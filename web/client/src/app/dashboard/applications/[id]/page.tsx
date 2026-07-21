@@ -61,6 +61,10 @@ export default function ApplicationDetailPage() {
   const lastReason = lastDecision?.reasonCodeId
     ? state.reasonCodes.find((r) => r.id === lastDecision.reasonCodeId)
     : null
+  const decidedBy = lastDecision
+    ? state.users.find((u) => u.id === lastDecision.actorId)?.name ?? "the reviewer"
+    : null
+  const applicantName = state.users.find((u) => u.id === app.applicantId)?.name ?? "Applicant"
 
   const onSubmit = () => {
     const validation = validate(app.id)
@@ -106,17 +110,29 @@ export default function ApplicationDetailPage() {
       {app.status === "returned" && lastDecision && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
           <p className="font-medium">
-            Returned for compliance{lastReason ? ` — ${lastReason.label}` : ""}
+            {applicantName}, {decidedBy} returned your application{lastReason ? ` — ${lastReason.label}` : ""}
           </p>
-          {lastDecision.comment && <p className="mt-0.5 text-xs">{lastDecision.comment}</p>}
-          <p className="mt-0.5 text-xs">Fix your answers below and resubmit — it goes back to the same step.</p>
+          {lastDecision.comment && (
+            <p className="mt-1 rounded-md bg-amber-100 px-2.5 py-1.5 text-xs">
+              &ldquo;{lastDecision.comment}&rdquo;
+            </p>
+          )}
+          <p className="mt-1.5 text-xs font-medium">
+            Please fix your answers below and resubmit — it goes back to {decidedBy} for another look.
+          </p>
         </div>
       )}
       {app.status === "rejected" && lastDecision && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-900">
-          <p className="font-medium">Rejected{lastReason ? ` — ${lastReason.label}` : ""}</p>
-          {lastDecision.comment && <p className="mt-0.5 text-xs">{lastDecision.comment}</p>}
-          <p className="mt-0.5 text-xs">This decision is final; the application can no longer be edited.</p>
+          <p className="font-medium">
+            {applicantName}, {decidedBy} rejected your application{lastReason ? ` — ${lastReason.label}` : ""}
+          </p>
+          {lastDecision.comment && (
+            <p className="mt-1 rounded-md bg-red-100 px-2.5 py-1.5 text-xs">
+              &ldquo;{lastDecision.comment}&rdquo;
+            </p>
+          )}
+          <p className="mt-1.5 text-xs">This decision is final; the application can no longer be edited or resubmitted.</p>
         </div>
       )}
       {app.status === "disbursed" && (

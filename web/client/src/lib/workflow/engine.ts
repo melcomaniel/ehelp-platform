@@ -175,14 +175,16 @@ export function reviewItemsOf(
   return items
 }
 
-export function isItemVerified(
+export function itemVerdict(
   state: WorkflowState,
   applicationId: string,
   stepId: string,
   itemKey: string
-): boolean {
-  return state.reviewChecks.some(
-    (c) => c.applicationId === applicationId && c.stepId === stepId && c.itemKey === itemKey
+): "approved" | "rejected" | null {
+  return (
+    state.reviewChecks.find(
+      (c) => c.applicationId === applicationId && c.stepId === stepId && c.itemKey === itemKey
+    )?.verdict ?? null
   )
 }
 
@@ -190,12 +192,15 @@ export function reviewProgress(
   state: WorkflowState,
   app: WorkflowApplication,
   step: Step
-): { verified: number; total: number; complete: boolean } {
+): { verified: number; rejected: number; total: number; complete: boolean } {
   const version = state.versions.find((v) => v.id === app.programVersionId)
   const items = version ? reviewItemsOf(state, app.id, version.stepSetId) : []
-  const verified = items.filter((i) => isItemVerified(state, app.id, step.id, i.key)).length
+  const verdicts = items.map((i) => itemVerdict(state, app.id, step.id, i.key))
+  const verified = verdicts.filter((v) => v === "approved").length
+  const rejected = verdicts.filter((v) => v === "rejected").length
   const total = items.length
-  return { verified, total, complete: verified >= total }
+  // whole-application approve only when every single item is approved
+  return { verified, rejected, total, complete: verified >= total }
 }
 
 // ---- validation ------------------------------------------------------------
@@ -305,7 +310,8 @@ export function submit(state: WorkflowState, input: SubmitInput): EngineResult {
 
   const isResubmit = app.status === "returned"
   if (isResubmit) {
-    // resubmit re-enters the step it was returned from (§2.10)
+    // resubmit re-enters the step it was returned from (§2.10); the review
+    // starts a fresh round, so all item verdicts reset to pending
     const target = state.steps.find((s) => s.id === app.currentStepId) ?? null
     if (!target) return { ok: false, error: "Return step no longer exists" }
     return {
@@ -313,6 +319,7 @@ export function submit(state: WorkflowState, input: SubmitInput): EngineResult {
       state: withEvent(
         {
           ...state,
+          reviewChecks: state.reviewChecks.filter((c) => c.applicationId !== app.id),
           applications: state.applications.map((a) =>
             a.id === app.id
               ? { ...a, status: "submitted", currentStepId: target.id, updatedAt: input.at }
@@ -465,12 +472,8 @@ export function disburse(state: WorkflowState, input: DisburseInput): EngineResu
     return { ok: false, error: "Current step is not a disbursement step" }
   if (!step.assignedRole || !actor.roles.includes(step.assignedRole))
     return { ok: false, error: `Only a ${step.assignedRole ?? "qualified"} can release funds` }
-  // separation of duties: the approver of this application cannot also release it
-  const approvedBy = state.events.find(
-    (e) => e.applicationId === app.id && e.action === "approve" && e.toStepId === step.id
-  )
-  if (approvedBy && approvedBy.actorId === input.actorId)
-    return { ok: false, error: "Separation of duties — the approver cannot release the funds" }
+  // NOTE: separation-of-duties (approver ≠ releaser) intentionally relaxed for
+  // the demo so one social worker can approve and release in a single flow.
   if (!input.payee.trim()) return { ok: false, error: "Payee is required" }
   if (!(input.amount > 0)) return { ok: false, error: "Amount must be greater than zero" }
 
@@ -637,6 +640,38 @@ export function decide(state: WorkflowState, input: DecisionInput): EngineResult
         at: input.at,
       }
     ),
+  }
+}
+
+interface CommentInput {
+  applicationId: string
+  actorId: string
+  comment: string
+  at: string
+  idGen: IdGen
+}
+
+/** General comment on an application — audit event only, no transition. */
+export function addComment(state: WorkflowState, input: CommentInput): EngineResult {
+  const app = state.applications.find((a) => a.id === input.applicationId)
+  if (!app) return { ok: false, error: "Application not found" }
+  if (!state.users.some((u) => u.id === input.actorId))
+    return { ok: false, error: "Acting user not found" }
+  const comment = input.comment.trim()
+  if (!comment) return { ok: false, error: "Comment cannot be empty" }
+  return {
+    ok: true,
+    state: withEvent(state, {
+      id: input.idGen("EVT"),
+      applicationId: app.id,
+      actorId: input.actorId,
+      action: "comment",
+      fromStepId: app.currentStepId,
+      toStepId: app.currentStepId,
+      reasonCodeId: null,
+      comment,
+      at: input.at,
+    }),
   }
 }
 

@@ -9,7 +9,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -29,9 +28,9 @@ import { useWorkflow } from "@/lib/workflow/store"
 import { ROLE_LABEL } from "@/lib/workflow/types"
 import {
   ChevronsUpDownIcon,
+  FolderKanbanIcon,
   GaugeIcon,
   HandHeartIcon,
-  InboxIcon,
   RotateCcwIcon,
 } from "lucide-react"
 
@@ -42,7 +41,7 @@ export function SocialWorkerSidebar({ ...props }: React.ComponentProps<typeof Si
 
   const links = [
     { href: "/social-worker/dashboard", label: "Dashboard", icon: GaugeIcon },
-    { href: "/social-worker/queue", label: "4Ps Review Queue", icon: InboxIcon },
+    { href: "/social-worker/applications", label: "Applications", icon: FolderKanbanIcon },
   ]
   const isActive = (url: string) => pathname === url || pathname.startsWith(url + "/")
 
@@ -122,7 +121,7 @@ export function SocialWorkerSidebar({ ...props }: React.ComponentProps<typeof Si
                 <ChevronsUpDownIcon className="ml-auto size-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="start" className="w-56">
-                <DropdownMenuLabel>Switch acting user</DropdownMenuLabel>
+                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Switch acting user</div>
                 <DropdownMenuSeparator />
                 {state.users.map((u) => (
                   <DropdownMenuItem key={u.id} onClick={() => setActingUser(u.id)}>

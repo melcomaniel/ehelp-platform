@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import {
+  addComment,
   allowedActions,
   copyStepSet,
   decide,
@@ -32,7 +33,9 @@ import type {
   WorkflowState,
 } from "./types"
 
-const STORAGE_KEY = "workflow-engine-state-v1"
+// Bump the version whenever the seed shape changes so stale localStorage
+// (missing new programs/steps) is discarded and fresh fixtures load.
+const STORAGE_KEY = "workflow-engine-state-v5"
 
 export type MutationResult = { ok: true; id?: string } | { ok: false; error: string }
 
@@ -101,7 +104,15 @@ interface WorkflowStore {
     instrument: DisbursementInstrument
   }) => MutationResult
   allowedActionsFor: (app: WorkflowApplication) => DecisionAction[]
-  toggleReviewItem: (applicationId: string, stepId: string, itemKey: string) => MutationResult
+  /** Set (or clear, by clicking the same verdict again) the reviewer's verdict on one checklist item. */
+  setReviewVerdict: (
+    applicationId: string,
+    stepId: string,
+    itemKey: string,
+    verdict: "approved" | "rejected"
+  ) => MutationResult
+  /** General comment on an application (audit event, no transition). */
+  commentOnApplication: (applicationId: string, comment: string) => MutationResult
 }
 
 const StoreContext = React.createContext<WorkflowStore | null>(null)
@@ -754,7 +765,7 @@ export function WorkflowProvider({ children }: { children: React.ReactNode }) {
 
       allowedActionsFor: (app) => allowedActions(state, app, actingUser),
 
-      toggleReviewItem: (applicationId, stepId, itemKey) =>
+      setReviewVerdict: (applicationId, stepId, itemKey, verdict) =>
         apply((prev) => {
           const app = prev.applications.find((a) => a.id === applicationId)
           if (!app) return { error: "Application not found" }
@@ -764,28 +775,43 @@ export function WorkflowProvider({ children }: { children: React.ReactNode }) {
           if (app.status !== "submitted" || app.currentStepId !== stepId)
             return { error: "Application is not at this review step" }
           if (!step.assignedRole || !actingUser.roles.includes(step.assignedRole))
-            return { error: `Only a ${step.assignedRole ?? "qualified"} can verify items` }
+            return { error: `Only a ${step.assignedRole ?? "qualified"} can check items` }
           const existing = prev.reviewChecks.find(
             (c) => c.applicationId === applicationId && c.stepId === stepId && c.itemKey === itemKey
           )
+          const rest = prev.reviewChecks.filter((c) => c !== existing)
+          // clicking the same verdict again clears it back to pending
+          if (existing && existing.verdict === verdict)
+            return { state: { ...prev, reviewChecks: rest } }
           return {
             state: {
               ...prev,
-              reviewChecks: existing
-                ? prev.reviewChecks.filter((c) => c !== existing)
-                : [
-                    ...prev.reviewChecks,
-                    {
-                      id: nextId("RCK"),
-                      applicationId,
-                      stepId,
-                      itemKey,
-                      checkedBy: prev.actingUserId,
-                      at: now(),
-                    },
-                  ],
+              reviewChecks: [
+                ...rest,
+                {
+                  id: nextId("RCK"),
+                  applicationId,
+                  stepId,
+                  itemKey,
+                  verdict,
+                  checkedBy: prev.actingUserId,
+                  at: now(),
+                },
+              ],
             },
           }
+        }),
+
+      commentOnApplication: (applicationId, comment) =>
+        apply((prev) => {
+          const result = addComment(prev, {
+            applicationId,
+            actorId: prev.actingUserId,
+            comment,
+            at: now(),
+            idGen: nextId,
+          })
+          return result.ok ? { state: result.state } : { error: result.error }
         }),
     }
   }, [state, hydrated])

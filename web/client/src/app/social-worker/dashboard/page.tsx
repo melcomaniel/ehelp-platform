@@ -11,29 +11,32 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { useWorkflow } from "@/lib/workflow/store"
-import { FOURPS_PROGRAM_ID, useFourPsQueue } from "@/app/social-worker/queue/shared"
+import {
+  applicationsOfProgram,
+  isActionableByReviewer,
+  useReviewablePrograms,
+} from "@/app/social-worker/applications/shared"
 
 export default function SocialWorkerDashboard() {
   const { state, actingUser, hasRole } = useWorkflow()
-
-  const queue = useFourPsQueue()
+  const programs = useReviewablePrograms()
 
   if (!hasRole("social_worker")) {
     return (
       <EmptyState
-        title="Switch to the social worker to review 4Ps"
+        title="Switch to the social worker to review applications"
         hint="Use the user switcher at the bottom of the sidebar — Grace Villanueva is the seeded social worker."
       />
     )
   }
 
-  const fourPs = state.applications.filter((a) => a.programId === FOURPS_PROGRAM_ID)
-  const count = (s: string) => fourPs.filter((a) => a.status === s).length
-  const atVerify = fourPs.filter((a) => a.status === "verifying").length
+  const allApps = programs.flatMap((p) => applicationsOfProgram(state, p.id))
+  const toReview = allApps.filter((a) => isActionableByReviewer(state, a, actingUser.roles)).length
+  const count = (s: string) => allApps.filter((a) => a.status === s).length
 
   const stats = [
-    { label: "Waiting for your review", value: queue.length, href: "/social-worker/queue" },
-    { label: "Awaiting identity", value: atVerify },
+    { label: "To review", value: toReview, href: "/social-worker/applications" },
+    { label: "Awaiting identity", value: count("verifying") },
     { label: "Approved (to disburse)", value: count("approved") },
     { label: "Disbursed", value: count("disbursed") },
   ]
@@ -42,7 +45,7 @@ export default function SocialWorkerDashboard() {
     <>
       <PageHeader
         title="4Ps Case Review"
-        description={`Acting as ${actingUser.name}. Review each application's inputs and documents, verify every item, then approve.`}
+        description={`Acting as ${actingUser.name}. Open a program, pick an applicant, verify each item, then approve.`}
       />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((s) => {
@@ -55,9 +58,7 @@ export default function SocialWorkerDashboard() {
             </Card>
           )
           return s.href ? (
-            <Link key={s.label} href={s.href}>
-              {card}
-            </Link>
+            <Link key={s.label} href={s.href}>{card}</Link>
           ) : (
             <div key={s.label}>{card}</div>
           )
@@ -70,11 +71,12 @@ export default function SocialWorkerDashboard() {
           <CardDescription>The demo flow, step by step</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-2 text-sm text-muted-foreground">
-          <p>1. Open the <Link href="/social-worker/queue" className="font-medium text-foreground underline">4Ps Review Queue</Link> and pick an applicant.</p>
-          <p>2. You land on their Review step — every input and uploaded document is a checklist item.</p>
-          <p>3. Verify each item one by one. The progress bar fills toward 100%.</p>
-          <p>4. At 100%, <span className="font-medium text-foreground">Approve</span> unlocks. Approve sends the application to Disbursement.</p>
-          <p>5. Anytime, you can Return (for compliance) or Reject with a reason.</p>
+          <p>1. Open <Link href="/social-worker/applications" className="font-medium text-foreground underline">Applications</Link> and pick a program (e.g. 4Ps).</p>
+          <p>2. See all applicants in that program; open a specific one.</p>
+          <p>3. At their Review step, every input and uploaded document is a checklist item.</p>
+          <p>4. Verify each item one by one — the progress bar fills toward 100%.</p>
+          <p>5. At 100%, <span className="font-medium text-foreground">Approve</span> unlocks and sends the application to Disbursement.</p>
+          <p>6. Anytime, you can Return (for compliance) or Reject with a reason.</p>
         </CardContent>
       </Card>
     </>

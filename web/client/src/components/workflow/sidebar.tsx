@@ -9,7 +9,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -191,7 +190,7 @@ export function WorkflowSidebar({ ...props }: React.ComponentProps<typeof Sideba
                 <ChevronsUpDownIcon className="ml-auto size-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="start" className="w-56">
-                <DropdownMenuLabel>Switch acting user</DropdownMenuLabel>
+                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Switch acting user</div>
                 <DropdownMenuSeparator />
                 {state.users.map((u) => (
                   <DropdownMenuItem key={u.id} onClick={() => setActingUser(u.id)}>

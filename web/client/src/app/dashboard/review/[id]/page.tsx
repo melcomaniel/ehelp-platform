@@ -6,12 +6,12 @@ import { useParams, useRouter } from "next/navigation"
 
 import {
   EmptyState,
-  Field,
   NativeSelect,
   PageHeader,
   StatusPill,
   Textarea,
 } from "@/components/workflow/bits"
+import { DisbursementReleaseCard } from "@/components/workflow/disburse-card"
 import { FormRenderer } from "@/components/workflow/form-renderer"
 import { EventHistory } from "@/components/workflow/history"
 import { usePrompts } from "@/components/workflow/prompts"
@@ -27,9 +27,9 @@ import {
 import { Label } from "@/components/ui/label"
 import { actionsOf, reasonCodesOf, reviewProgress } from "@/lib/workflow/engine"
 import { useWorkflow } from "@/lib/workflow/store"
-import type { DisbursementInstrument, DecisionAction, Step } from "@/lib/workflow/types"
-import { APPLICATION_STATUS_LABEL, INSTRUMENT_LABEL } from "@/lib/workflow/types"
-import { ArrowLeftIcon, BanknoteIcon, CheckIcon, Undo2Icon, XIcon } from "lucide-react"
+import type { DecisionAction } from "@/lib/workflow/types"
+import { APPLICATION_STATUS_LABEL } from "@/lib/workflow/types"
+import { ArrowLeftIcon, CheckIcon, Undo2Icon, XIcon } from "lucide-react"
 
 const ACTION_VERB: Record<DecisionAction, string> = {
   approve: "Approve",
@@ -258,70 +258,3 @@ export default function ReviewDetailPage() {
   )
 }
 
-function DisbursementReleaseCard({
-  step,
-  applicationId,
-  applicantName,
-}: {
-  step: Step
-  applicationId: string
-  applicantName: string
-}) {
-  const { disburseApplication } = useWorkflow()
-  const { toast, confirm } = usePrompts()
-  const instruments = Object.keys(INSTRUMENT_LABEL) as DisbursementInstrument[]
-
-  const [payee, setPayee] = React.useState(applicantName)
-  const [amount, setAmount] = React.useState("")
-  const [instrument, setInstrument] = React.useState<DisbursementInstrument>("cash")
-
-  const amountNum = Number(amount)
-  const valid = payee.trim() !== "" && amountNum > 0
-
-  const onRelease = async () => {
-    const ok = await confirm({
-      title: "Release funds?",
-      description: `₱${amountNum.toLocaleString()} to ${payee.trim()} via ${INSTRUMENT_LABEL[instrument]}. This marks the application disbursed.`,
-      confirmLabel: "Release",
-    })
-    if (!ok) return
-    const result = disburseApplication({ applicationId, payee, amount: amountNum, instrument })
-    toast(
-      result.ok
-        ? { title: "Funds released", description: `₱${amountNum.toLocaleString()} to ${payee.trim()}.`, variant: "success" }
-        : { title: "Could not release", description: result.error, variant: "error" }
-    )
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{step.name}</CardTitle>
-        <CardDescription>Release funds to complete the application</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-3">
-        <Field label="Payee" value={payee} onChange={(e) => setPayee(e.target.value)} />
-        <Field
-          label="Amount (PHP)"
-          type="number"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="10000"
-        />
-        <div className="grid gap-1.5">
-          <Label>Instrument</Label>
-          <NativeSelect value={instrument} onChange={(e) => setInstrument(e.target.value as DisbursementInstrument)}>
-            {instruments.map((i) => (
-              <option key={i} value={i}>
-                {INSTRUMENT_LABEL[i]}
-              </option>
-            ))}
-          </NativeSelect>
-        </div>
-        <Button size="sm" className="justify-self-start" disabled={!valid} onClick={onRelease}>
-          <BanknoteIcon /> Release funds
-        </Button>
-      </CardContent>
-    </Card>
-  )
-}

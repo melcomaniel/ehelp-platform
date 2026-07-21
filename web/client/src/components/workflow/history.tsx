@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 import {
   BanknoteIcon,
   CheckIcon,
+  MessageSquareIcon,
   ScanFaceIcon,
   SendIcon,
   Undo2Icon,
@@ -22,6 +23,7 @@ const ACTION_META: Record<
   return: { label: "Returned", icon: <Undo2Icon className="size-3" />, tone: "bg-amber-100 text-amber-700" },
   reject: { label: "Rejected", icon: <XIcon className="size-3" />, tone: "bg-red-100 text-red-700" },
   disburse: { label: "Disbursed", icon: <BanknoteIcon className="size-3" />, tone: "bg-emerald-100 text-emerald-700" },
+  comment: { label: "Comment", icon: <MessageSquareIcon className="size-3" />, tone: "bg-slate-100 text-slate-700" },
 }
 
 /** Append-only audit trail of an application: who, when, what, why. */

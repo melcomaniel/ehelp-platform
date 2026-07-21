@@ -203,6 +203,7 @@ export type EventAction =
   | "return"
   | "reject"
   | "disburse"
+  | "comment"
 
 export interface ApplicationEvent {
   id: string
@@ -239,14 +240,18 @@ export interface Disbursement {
 }
 
 /**
- * A single verified checklist item on a review step. itemKey is stable per
- * submitted input: the field id for an answer, `${fieldId}#${index}` per file.
+ * The reviewer's verdict on one checklist item of a review step. itemKey is
+ * stable per submitted input: the field id for an answer, `${fieldId}#${index}`
+ * per file. Approve-the-application requires every item approved; a rejected
+ * item flags what to fix (the reviewer then returns or rejects the whole
+ * application — item rejects never partially reject it).
  */
 export interface ReviewCheck {
   id: string
   applicationId: string
   stepId: string
   itemKey: string
+  verdict: "approved" | "rejected"
   checkedBy: string
   at: string
 }

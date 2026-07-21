@@ -41,6 +41,7 @@ function verifyCurrentReview(state: WorkflowState, appId: string): WorkflowState
         applicationId: appId,
         stepId: app.currentStepId!,
         itemKey: it.key,
+        verdict: "approved" as const,
         checkedBy: "U-REV",
         at,
       })),
@@ -402,8 +403,8 @@ describe("disburse", () => {
     expect(result.ok).toBe(false)
   })
 
-  it("enforces separation of duties — the approver cannot release", () => {
-    // move APP-010's disbursement assignment to the approver who approved it
+  it("allows the approver to also release (separation of duties relaxed for the demo)", () => {
+    // the same role/actor that approved may release — deliberate demo tradeoff
     const state = clone()
     const step = state.steps.find((s) => s.id === DISBURSE_STEP)!
     step.assignedRole = "approver"
@@ -416,7 +417,7 @@ describe("disburse", () => {
       at,
       idGen,
     })
-    expect(result.ok).toBe(false)
+    expect(result.ok).toBe(true)
   })
 })
 
@@ -507,6 +508,7 @@ describe("4Ps review checklist", () => {
           applicationId: appId,
           stepId: REVIEW,
           itemKey: it.key,
+          verdict: "approved" as const,
           checkedBy: SW,
           at,
         })),
@@ -516,10 +518,10 @@ describe("4Ps review checklist", () => {
 
   it("derives one item per answered field and per uploaded document", () => {
     const items = reviewItemsOf(SEED, APP, "SS-F")
-    // 6 non-file answers (name, dob, children, income, component, situation)
-    // + checkbox (checked) + 2 files = 9
+    // AICS form: 5 text/select/textarea answers (name, type, id, amount, nature)
+    // + checkbox (checked) + 3 files (valid ID, support doc, barangay cert) = 9
     expect(items.length).toBe(9)
-    expect(items.filter((i) => i.kind === "file").length).toBe(2)
+    expect(items.filter((i) => i.kind === "file").length).toBe(3)
     // real values surfaced, not placeholders
     expect(items.some((i) => i.value === "Maria Reyes")).toBe(true)
   })
