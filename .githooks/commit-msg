@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+#
+# commit-msg hook: enforce Conventional Commits.
+# Blocks the commit (exit 1) when the subject line does not match the spec.
+# Spec: https://www.conventionalcommits.org/
+
+set -euo pipefail
+
+msg_file="$1"
+
+# First non-empty, non-comment line = subject.
+subject="$(grep -vE '^\s*#' "$msg_file" | grep -vE '^\s*$' | head -n1 || true)"
+
+# Allow merge/revert/fixup commits to pass untouched.
+if printf '%s' "$subject" | grep -qE '^(Merge |Revert |fixup! |squash! )'; then
+  exit 0
+fi
+
+# type(optional-scope)(optional !): subject
+# types per Conventional Commits.
+pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9._-]+\))?(!)?: .+'
+
+if printf '%s' "$subject" | grep -qE "$pattern"; then
+  # Optional: warn on overly long subject (soft, non-blocking).
+  len=${#subject}
+  if [ "$len" -gt 72 ]; then
+    echo "warning: commit subject is ${len} chars (>72 recommended)." >&2
+  fi
+  exit 0
+fi
+
+cat >&2 <<'EOF'
+✖ Commit blocked: subject does not follow Conventional Commits.
+
+  Required format:
+    <type>[optional scope][!]: <subject>
+
+  Allowed types:
+    feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
+
+  Examples:
+    feat(auth): add login endpoint
+    fix: correct token expiry check
+    refactor(db)!: split user table
+    docs: update README
+
+  See https://www.conventionalcommits.org/
+EOF
+exit 1
