@@ -2,8 +2,16 @@
 
 import * as React from "react"
 
-import { useEhelp } from "@/lib/ehelp/store"
-import type { Template } from "@/lib/ehelp/types"
+import { useAdminAccess } from "@/lib/admin/access-provider"
+import {
+  listProgramTemplates,
+  listRegionTemplates,
+  saveProgramTemplate,
+  saveRegionTemplate,
+  toggleProgramTemplate,
+  type ProgramTemplateRow,
+  type RegionTemplateRow,
+} from "@/lib/admin/template-actions"
 import {
   DataTable,
   Field,
@@ -29,63 +37,107 @@ import {
 } from "@/components/ui/sheet"
 import { PencilIcon, PlusIcon } from "lucide-react"
 
+function requirementsOf(t: ProgramTemplateRow) {
+  const r = t.eligibilityRules?.requirements
+  return typeof r === "string" ? r : ""
+}
+
+function noteOf(o: RegionTemplateRow) {
+  const n = o.localEligibilityRules?.eligibility_note
+  return typeof n === "string" ? n : ""
+}
+
+function cooldownOf(o: RegionTemplateRow) {
+  const c = o.localEligibilityRules?.cooldown_days
+  return typeof c === "number" ? c : undefined
+}
+
 export default function TemplatesPage() {
-  const { state, can, saveTemplate, saveOverride } = useEhelp()
-  const { region } = state.session
+  const { can, region, loading: accessLoading } = useAdminAccess()
   const master = can("manage-templates")
   const customize = can("customize-templates")
 
-  const [editing, setEditing] = React.useState<Template | null>(null)
+  const [templates, setTemplates] = React.useState<ProgramTemplateRow[]>([])
+  const [overrides, setOverrides] = React.useState<RegionTemplateRow[]>([])
+  const [editing, setEditing] = React.useState<ProgramTemplateRow | null>(null)
   const [openEdit, setOpenEdit] = React.useState(false)
   const [tName, setTName] = React.useState("")
   const [tProgram, setTProgram] = React.useState("")
   const [tCooldown, setTCooldown] = React.useState("90")
   const [tReqs, setTReqs] = React.useState("")
-
-  const [overrideFor, setOverrideFor] = React.useState<Template | null>(null)
+  const [overrideFor, setOverrideFor] = React.useState<ProgramTemplateRow | null>(
+    null,
+  )
   const [oNote, setONote] = React.useState("")
   const [oCooldown, setOCooldown] = React.useState("")
+  const [busy, setBusy] = React.useState(false)
+  const [message, setMessage] = React.useState<string | null>(null)
 
-  const startEdit = (t: Template | null) => {
+  const reload = React.useCallback(async () => {
+    const [tpl, ov] = await Promise.all([
+      listProgramTemplates(),
+      listRegionTemplates(region?.id),
+    ])
+    setTemplates(tpl)
+    setOverrides(ov)
+  }, [region?.id])
+
+  React.useEffect(() => {
+    if (!accessLoading) void reload()
+  }, [accessLoading, reload])
+
+  const startEdit = (t: ProgramTemplateRow | null) => {
     setEditing(t)
     setTName(t?.name ?? "")
-    setTProgram(t?.program ?? "")
+    setTProgram(t?.description ?? "")
     setTCooldown(String(t?.cooldownDays ?? 90))
-    setTReqs(t?.requirements ?? "")
+    setTReqs(t ? requirementsOf(t) : "")
     setOpenEdit(true)
   }
 
-  const submitTemplate = () => {
-    if (!tName || !tProgram) return
-    saveTemplate({
-      id: editing?.id ?? `TPL-${tName.replace(/[^A-Za-z]/g, "").slice(0, 8).toUpperCase()}`,
+  const submitTemplate = async () => {
+    if (!tName) return
+    setBusy(true)
+    setMessage(null)
+    const result = await saveProgramTemplate({
+      id: editing?.id,
       name: tName,
-      program: tProgram,
-      cooldownDays: Math.max(0, Number(tCooldown) || 0),
+      description: tProgram,
       requirements: tReqs,
-      active: editing?.active ?? true,
+      cooldownDays: Math.max(0, Number(tCooldown) || 0),
+      isActive: editing?.isActive ?? true,
     })
-    setOpenEdit(false)
+    if (!result.ok) setMessage(result.error)
+    else {
+      setOpenEdit(false)
+      await reload()
+    }
+    setBusy(false)
   }
 
-  const startOverride = (t: Template) => {
-    const existing = state.overrides.find(
-      (o) => o.templateId === t.id && o.region === region
-    )
+  const startOverride = (t: ProgramTemplateRow) => {
+    const existing = overrides.find((o) => o.templateId === t.id)
     setOverrideFor(t)
-    setONote(existing?.eligibilityNote ?? "")
-    setOCooldown(existing?.cooldownDays ? String(existing.cooldownDays) : "")
+    setONote(existing ? noteOf(existing) : "")
+    const cd = existing ? cooldownOf(existing) : undefined
+    setOCooldown(cd !== undefined ? String(cd) : "")
   }
 
-  const submitOverride = () => {
+  const submitOverride = async () => {
     if (!overrideFor) return
-    saveOverride({
+    setBusy(true)
+    setMessage(null)
+    const result = await saveRegionTemplate({
       templateId: overrideFor.id,
-      region,
       eligibilityNote: oNote,
       cooldownDays: oCooldown ? Math.max(0, Number(oCooldown) || 0) : undefined,
     })
-    setOverrideFor(null)
+    if (!result.ok) setMessage(result.error)
+    else {
+      setOverrideFor(null)
+      await reload()
+    }
+    setBusy(false)
   }
 
   return (
@@ -95,7 +147,7 @@ export default function TemplatesPage() {
         description={
           master
             ? "Master program templates — system-wide definitions and disbursement cooldowns"
-            : `Regional customization for ${region} — master templates stay read-only`
+            : `Regional customization for ${region?.name ?? "your region"} — master templates stay read-only`
         }
       >
         {master && (
@@ -104,6 +156,12 @@ export default function TemplatesPage() {
           </Button>
         )}
       </PageHeader>
+
+      {message && (
+        <p className="text-sm text-muted-foreground" role="status">
+          {message}
+        </p>
+      )}
 
       <Card>
         <CardHeader>
@@ -115,51 +173,70 @@ export default function TemplatesPage() {
         <CardContent>
           <DataTable
             headers={[
-              "ID",
               "Name",
-              "Program",
+              "Description",
               "Cooldown",
               "Requirements",
               "Status",
               "Actions",
             ]}
-            empty={state.templates.length === 0}
+            empty={!accessLoading && templates.length === 0}
           >
-            {state.templates.map((t) => (
+            {templates.map((t) => (
               <tr key={t.id} className="border-b last:border-0">
-                <Td className="font-mono text-xs">{t.id}</Td>
                 <Td>{t.name}</Td>
-                <Td className="text-muted-foreground">{t.program}</Td>
+                <Td className="text-muted-foreground">
+                  {t.description || "—"}
+                </Td>
                 <Td className="tabular-nums">{t.cooldownDays} days</Td>
                 <Td className="max-w-64 text-xs text-muted-foreground">
-                  {t.requirements}
+                  {requirementsOf(t) || "—"}
                 </Td>
                 <Td>
-                  <StatusPill value={t.active ? "Active" : "Pending"} />
+                  <StatusPill value={t.isActive ? "Active" : "Pending"} />
                 </Td>
                 <Td>
                   <div className="flex flex-wrap gap-1.5">
                     {master && (
                       <>
-                        <Button size="xs" variant="outline" onClick={() => startEdit(t)}>
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => startEdit(t)}
+                        >
                           <PencilIcon /> Edit
                         </Button>
                         <Button
                           size="xs"
                           variant="outline"
-                          onClick={() => saveTemplate({ ...t, active: !t.active })}
+                          disabled={busy}
+                          onClick={() =>
+                            void toggleProgramTemplate(t.id, !t.isActive).then(
+                              (r) => {
+                                if (!r.ok) setMessage(r.error)
+                                else void reload()
+                              },
+                            )
+                          }
                         >
-                          {t.active ? "Deactivate" : "Activate"}
+                          {t.isActive ? "Deactivate" : "Activate"}
                         </Button>
                       </>
                     )}
                     {customize && (
-                      <Button size="xs" onClick={() => startOverride(t)}>
-                        Customize for {region}
+                      <Button
+                        size="xs"
+                        disabled={busy}
+                        onClick={() => startOverride(t)}
+                      >
+                        Customize for {region?.code ?? "region"}
                       </Button>
                     )}
                     {!master && !customize && (
-                      <span className="text-xs text-muted-foreground">read-only</span>
+                      <span className="text-xs text-muted-foreground">
+                        read-only
+                      </span>
                     )}
                   </div>
                 </Td>
@@ -173,25 +250,37 @@ export default function TemplatesPage() {
         <CardHeader>
           <CardTitle>Regional Customizations</CardTitle>
           <CardDescription>
-            Satellite-admin overrides: local eligibility notes and cooldown
-            adjustments
+            Local eligibility notes and optional cooldown overrides
           </CardDescription>
         </CardHeader>
         <CardContent>
           <DataTable
-            headers={["Template", "Region", "Eligibility Note", "Cooldown Override"]}
-            empty={state.overrides.length === 0}
+            headers={[
+              "Template",
+              "Region",
+              "Eligibility Note",
+              "Cooldown Override",
+            ]}
+            empty={overrides.length === 0}
           >
-            {state.overrides.map((o) => (
-              <tr key={`${o.templateId}-${o.region}`} className="border-b last:border-0">
-                <Td className="font-mono text-xs">{o.templateId}</Td>
-                <Td className="text-muted-foreground">{o.region}</Td>
-                <Td className="text-muted-foreground">{o.eligibilityNote || "—"}</Td>
-                <Td className="tabular-nums">
-                  {o.cooldownDays ? `${o.cooldownDays} days` : "inherits master"}
-                </Td>
-              </tr>
-            ))}
+            {overrides.map((o) => {
+              const tpl = templates.find((t) => t.id === o.templateId)
+              const cd = cooldownOf(o)
+              return (
+                <tr key={o.id} className="border-b last:border-0">
+                  <Td>{tpl?.name ?? o.templateId.slice(0, 8)}</Td>
+                  <Td className="text-muted-foreground">
+                    {o.regionCode ?? "—"}
+                  </Td>
+                  <Td className="text-muted-foreground">
+                    {noteOf(o) || "—"}
+                  </Td>
+                  <Td className="tabular-nums">
+                    {cd !== undefined ? `${cd} days` : "inherits master"}
+                  </Td>
+                </tr>
+              )
+            })}
           </DataTable>
         </CardContent>
       </Card>
@@ -199,13 +288,21 @@ export default function TemplatesPage() {
       <Sheet open={openEdit} onOpenChange={setOpenEdit}>
         <SheetContent>
           <SheetHeader>
-            <SheetTitle>{editing ? `Edit ${editing.id}` : "New master template"}</SheetTitle>
-            <SheetDescription>System-wide — applies to every region unless overridden.</SheetDescription>
+            <SheetTitle>
+              {editing ? `Edit ${editing.name}` : "New master template"}
+            </SheetTitle>
+            <SheetDescription>
+              System-wide — applies to every region unless overridden.
+            </SheetDescription>
           </SheetHeader>
           <div className="grid gap-4 px-4">
-            <Field label="Name" value={tName} onChange={(e) => setTName(e.target.value)} />
             <Field
-              label="Program"
+              label="Name"
+              value={tName}
+              onChange={(e) => setTName(e.target.value)}
+            />
+            <Field
+              label="Description / program"
               value={tProgram}
               onChange={(e) => setTProgram(e.target.value)}
               placeholder="DSWD · AICS"
@@ -224,20 +321,26 @@ export default function TemplatesPage() {
             />
           </div>
           <SheetFooter>
-            <Button onClick={submitTemplate} disabled={!tName || !tProgram}>
+            <Button
+              onClick={() => void submitTemplate()}
+              disabled={busy || !tName}
+            >
               Save template
             </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
 
-      <Sheet open={!!overrideFor} onOpenChange={(v) => !v && setOverrideFor(null)}>
+      <Sheet
+        open={!!overrideFor}
+        onOpenChange={(v) => !v && setOverrideFor(null)}
+      >
         <SheetContent>
           <SheetHeader>
             <SheetTitle>Customize {overrideFor?.name}</SheetTitle>
             <SheetDescription>
-              Applies to {region} only. Blank cooldown inherits the master value
-              ({overrideFor?.cooldownDays} days).
+              Applies to {region?.name ?? "your region"} only. Blank cooldown
+              inherits the master value ({overrideFor?.cooldownDays} days).
             </SheetDescription>
           </SheetHeader>
           <div className="grid gap-4 px-4">
@@ -255,7 +358,9 @@ export default function TemplatesPage() {
             />
           </div>
           <SheetFooter>
-            <Button onClick={submitOverride}>Save customization</Button>
+            <Button disabled={busy} onClick={() => void submitOverride()}>
+              Save customization
+            </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

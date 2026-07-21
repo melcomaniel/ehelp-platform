@@ -4,6 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
+import { SignOutButton } from "@/components/auth/sign-out-button"
 import { usePrompts } from "@/components/workflow/prompts"
 import {
   DropdownMenu,
@@ -105,6 +106,9 @@ export function SocialWorkerSidebar({ ...props }: React.ComponentProps<typeof Si
             >
               <RotateCcwIcon className="size-4" /> Reset demo data
             </button>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SignOutButton />
           </SidebarMenuItem>
           <SidebarMenuItem>
             <DropdownMenu>
