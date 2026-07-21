@@ -63,17 +63,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFFE1F5EE),
-              Color(0xFFF7F6F2),
-              Color(0xFFE6F1FB),
-            ],
-          ),
-        ),
+        color: AppColors.surface,
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
@@ -83,69 +73,105 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      'EHELP',
-                      style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                            color: AppColors.forestDark,
-                          ),
+                    Image.asset(
+                      'lib/assets/heart-egov-letter.png',
+                      height: 96,
+                      fit: BoxFit.contain,
+                      color: AppColors.primary,
+                      colorBlendMode: BlendMode.srcIn,
                     ),
                     const SizedBox(height: 8),
                     const Text(
                       'Social assistance for approvers, evaluators, and customers.',
-                      style: TextStyle(color: AppColors.muted, fontSize: 16),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: AppColors.muted, fontSize: 14),
                     ),
-                    const SizedBox(height: 36),
-                    TextField(
-                      controller: _email,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
-                        labelText: 'Email',
-                        prefixIcon: Icon(Icons.mail_outline),
+                    const SizedBox(height: 28),
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: AppColors.card,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: AppColors.line),
                       ),
-                    ),
-                    if (!_useOtp) ...[
-                      const SizedBox(height: 14),
-                      TextField(
-                        controller: _password,
-                        obscureText: _obscure,
-                        decoration: InputDecoration(
-                          labelText: 'Password',
-                          prefixIcon: const Icon(Icons.lock_outline),
-                          suffixIcon: IconButton(
-                            onPressed: () =>
-                                setState(() => _obscure = !_obscure),
-                            icon: Icon(
-                              _obscure
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            'Welcome back',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineMedium
+                                ?.copyWith(fontSize: 24),
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Sign in to check your applications and aid status',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AppColors.muted,
+                              fontSize: 14,
                             ),
                           ),
-                        ),
+                          const SizedBox(height: 24),
+                          TextField(
+                            controller: _email,
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: const InputDecoration(
+                              labelText: 'Email',
+                              prefixIcon: Icon(Icons.mail_outline),
+                            ),
+                          ),
+                          if (!_useOtp) ...[
+                            const SizedBox(height: 14),
+                            TextField(
+                              controller: _password,
+                              obscureText: _obscure,
+                              decoration: InputDecoration(
+                                labelText: 'Password',
+                                prefixIcon: const Icon(Icons.lock_outline),
+                                suffixIcon: IconButton(
+                                  onPressed: () =>
+                                      setState(() => _obscure = !_obscure),
+                                  icon: Icon(
+                                    _obscure
+                                        ? Icons.visibility_outlined
+                                        : Icons.visibility_off_outlined,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 20),
+                          FilledButton(
+                            onPressed: loading ? null : _submit,
+                            child: loading
+                                ? const SizedBox(
+                                    height: 22,
+                                    width: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(_useOtp ? 'Send OTP' : 'Sign in'),
+                          ),
+                          const SizedBox(height: 12),
+                          TextButton(
+                            onPressed: () =>
+                                setState(() => _useOtp = !_useOtp),
+                            child: Text(
+                              _useOtp
+                                  ? 'Use password instead'
+                                  : 'Sign in with email OTP',
+                            ),
+                          ),
+                          OutlinedButton(
+                            onPressed: () => context.push('/register'),
+                            child: const Text('Create account'),
+                          ),
+                        ],
                       ),
-                    ],
-                    const SizedBox(height: 20),
-                    FilledButton(
-                      onPressed: loading ? null : _submit,
-                      child: loading
-                          ? const SizedBox(
-                              height: 22,
-                              width: 22,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Text(_useOtp ? 'Send OTP' : 'Sign in'),
-                    ),
-                    const SizedBox(height: 12),
-                    TextButton(
-                      onPressed: () => setState(() => _useOtp = !_useOtp),
-                      child: Text(
-                        _useOtp
-                            ? 'Use password instead'
-                            : 'Sign in with email OTP',
-                      ),
-                    ),
-                    OutlinedButton(
-                      onPressed: () => context.push('/register'),
-                      child: const Text('Create account'),
                     ),
                   ],
                 ),

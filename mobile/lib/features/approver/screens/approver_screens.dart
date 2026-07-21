@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../models/application.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../theme/app_theme.dart';
+import '../../shared/widgets/app_confirm_dialog.dart';
 import '../../shared/widgets/common_widgets.dart';
 
 final approverQueueProvider =
@@ -40,8 +41,11 @@ class ApproverHomeScreen extends ConsumerWidget {
         title: const Text('Approver'),
         actions: [
           IconButton(
-            onPressed: () =>
-                ref.read(authControllerProvider.notifier).signOut(),
+            onPressed: () async {
+              if (await confirmSignOut(context)) {
+                ref.read(authControllerProvider.notifier).signOut();
+              }
+            },
             icon: const Icon(Icons.logout),
           ),
         ],
@@ -215,6 +219,17 @@ class _ApproverCaseScreenState extends ConsumerState<ApproverCaseScreen> {
   }
 
   Future<void> _decide(bool approve) async {
+    final confirmed = await showAppConfirm(
+      context,
+      title: approve ? 'Approve application?' : 'Decline application?',
+      description: approve
+          ? 'The customer will be notified and the approved amount moves forward for disbursement.'
+          : 'This decision is final. The customer will be notified that their application was declined.',
+      confirmLabel: approve ? 'Approve' : 'Decline',
+      destructive: !approve,
+    );
+    if (!confirmed || !mounted) return;
+
     final profile = await ref.read(currentProfileProvider.future);
     if (profile == null) return;
     setState(() => _loading = true);
@@ -310,8 +325,8 @@ class _ApproverCaseScreenState extends ConsumerState<ApproverCaseScreen> {
                       ? null
                       : () => _decide(false),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFFA32D2D),
-                    side: const BorderSide(color: Color(0xFFA32D2D)),
+                    foregroundColor: AppColors.danger,
+                    side: const BorderSide(color: AppColors.danger),
                   ),
                   child: const Text('Decline'),
                 ),

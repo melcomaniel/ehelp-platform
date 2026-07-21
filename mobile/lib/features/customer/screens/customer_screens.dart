@@ -8,6 +8,7 @@ import '../../../models/profile.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../theme/app_theme.dart';
 import '../../liveness/screens/face_liveness_screen.dart';
+import '../../shared/widgets/app_confirm_dialog.dart';
 import '../../shared/widgets/common_widgets.dart';
 import '../../../services/liveness_service.dart';
 
@@ -35,7 +36,13 @@ class CustomerHomeScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('EHELP'),
+        title: Image.asset(
+          'lib/assets/heart-egov-letter.png',
+          height: 30,
+          fit: BoxFit.contain,
+          color: AppColors.primary,
+          colorBlendMode: BlendMode.srcIn,
+        ),
         actions: [
           IconButton(
             tooltip: 'Profile',
@@ -44,7 +51,11 @@ class CustomerHomeScreen extends ConsumerWidget {
           ),
           IconButton(
             tooltip: 'Sign out',
-            onPressed: () => ref.read(authControllerProvider.notifier).signOut(),
+            onPressed: () async {
+              if (await confirmSignOut(context)) {
+                ref.read(authControllerProvider.notifier).signOut();
+              }
+            },
             icon: const Icon(Icons.logout),
           ),
         ],
@@ -53,7 +64,8 @@ class CustomerHomeScreen extends ConsumerWidget {
         onPressed: () => context.push('/customer/apply'),
         icon: const Icon(Icons.add),
         label: const Text('Apply'),
-        backgroundColor: AppColors.ocean,
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
       ),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -791,7 +803,11 @@ class DependentHomeScreen extends ConsumerWidget {
         title: const Text('Dependent / Guarantor'),
         actions: [
           IconButton(
-            onPressed: () => ref.read(authControllerProvider.notifier).signOut(),
+            onPressed: () async {
+              if (await confirmSignOut(context)) {
+                ref.read(authControllerProvider.notifier).signOut();
+              }
+            },
             icon: const Icon(Icons.logout),
           ),
         ],

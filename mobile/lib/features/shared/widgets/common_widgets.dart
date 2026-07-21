@@ -104,7 +104,7 @@ Color statusColor(String status) {
       return AppColors.forest;
     case 'declined':
     case 'cancelled':
-      return const Color(0xFFA32D2D);
+      return AppColors.danger;
     case 'recommended':
     case 'under_review':
       return AppColors.clay;
@@ -118,7 +118,7 @@ Color statusColor(String status) {
 Color priorityColor(String priority) {
   switch (priority) {
     case 'urgent':
-      return const Color(0xFFA32D2D);
+      return AppColors.danger;
     case 'high':
       return AppColors.clay;
     case 'medium':

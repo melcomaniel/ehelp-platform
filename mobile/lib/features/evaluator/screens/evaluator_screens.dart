@@ -7,6 +7,7 @@ import '../../../providers/auth_provider.dart';
 import '../../../services/liveness_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../liveness/screens/face_liveness_screen.dart';
+import '../../shared/widgets/app_confirm_dialog.dart';
 import '../../shared/widgets/common_widgets.dart';
 
 final evaluatorQueueProvider =
@@ -32,14 +33,19 @@ class EvaluatorHomeScreen extends ConsumerWidget {
         title: const Text('Evaluator'),
         actions: [
           IconButton(
-            onPressed: () => ref.read(authControllerProvider.notifier).signOut(),
+            onPressed: () async {
+              if (await confirmSignOut(context)) {
+                ref.read(authControllerProvider.notifier).signOut();
+              }
+            },
             icon: const Icon(Icons.logout),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push('/evaluator/register-customer'),
-        backgroundColor: AppColors.clay,
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
         icon: const Icon(Icons.person_add_alt_1),
         label: const Text('Register customer'),
       ),
