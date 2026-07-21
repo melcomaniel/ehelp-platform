@@ -1,0 +1,86 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../models/app_role.dart';
+import '../models/profile.dart';
+import '../services/application_service.dart';
+import '../services/auth_service.dart';
+
+final supabaseClientProvider = Provider<SupabaseClient>(
+  (ref) => Supabase.instance.client,
+);
+
+final authServiceProvider = Provider<AuthService>(
+  (ref) => AuthService(ref.watch(supabaseClientProvider)),
+);
+
+final applicationServiceProvider = Provider<ApplicationService>(
+  (ref) => ApplicationService(ref.watch(supabaseClientProvider)),
+);
+
+final authStateProvider = StreamProvider<AuthState>((ref) {
+  return ref.watch(authServiceProvider).authStateChanges;
+});
+
+final currentProfileProvider = FutureProvider<Profile?>((ref) async {
+  ref.watch(authStateProvider);
+  final auth = ref.watch(authServiceProvider);
+  if (auth.currentUser == null) return null;
+  return auth.fetchProfile();
+});
+
+class AuthController extends Notifier<AsyncValue<void>> {
+  @override
+  AsyncValue<void> build() => const AsyncValue.data(null);
+
+  AuthService get _auth => ref.read(authServiceProvider);
+
+  Future<void> signIn(String email, String password) async {
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() async {
+      await _auth.signIn(email: email, password: password);
+      ref.invalidate(currentProfileProvider);
+    });
+  }
+
+  Future<void> signUp({
+    required String email,
+    required String password,
+    required String fullName,
+    required String roleValue,
+    String? phone,
+  }) async {
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() async {
+      await _auth.signUp(
+        email: email,
+        password: password,
+        fullName: fullName,
+        role: AppRole.fromString(roleValue),
+        phone: phone,
+      );
+      ref.invalidate(currentProfileProvider);
+    });
+  }
+
+  Future<void> sendOtp(String email) async {
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() => _auth.signInWithOtp(email: email));
+  }
+
+  Future<void> verifyOtp(String email, String token) async {
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() async {
+      await _auth.verifyOtp(email: email, token: token);
+      ref.invalidate(currentProfileProvider);
+    });
+  }
+
+  Future<void> signOut() async {
+    await _auth.signOut();
+    ref.invalidate(currentProfileProvider);
+  }
+}
+
+final authControllerProvider =
+    NotifierProvider<AuthController, AsyncValue<void>>(AuthController.new);

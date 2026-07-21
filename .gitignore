@@ -3,3 +3,19 @@
 .env*
 .vscode/
 .idea/
+
+# Flutter / mobile
+mobile/.dart_tool/
+mobile/build/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/**/.gradle/
+mobile/**/local.properties
+mobile/**/Pods/
+mobile/**/DerivedData/
+mobile/ios/Flutter/ephemeral/
+mobile/android/app/debug/
+mobile/android/app/profile/
+mobile/android/app/release/
+*.jks
+*.keystore
