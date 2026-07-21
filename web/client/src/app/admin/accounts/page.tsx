@@ -2,9 +2,14 @@
 
 import * as React from "react"
 
-import { useEhelp } from "@/lib/ehelp/store"
-import type { Role } from "@/lib/ehelp/types"
-import { ROLE_LABEL } from "@/lib/ehelp/types"
+import { useAdminAccess } from "@/lib/admin/access-provider"
+import {
+  approveStaffAccount,
+  listStaffAccounts,
+  registerStaffAccount,
+  type StaffAccountRow,
+} from "@/lib/admin/account-actions"
+import { APP_ROLE_LABEL } from "@/lib/auth/types"
 import {
   DataTable,
   Field,
@@ -29,96 +34,144 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { KeyRoundIcon, UserPlusIcon } from "lucide-react"
+import { UserPlusIcon } from "lucide-react"
 
-const REGISTERABLE: Role[] = ["approver", "evaluator"]
+const REGISTERABLE = [
+  { value: "approver" as const, label: "Approver" },
+  { value: "evaluator" as const, label: "Evaluator" },
+]
 
 export default function AccountsPage() {
-  const { state, can, registerAccount, approveAccount } = useEhelp()
-  const { region } = state.session
+  const { can, isDswdAdmin, isSatelliteAdmin, region, loading: accessLoading } =
+    useAdminAccess()
 
+  const [accounts, setAccounts] = React.useState<StaffAccountRow[]>([])
   const [open, setOpen] = React.useState(false)
   const [name, setName] = React.useState("")
-  const [role, setRole] = React.useState<Role>("evaluator")
+  const [email, setEmail] = React.useState("")
+  const [password, setPassword] = React.useState("")
+  const [role, setRole] = React.useState<"approver" | "evaluator">("evaluator")
+  const [busy, setBusy] = React.useState(false)
+  const [message, setMessage] = React.useState<string | null>(null)
 
-  const submit = () => {
-    if (!name) return
-    registerAccount({
-      name,
+  const reload = React.useCallback(async () => {
+    const rows = await listStaffAccounts()
+    setAccounts(rows)
+  }, [])
+
+  React.useEffect(() => {
+    if (!accessLoading) void reload()
+  }, [accessLoading, reload])
+
+  const submit = async () => {
+    setBusy(true)
+    setMessage(null)
+    const result = await registerStaffAccount({
+      email,
+      fullName: name,
+      password,
       role,
-      region,
-      pinAgeDays: 0,
-      otpEnabled: false,
-      faceEnrolled: false,
     })
+    if (!result.ok) {
+      setMessage(result.error)
+      setBusy(false)
+      return
+    }
     setOpen(false)
     setName("")
+    setEmail("")
+    setPassword("")
+    setRole("evaluator")
+    await reload()
+    setBusy(false)
+  }
+
+  const approve = async (id: string) => {
+    setBusy(true)
+    setMessage(null)
+    const result = await approveStaffAccount(id)
+    if (!result.ok) setMessage(result.error)
+    else await reload()
+    setBusy(false)
   }
 
   return (
     <>
       <PageHeader
         title="Internal Accounts"
-        description="Satellite admins register regional staff; DSWD Admin approves activation. PIN expires at 90 days."
+        description={
+          isSatelliteAdmin
+            ? `Register approvers and evaluators for ${region?.name ?? "your region"}; DSWD Admin approves activation.`
+            : "Approve pending regional staff and review internal accounts."
+        }
       >
-        {can("register-accounts") && (
+        {can("register-accounts") && isSatelliteAdmin && (
           <Button size="sm" onClick={() => setOpen(true)}>
             <UserPlusIcon /> Register account
           </Button>
         )}
       </PageHeader>
 
+      {message && (
+        <p className="text-sm text-muted-foreground" role="status">
+          {message}
+        </p>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Staff Accounts</CardTitle>
           <CardDescription>
-            Auth factors: PIN (90-day expiry) + OTP + face scan enrolment
+            Roles: Approver and Evaluator are region-scoped; Satellite Admin owns
+            the tenant
           </CardDescription>
         </CardHeader>
         <CardContent>
           <DataTable
             headers={[
-              "ID",
               "Name",
+              "Email",
               "Role",
               "Region",
-              "PIN Age",
-              "OTP",
-              "Face",
               "Status",
+              "Active",
               "Actions",
             ]}
-            empty={state.accounts.length === 0}
+            empty={!accessLoading && accounts.length === 0}
           >
-            {state.accounts.map((a) => (
+            {accounts.map((a) => (
               <tr key={a.id} className="border-b last:border-0">
-                <Td className="font-mono text-xs">{a.id}</Td>
-                <Td>{a.name}</Td>
-                <Td className="text-muted-foreground">{ROLE_LABEL[a.role]}</Td>
-                <Td className="text-muted-foreground">{a.region}</Td>
-                <Td>
-                  {a.pinAgeDays > 90 ? (
-                    <span className="flex items-center gap-1 text-xs font-medium text-red-600">
-                      <KeyRoundIcon className="size-3" /> Expired ({a.pinAgeDays}d)
-                    </span>
-                  ) : (
-                    <span className="text-xs tabular-nums text-muted-foreground">
-                      {a.pinAgeDays}d / 90d
-                    </span>
-                  )}
+                <Td>{a.fullName || "—"}</Td>
+                <Td className="text-muted-foreground">{a.email ?? "—"}</Td>
+                <Td className="text-muted-foreground">
+                  {APP_ROLE_LABEL[a.role]}
+                </Td>
+                <Td className="text-muted-foreground">
+                  {a.regionCode ?? "—"}
                 </Td>
                 <Td>
-                  <StatusPill value={a.otpEnabled ? "Active" : "Pending"} />
+                  <StatusPill
+                    value={
+                      a.validationStatus === "validated"
+                        ? "Active"
+                        : a.validationStatus === "rejected"
+                          ? "Declined"
+                          : "Pending Approval"
+                    }
+                  />
                 </Td>
                 <Td>
-                  <StatusPill value={a.faceEnrolled ? "Verified" : "Pending"} />
+                  <StatusPill value={a.isActive ? "Active" : "Pending"} />
                 </Td>
                 <Td>
-                  <StatusPill value={a.status} />
-                </Td>
-                <Td>
-                  {can("approve-accounts") && a.status === "Pending Approval" ? (
-                    <Button size="xs" onClick={() => approveAccount(a.id)}>
+                  {can("approve-accounts") &&
+                  isDswdAdmin &&
+                  a.validationStatus === "pending" ? (
+                    <Button
+                      size="xs"
+                      disabled={busy}
+                      onClick={() => void approve(a.id)}
+                    >
                       Approve
                     </Button>
                   ) : (
@@ -136,8 +189,8 @@ export default function AccountsPage() {
           <SheetHeader>
             <SheetTitle>Register internal account</SheetTitle>
             <SheetDescription>
-              Created for {region}, lands in DSWD Admin&apos;s approval queue
-              before activation.
+              Created for {region?.name ?? "your region"} as Approver or
+              Evaluator. Lands pending until DSWD Admin approval.
             </SheetDescription>
           </SheetHeader>
           <div className="grid gap-4 px-4">
@@ -147,17 +200,36 @@ export default function AccountsPage() {
               onChange={(e) => setName(e.target.value)}
               placeholder="Staff full name"
             />
+            <Field
+              label="Email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="staff@example.gov.ph"
+            />
+            <Field
+              label="Temporary password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Min. 8 characters"
+            />
             <MenuSelect
               label="Role"
-              value={ROLE_LABEL[role]}
-              options={REGISTERABLE.map((r) => ROLE_LABEL[r])}
+              value={REGISTERABLE.find((r) => r.value === role)?.label ?? ""}
+              options={REGISTERABLE.map((r) => r.label)}
               onChange={(v) =>
-                setRole(REGISTERABLE.find((r) => ROLE_LABEL[r] === v) ?? "evaluator")
+                setRole(
+                  REGISTERABLE.find((r) => r.label === v)?.value ?? "evaluator",
+                )
               }
             />
           </div>
           <SheetFooter>
-            <Button onClick={submit} disabled={!name}>
+            <Button
+              onClick={() => void submit()}
+              disabled={busy || !name || !email || password.length < 8}
+            >
               Register (pending approval)
             </Button>
           </SheetFooter>

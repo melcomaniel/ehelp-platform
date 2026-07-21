@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# EHELP Web Client
 
-## Getting Started
+Next.js web app for EHELP (citizen dashboard, admin, social worker).
 
-First, run the development server:
+## Setup
 
 ```bash
+cd web/client
+cp .env.example .env.local
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Auth & backend
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Uses the same Supabase project as the mobile app:
 
-## Learn More
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
-To learn more about Next.js, take a look at the following resources:
+Client helpers live in `src/lib/supabase/`:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `client.ts` — browser / Client Components
+- `server.ts` — Server Components / Route Handlers
+- `middleware.ts` — session refresh + route guards
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Auth mirrors mobile (`signInWithPassword`, email OTP, `signUp` with `full_name` / `role` / `phone` metadata, `profiles` lookup, sign out):
 
-## Deploy on Vercel
+| Path | Purpose |
+|------|---------|
+| `/signin` | Password or email OTP |
+| `/signup` | Self-register (customer, dependent, evaluator, approver) |
+| `/otp` | Verify email OTP |
+| `/auth/callback` | Email confirmation redirect |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Protected: `/dashboard`, `/admin`, `/social-worker`. After login, users are sent to a role home (`customer`/`dependent` → dashboard, `evaluator`/`approver` → social worker, admin roles → admin).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Add `http://localhost:3000/auth/callback` to Supabase Auth redirect URLs for local email confirmation.
+
+### Seed a tenant admin (regions + Auth)
+
+Tenants are rows in `regions`. A tenant admin is a Supabase Auth user with `profiles.role = satellite_admin` and `profiles.region_id` set to that region.
+
+1. Add `SUPABASE_SERVICE_ROLE_KEY` to `.env.local` (Project Settings → API).
+2. Run:
+
+```bash
+npm run seed:tenant-admin
+```
+
+Defaults: region `DEMO` / `Demo Tenant`, login `admin@demo.local` / `DemoAdmin123!`. Override with `SEED_REGION_CODE`, `SEED_REGION_NAME`, `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_ADMIN_NAME`.
+
+For a super admin (template + cross-region RBAC):
+
+```bash
+npm run seed:dswd-admin
+```
+
+Defaults: `dswd@demo.local` / `DswdAdmin123!`.
+
+### Live admin surfaces
+
+These admin pages use Supabase (not the ehelp mock store):
+
+| Path | Who | Behavior |
+|------|-----|----------|
+| `/admin/rbac` | Satellite Admin | Edit `approver` / `evaluator` grants for own `region_id` |
+| `/admin/rbac` | DSWD Admin | Edit any region (incl. `satellite_admin` grants); edit global `rbac_templates`; apply template to region(s) |
+| `/admin/accounts` | Satellite Admin | Create Auth user + profile (`approver`/`evaluator`, pending) |
+| `/admin/accounts` | DSWD Admin | Approve pending staff |
+| `/admin/templates` | DSWD / Satellite | Master `program_templates` vs regional `region_templates` |
+
+Requires `SUPABASE_SERVICE_ROLE_KEY` for staff registration from `/admin/accounts`.
+
+Other admin pages may still use local demo state; auth sessions are live against Supabase.
