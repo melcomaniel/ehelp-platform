@@ -40,6 +40,7 @@ import {
   ScrollTextIcon,
   HandHeartIcon,
   ChevronRightIcon,
+  WorkflowIcon,
 } from "lucide-react"
 
 interface NavLeaf {
@@ -72,6 +73,11 @@ const NAV: NavEntry[] = [
     title: "Registrations",
     url: "/admin/registrations",
     icon: <UserPlusIcon />,
+  },
+  {
+    title: "Workflows",
+    url: "/dashboard/workflows",
+    icon: <WorkflowIcon />,
   },
   {
     title: "Templates",
