@@ -30,6 +30,7 @@ import { useWorkflow } from "@/lib/workflow/store"
 import type { RoleKey } from "@/lib/workflow/types"
 import { ROLE_LABEL } from "@/lib/workflow/types"
 import {
+  ArrowLeftIcon,
   ChevronsUpDownIcon,
   ClipboardListIcon,
   FolderKanbanIcon,
@@ -58,7 +59,10 @@ interface NavGroup {
 const GROUPS: NavGroup[] = [
   {
     label: "Overview",
-    items: [{ title: "Dashboard", url: "/dashboard", icon: GaugeIcon, roles: ["admin", "applicant", "reviewer", "approver"] }],
+    items: [
+      { title: "Dashboard", url: "/dashboard", icon: GaugeIcon, roles: ["admin", "applicant", "reviewer", "approver"] },
+      { title: "Back to Admin", url: "/admin", icon: ArrowLeftIcon, roles: ["admin"] },
+    ],
   },
   {
     label: "Workflow",
