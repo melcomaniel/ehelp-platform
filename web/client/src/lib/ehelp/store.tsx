@@ -11,7 +11,6 @@ import type {
   InternalAccount,
   Permission,
   Recommendation,
-  Region,
   RegionalOverride,
   Role,
   Template,
@@ -26,8 +25,6 @@ interface EhelpStore {
   can: (perm: Permission) => boolean
   actorLabel: () => string
   cooldownBlock: (app: Application) => string | null
-  setSession: (role: Role, region: Region) => void
-  resetAll: () => void
   registerCustomer: (c: Omit<Customer, "id">) => void
   verifyFaceScan: (customerId: string) => void
   setDisbursementPref: (customerId: string, pref: Customer["disbursementPref"]) => void
@@ -126,14 +123,6 @@ export function EhelpProvider({ children }: { children: React.ReactNode }) {
           return `Cooldown active — ${Math.ceil(cooldown - elapsed)} of ${cooldown} days remaining`
         }
         return null
-      },
-
-      setSession: (role, region) =>
-        setState((prev) => ({ ...prev, session: { role, region } })),
-
-      resetAll: () => {
-        window.localStorage.removeItem(STORAGE_KEY)
-        setState(SEED)
       },
 
       registerCustomer: (c) => {
