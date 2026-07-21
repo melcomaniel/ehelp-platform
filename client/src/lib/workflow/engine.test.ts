@@ -5,6 +5,8 @@ import {
   copyStepSet,
   decide,
   disburse,
+  reviewItemsOf,
+  reviewProgress,
   submit,
   validateAnswers,
   verify,
@@ -24,6 +26,27 @@ const APPROVER = "U-APPR"
 const ADMIN = "U-ADMIN"
 
 const clone = (): WorkflowState => JSON.parse(JSON.stringify(SEED))
+
+/** Mark every checklist item verified on the app's current review step. */
+function verifyCurrentReview(state: WorkflowState, appId: string): WorkflowState {
+  const app = state.applications.find((a) => a.id === appId)!
+  const version = state.versions.find((v) => v.id === app.programVersionId)!
+  const items = reviewItemsOf(state, appId, version.stepSetId)
+  return {
+    ...state,
+    reviewChecks: [
+      ...state.reviewChecks,
+      ...items.map((it, i) => ({
+        id: `RCK-${appId}-${i}`,
+        applicationId: appId,
+        stepId: app.currentStepId!,
+        itemKey: it.key,
+        checkedBy: "U-REV",
+        at,
+      })),
+    ],
+  }
+}
 
 describe("decide — guards", () => {
   it("refuses a decision from the wrong role", () => {
@@ -122,7 +145,7 @@ describe("decide — guards", () => {
 
 describe("decide — transitions", () => {
   it("approve at review advances to the second review", () => {
-    const result = decide(clone(), {
+    const result = decide(verifyCurrentReview(clone(), "APP-001"), {
       applicationId: "APP-001",
       action: "approve",
       actorId: REVIEWER,
@@ -137,7 +160,7 @@ describe("decide — transitions", () => {
   })
 
   it("approve at the last decision routes to the disbursement step", () => {
-    const result = decide(clone(), {
+    const result = decide(verifyCurrentReview(clone(), "APP-007"), {
       applicationId: "APP-007", // waiting at the second review
       action: "approve",
       actorId: APPROVER,
@@ -461,7 +484,91 @@ describe("seed integrity", () => {
       const events = SEED.events.filter((e) => e.applicationId === app.id)
       expect(events.length).toBeGreaterThan(0)
       expect(events[0].action).toBe("submit")
-      expect(validateAnswers(SEED, "SS-P", app.id)).toEqual({})
+      const version = SEED.versions.find((v) => v.id === app.programVersionId)!
+      expect(validateAnswers(SEED, version.stepSetId, app.id)).toEqual({})
     }
+  })
+})
+
+describe("4Ps review checklist", () => {
+  const REVIEW = "ST-F-REV"
+  const SW = "U-SW"
+  const APP = "FPS-001" // submitted, at 4Ps review
+
+  function verifyAll(state: WorkflowState, appId: string): WorkflowState {
+    const version = state.versions.find((v) => v.id === state.applications.find((a) => a.id === appId)!.programVersionId)!
+    const items = reviewItemsOf(state, appId, version.stepSetId)
+    return {
+      ...state,
+      reviewChecks: [
+        ...state.reviewChecks,
+        ...items.map((it, i) => ({
+          id: `RCK-T-${i}`,
+          applicationId: appId,
+          stepId: REVIEW,
+          itemKey: it.key,
+          checkedBy: SW,
+          at,
+        })),
+      ],
+    }
+  }
+
+  it("derives one item per answered field and per uploaded document", () => {
+    const items = reviewItemsOf(SEED, APP, "SS-F")
+    // 6 non-file answers (name, dob, children, income, component, situation)
+    // + checkbox (checked) + 2 files = 9
+    expect(items.length).toBe(9)
+    expect(items.filter((i) => i.kind === "file").length).toBe(2)
+    // real values surfaced, not placeholders
+    expect(items.some((i) => i.value === "Maria Reyes")).toBe(true)
+  })
+
+  it("refuses approve until every item is verified", () => {
+    const result = decide(clone(), {
+      applicationId: APP,
+      action: "approve",
+      actorId: SW,
+      at,
+      idGen,
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error).toContain("Verify all items")
+  })
+
+  it("allows approve once all items verified → advances to disbursement", () => {
+    const state = verifyAll(clone(), APP)
+    const progress = reviewProgress(
+      state,
+      state.applications.find((a) => a.id === APP)!,
+      state.steps.find((s) => s.id === REVIEW)!
+    )
+    expect(progress.complete).toBe(true)
+    const result = decide(state, { applicationId: APP, action: "approve", actorId: SW, at, idGen })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const app = result.state.applications.find((a) => a.id === APP)!
+    expect(app.status).toBe("approved")
+    expect(app.currentStepId).toBe("ST-F-DSB")
+  })
+
+  it("does not gate return even with items unverified", () => {
+    const result = decide(clone(), {
+      applicationId: APP,
+      action: "return",
+      actorId: SW,
+      reasonCodeId: "RC-F-RET-1",
+      comment: "Please re-upload a clearer barangay certificate.",
+      at,
+      idGen,
+    })
+    expect(result.ok).toBe(true)
+  })
+
+  it("refuses approve from a non-social-worker", () => {
+    const state = verifyAll(clone(), APP)
+    const result = decide(state, { applicationId: APP, action: "approve", actorId: REVIEWER, at, idGen })
+    expect(result.ok).toBe(false)
   })
 })

@@ -118,6 +118,86 @@ export function answerFor(
   )
 }
 
+// ---- review checklist ------------------------------------------------------
+
+export interface ReviewItem {
+  key: string
+  label: string
+  /** the real submitted value, shown so the reviewer verifies actual input */
+  value: string
+  kind: "answer" | "file"
+  /** file items carry the object URL (may be absent after reload) */
+  fileUrl?: string
+  fileName?: string
+}
+
+/**
+ * Checklist items for a review step, derived from the application's real
+ * submitted inputs: one per answered field, one per uploaded document.
+ * Empty optional answers are skipped (nothing to verify).
+ */
+export function reviewItemsOf(
+  state: WorkflowState,
+  applicationId: string,
+  stepSetId: string
+): ReviewItem[] {
+  const items: ReviewItem[] = []
+  for (const field of formFieldsOfStepSet(state, stepSetId)) {
+    const answer = answerFor(state, applicationId, field.id)
+    if (field.type === "file") {
+      const files = answer?.files ?? []
+      files.forEach((f, i) => {
+        items.push({
+          key: `${field.id}#${i}`,
+          label: field.label,
+          value: f.name,
+          kind: "file",
+          fileUrl: f.url,
+          fileName: f.name,
+        })
+      })
+      continue
+    }
+    if (field.type === "checkbox") {
+      if (answer?.checked)
+        items.push({ key: field.id, label: field.label, value: "Yes", kind: "answer" })
+      continue
+    }
+    const value = answer?.value?.trim() ?? ""
+    if (value === "") continue
+    let display = value
+    if (field.type === "select") {
+      const opt = optionsOf(state, field.id).find((o) => o.value === value)
+      display = opt?.label ?? value
+    }
+    items.push({ key: field.id, label: field.label, value: display, kind: "answer" })
+  }
+  return items
+}
+
+export function isItemVerified(
+  state: WorkflowState,
+  applicationId: string,
+  stepId: string,
+  itemKey: string
+): boolean {
+  return state.reviewChecks.some(
+    (c) => c.applicationId === applicationId && c.stepId === stepId && c.itemKey === itemKey
+  )
+}
+
+export function reviewProgress(
+  state: WorkflowState,
+  app: WorkflowApplication,
+  step: Step
+): { verified: number; total: number; complete: boolean } {
+  const version = state.versions.find((v) => v.id === app.programVersionId)
+  const items = version ? reviewItemsOf(state, app.id, version.stepSetId) : []
+  const verified = items.filter((i) => isItemVerified(state, app.id, step.id, i.key)).length
+  const total = items.length
+  return { verified, total, complete: verified >= total }
+}
+
 // ---- validation ------------------------------------------------------------
 
 export function validateFiles(rule: FileRule | undefined, files: FileMeta[]): string | null {
@@ -500,6 +580,16 @@ export function decide(state: WorkflowState, input: DecisionInput): EngineResult
       if (!match) return { ok: false, error: "A reason code is required for this action" }
       reasonCodeId = match.id
     }
+  }
+
+  // review checklist gate: cannot approve until every submitted item verified
+  if (input.action === "approve") {
+    const progress = reviewProgress(state, app, step)
+    if (!progress.complete)
+      return {
+        ok: false,
+        error: `Verify all items before approving (${progress.verified}/${progress.total})`,
+      }
   }
 
   let next: Partial<WorkflowApplication>

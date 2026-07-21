@@ -79,8 +79,183 @@ function buildStepSet(p: string) {
   return { stepSetId, formId, verifyId, reviewId, approvalId, disburseId, steps, fields, options, fileRules, stepActions, reasonCodes }
 }
 
+const U = {
+  admin: "U-ADMIN",
+  reviewer: "U-REV",
+  approver: "U-APPR",
+  socialWorker: "U-SW",
+  a1: "U-APP-1",
+  a2: "U-APP-2",
+  a3: "U-APP-3",
+  a4: "U-APP-4",
+  a5: "U-APP-5",
+  a6: "U-APP-6",
+}
+
 const T = buildStepSet("T") // owned by the template
-const P = buildStepSet("P") // the program version's independent copy
+const P = buildStepSet("P") // the Financial Assistance program version's copy
+
+/**
+ * 4Ps program step set: Form → Identity Verify → Review → Disbursement.
+ * The review is assigned to the social worker, who verifies each submitted
+ * item (checklist) before approving.
+ */
+function build4Ps() {
+  const stepSetId = "SS-F"
+  const formId = "ST-F-FORM"
+  const verifyId = "ST-F-VER"
+  const reviewId = "ST-F-REV"
+  const disburseId = "ST-F-DSB"
+
+  const steps: Step[] = [
+    { id: formId, stepSetId, position: 1, type: "form", name: "Application Form", assignedRole: null, autoAdvance: true },
+    { id: verifyId, stepSetId, position: 2, type: "verify", name: "Identity Verification", assignedRole: null, autoAdvance: false, verifyConfig: { provider: "eVerify", faceLiveness: true, philsysMatch: true } },
+    { id: reviewId, stepSetId, position: 3, type: "review", name: "Social Worker Review", assignedRole: "social_worker", autoAdvance: false },
+    { id: disburseId, stepSetId, position: 4, type: "disbursement", name: "Cash Grant Disbursement", assignedRole: "admin", autoAdvance: false },
+  ]
+
+  const fields: FormField[] = [
+    { id: "FLD-F-1", stepId: formId, position: 1, type: "text", label: "Household head full name", helpText: "As it appears on the PhilSys ID", required: true },
+    { id: "FLD-F-2", stepId: formId, position: 2, type: "date", label: "Date of birth", helpText: "", required: true },
+    { id: "FLD-F-3", stepId: formId, position: 3, type: "number", label: "Number of children (0–18)", helpText: "Qualified household members", required: true },
+    { id: "FLD-F-4", stepId: formId, position: 4, type: "number", label: "Monthly household income (PHP)", helpText: "Combined income of all members", required: true },
+    { id: "FLD-F-5", stepId: formId, position: 5, type: "select", label: "Grant component", helpText: "", required: true },
+    { id: "FLD-F-6", stepId: formId, position: 6, type: "textarea", label: "Household situation", helpText: "Brief description for the case record", required: true },
+    { id: "FLD-F-7", stepId: formId, position: 7, type: "file", label: "Proof of residence", helpText: "Barangay certificate or utility bill", required: true },
+    { id: "FLD-F-8", stepId: formId, position: 8, type: "file", label: "Children's school enrolment", helpText: "Enrolment form or school ID", required: true },
+    { id: "FLD-F-9", stepId: formId, position: 9, type: "checkbox", label: "I certify the information is true and consent to verification", helpText: "", required: true },
+  ]
+
+  const options: FieldOption[] = [
+    { id: "OPT-F-1", fieldId: "FLD-F-5", position: 1, value: "health", label: "Health grant" },
+    { id: "OPT-F-2", fieldId: "FLD-F-5", position: 2, value: "education", label: "Education grant" },
+    { id: "OPT-F-3", fieldId: "FLD-F-5", position: 3, value: "both", label: "Health + Education" },
+  ]
+
+  const fileRules: FileRule[] = [
+    { id: "FR-F-1", fieldId: "FLD-F-7", allowedMime: ["application/pdf", "image/jpeg", "image/png"], maxSizeMb: 5, minCount: 1, maxCount: 2 },
+    { id: "FR-F-2", fieldId: "FLD-F-8", allowedMime: ["application/pdf", "image/jpeg", "image/png"], maxSizeMb: 5, minCount: 1, maxCount: 3 },
+  ]
+
+  const stepActions: StepAction[] = [
+    { id: "ACT-F-REV-APPROVE", stepId: reviewId, action: "approve", enabled: true, commentRequired: false },
+    { id: "ACT-F-REV-RETURN", stepId: reviewId, action: "return", enabled: true, commentRequired: true },
+    { id: "ACT-F-REV-REJECT", stepId: reviewId, action: "reject", enabled: true, commentRequired: true },
+  ]
+
+  const reasonCodes: ReasonCode[] = [
+    { id: "RC-F-RET-1", stepActionId: "ACT-F-REV-RETURN", position: 1, code: "missing-document", label: "Missing document" },
+    { id: "RC-F-RET-2", stepActionId: "ACT-F-REV-RETURN", position: 2, code: "unclear-scan", label: "Unclear document scan" },
+    { id: "RC-F-REJ-1", stepActionId: "ACT-F-REV-REJECT", position: 1, code: "not-eligible", label: "Not eligible" },
+    { id: "RC-F-REJ-2", stepActionId: "ACT-F-REV-REJECT", position: 2, code: "duplicate", label: "Duplicate household" },
+  ]
+
+  return { stepSetId, formId, verifyId, reviewId, disburseId, steps, fields, options, fileRules, stepActions, reasonCodes }
+}
+
+const F = build4Ps()
+
+interface FourPsAnswerSpec {
+  name: string
+  dob: string
+  children: string
+  income: string
+  component: string
+  situation: string
+}
+
+function fourPsAnswers(appId: string, spec: FourPsAnswerSpec): Answer[] {
+  const mk = (n: number, patch: Partial<Answer>): Answer => ({
+    id: `ANS-${appId}-${n}`,
+    applicationId: appId,
+    fieldId: `FLD-F-${n}`,
+    value: "",
+    checked: false,
+    files: [],
+    ...patch,
+  })
+  return [
+    mk(1, { value: spec.name }),
+    mk(2, { value: spec.dob }),
+    mk(3, { value: spec.children }),
+    mk(4, { value: spec.income }),
+    mk(5, { value: spec.component }),
+    mk(6, { value: spec.situation }),
+    mk(7, { files: [{ name: "barangay-certificate.pdf", sizeBytes: 260_000, mime: "application/pdf" }] }),
+    mk(8, { files: [{ name: "enrolment-form.jpg", sizeBytes: 480_000, mime: "image/jpeg" }] }),
+    mk(9, { checked: true }),
+  ]
+}
+
+interface FourPsAppSpec {
+  id: string
+  applicantId: string
+  status: WorkflowState["applications"][number]["status"]
+  currentStepId: string | null
+  createdAt: string
+  answers: FourPsAnswerSpec
+  events: Omit<ApplicationEvent, "applicationId">[]
+}
+
+// all 4Ps apps are filed and submitted; the social worker reviews them
+const FOURPS_APPS: FourPsAppSpec[] = [
+  {
+    id: "FPS-001", applicantId: U.a1, status: "submitted", currentStepId: F.reviewId,
+    createdAt: "2026-07-16T01:00:00.000Z",
+    answers: { name: "Maria Reyes", dob: "1988-03-12", children: "3", income: "8500", component: "both", situation: "Solo parent of three school-age children; irregular laundry income." },
+    events: [
+      { id: "EFPS-001-1", actorId: U.a1, action: "submit", fromStepId: null, toStepId: F.verifyId, reasonCodeId: null, comment: null, at: "2026-07-16T01:00:00.000Z" },
+      { id: "EFPS-001-2", actorId: U.a1, action: "verify", fromStepId: F.verifyId, toStepId: F.reviewId, reasonCodeId: null, comment: "Face check passed (94%)", at: "2026-07-16T01:05:00.000Z" },
+    ],
+  },
+  {
+    id: "FPS-002", applicantId: U.a2, status: "submitted", currentStepId: F.reviewId,
+    createdAt: "2026-07-16T03:20:00.000Z",
+    answers: { name: "Jose Bautista", dob: "1979-08-21", children: "2", income: "9200", component: "education", situation: "Two children in elementary; seasonal farm worker." },
+    events: [
+      { id: "EFPS-002-1", actorId: U.a2, action: "submit", fromStepId: null, toStepId: F.verifyId, reasonCodeId: null, comment: null, at: "2026-07-16T03:20:00.000Z" },
+      { id: "EFPS-002-2", actorId: U.a2, action: "verify", fromStepId: F.verifyId, toStepId: F.reviewId, reasonCodeId: null, comment: "Face check passed (91%)", at: "2026-07-16T03:24:00.000Z" },
+    ],
+  },
+  {
+    id: "FPS-003", applicantId: U.a3, status: "submitted", currentStepId: F.reviewId,
+    createdAt: "2026-07-17T05:10:00.000Z",
+    answers: { name: "Ana Dela Cruz", dob: "1991-12-02", children: "4", income: "7600", component: "health", situation: "Four children; spouse unemployed after factory closure." },
+    events: [
+      { id: "EFPS-003-1", actorId: U.a3, action: "submit", fromStepId: null, toStepId: F.verifyId, reasonCodeId: null, comment: null, at: "2026-07-17T05:10:00.000Z" },
+      { id: "EFPS-003-2", actorId: U.a3, action: "verify", fromStepId: F.verifyId, toStepId: F.reviewId, reasonCodeId: null, comment: "Face check passed (96%)", at: "2026-07-17T05:15:00.000Z" },
+    ],
+  },
+  {
+    id: "FPS-004", applicantId: U.a4, status: "verifying", currentStepId: F.verifyId,
+    createdAt: "2026-07-18T02:30:00.000Z",
+    answers: { name: "Liza Moreno", dob: "1985-05-19", children: "1", income: "10100", component: "education", situation: "One child entering senior high; single income." },
+    events: [
+      { id: "EFPS-004-1", actorId: U.a4, action: "submit", fromStepId: null, toStepId: F.verifyId, reasonCodeId: null, comment: null, at: "2026-07-18T02:30:00.000Z" },
+    ],
+  },
+  {
+    id: "FPS-005", applicantId: U.a5, status: "approved", currentStepId: F.disburseId,
+    createdAt: "2026-07-14T04:00:00.000Z",
+    answers: { name: "Carlo Aquino", dob: "1983-02-27", children: "3", income: "8800", component: "both", situation: "Three children; recovering from illness, reduced work hours." },
+    events: [
+      { id: "EFPS-005-1", actorId: U.a5, action: "submit", fromStepId: null, toStepId: F.verifyId, reasonCodeId: null, comment: null, at: "2026-07-14T04:00:00.000Z" },
+      { id: "EFPS-005-2", actorId: U.a5, action: "verify", fromStepId: F.verifyId, toStepId: F.reviewId, reasonCodeId: null, comment: "Face check passed (93%)", at: "2026-07-14T04:05:00.000Z" },
+      { id: "EFPS-005-3", actorId: U.socialWorker, action: "approve", fromStepId: F.reviewId, toStepId: F.disburseId, reasonCodeId: null, comment: "All items verified; endorsing for disbursement.", at: "2026-07-15T02:00:00.000Z" },
+    ],
+  },
+  {
+    id: "FPS-006", applicantId: U.a6, status: "disbursed", currentStepId: null,
+    createdAt: "2026-07-12T06:00:00.000Z",
+    answers: { name: "Nena Flores", dob: "1970-10-08", children: "2", income: "6900", component: "health", situation: "Grandmother caring for two grandchildren." },
+    events: [
+      { id: "EFPS-006-1", actorId: U.a6, action: "submit", fromStepId: null, toStepId: F.verifyId, reasonCodeId: null, comment: null, at: "2026-07-12T06:00:00.000Z" },
+      { id: "EFPS-006-2", actorId: U.a6, action: "verify", fromStepId: F.verifyId, toStepId: F.reviewId, reasonCodeId: null, comment: "Face check passed (90%)", at: "2026-07-12T06:05:00.000Z" },
+      { id: "EFPS-006-3", actorId: U.socialWorker, action: "approve", fromStepId: F.reviewId, toStepId: F.disburseId, reasonCodeId: null, comment: "Verified.", at: "2026-07-13T01:00:00.000Z" },
+      { id: "EFPS-006-4", actorId: U.admin, action: "disburse", fromStepId: F.disburseId, toStepId: null, reasonCodeId: null, comment: "Released ₱4,400 to Nena Flores", at: "2026-07-13T03:00:00.000Z" },
+    ],
+  },
+]
 
 interface AnswerSpec {
   name: string
@@ -110,18 +285,6 @@ function answersFor(appId: string, spec: AnswerSpec): Answer[] {
     mk(6, { files: [spec.file ?? { name: "barangay-certificate.pdf", sizeBytes: 240_000, mime: "application/pdf" }] }),
     mk(7, { checked: true }),
   ]
-}
-
-const U = {
-  admin: "U-ADMIN",
-  reviewer: "U-REV",
-  approver: "U-APPR",
-  a1: "U-APP-1",
-  a2: "U-APP-2",
-  a3: "U-APP-3",
-  a4: "U-APP-4",
-  a5: "U-APP-5",
-  a6: "U-APP-6",
 }
 
 interface AppSpec {
@@ -249,6 +412,7 @@ export const SEED: WorkflowState = {
     { id: U.admin, name: "Amara Santos", roles: ["admin"] },
     { id: U.reviewer, name: "Rosa Dizon", roles: ["reviewer"] },
     { id: U.approver, name: "Diego Ramos", roles: ["approver"] },
+    { id: U.socialWorker, name: "Grace Villanueva", roles: ["social_worker"] },
     { id: U.a1, name: "Maria Reyes", roles: ["applicant"] },
     { id: U.a2, name: "Jose Bautista", roles: ["applicant"] },
     { id: U.a3, name: "Ana Dela Cruz", roles: ["applicant"] },
@@ -273,6 +437,13 @@ export const SEED: WorkflowState = {
       classification: "simple",
       createdFromTemplateId: "TPL-STD",
     },
+    {
+      id: "PRG-4PS",
+      name: "4Ps Financial Aid",
+      description: "Pantawid Pamilyang Pilipino Program — conditional cash grant for qualified households. Social worker reviews each application item by item.",
+      classification: "complex",
+      createdFromTemplateId: null,
+    },
   ],
   versions: [
     {
@@ -283,28 +454,52 @@ export const SEED: WorkflowState = {
       stepSetId: P.stepSetId,
       publishedAt: "2026-07-09T08:00:00.000Z",
     },
+    {
+      id: "VER-4PS-1",
+      programId: "PRG-4PS",
+      versionNo: 1,
+      status: "published",
+      stepSetId: F.stepSetId,
+      publishedAt: "2026-07-11T08:00:00.000Z",
+    },
   ],
-  stepSets: [{ id: T.stepSetId }, { id: P.stepSetId }],
-  steps: [...T.steps, ...P.steps],
-  fields: [...T.fields, ...P.fields],
-  options: [...T.options, ...P.options],
-  fileRules: [...T.fileRules, ...P.fileRules],
-  stepActions: [...T.stepActions, ...P.stepActions],
-  reasonCodes: [...T.reasonCodes, ...P.reasonCodes],
-  applications: APPS.map((a) => ({
-    id: a.id,
-    programId: "PRG-FA",
-    programVersionId: "VER-FA-1",
-    applicantId: a.applicantId,
-    currentStepId: a.currentStepId,
-    status: a.status,
-    createdAt: a.createdAt,
-    updatedAt: a.events[a.events.length - 1]?.at ?? a.createdAt,
-  })),
-  answers: APPS.flatMap((a) => answersFor(a.id, a.answers)),
-  events: APPS.flatMap((a) =>
-    a.events.map((e) => ({ ...e, applicationId: a.id }))
-  ).sort((x, y) => x.at.localeCompare(y.at)),
+  stepSets: [{ id: T.stepSetId }, { id: P.stepSetId }, { id: F.stepSetId }],
+  steps: [...T.steps, ...P.steps, ...F.steps],
+  fields: [...T.fields, ...P.fields, ...F.fields],
+  options: [...T.options, ...P.options, ...F.options],
+  fileRules: [...T.fileRules, ...P.fileRules, ...F.fileRules],
+  stepActions: [...T.stepActions, ...P.stepActions, ...F.stepActions],
+  reasonCodes: [...T.reasonCodes, ...P.reasonCodes, ...F.reasonCodes],
+  applications: [
+    ...APPS.map((a) => ({
+      id: a.id,
+      programId: "PRG-FA",
+      programVersionId: "VER-FA-1",
+      applicantId: a.applicantId,
+      currentStepId: a.currentStepId,
+      status: a.status,
+      createdAt: a.createdAt,
+      updatedAt: a.events[a.events.length - 1]?.at ?? a.createdAt,
+    })),
+    ...FOURPS_APPS.map((a) => ({
+      id: a.id,
+      programId: "PRG-4PS",
+      programVersionId: "VER-4PS-1",
+      applicantId: a.applicantId,
+      currentStepId: a.currentStepId,
+      status: a.status,
+      createdAt: a.createdAt,
+      updatedAt: a.events[a.events.length - 1]?.at ?? a.createdAt,
+    })),
+  ],
+  answers: [
+    ...APPS.flatMap((a) => answersFor(a.id, a.answers)),
+    ...FOURPS_APPS.flatMap((a) => fourPsAnswers(a.id, a.answers)),
+  ],
+  events: [
+    ...APPS.flatMap((a) => a.events.map((e) => ({ ...e, applicationId: a.id }))),
+    ...FOURPS_APPS.flatMap((a) => a.events.map((e) => ({ ...e, applicationId: a.id }))),
+  ].sort((x, y) => x.at.localeCompare(y.at)),
   verifyResults: [],
   disbursements: [
     {
@@ -317,5 +512,16 @@ export const SEED: WorkflowState = {
       releasedBy: U.approver,
       at: "2026-07-09T03:30:00.000Z",
     },
+    {
+      id: "DSB-FPS-006",
+      applicationId: "FPS-006",
+      stepId: F.disburseId,
+      payee: "Nena Flores",
+      amount: 4400,
+      instrument: "egovpay",
+      releasedBy: U.admin,
+      at: "2026-07-13T03:00:00.000Z",
+    },
   ],
+  reviewChecks: [],
 }

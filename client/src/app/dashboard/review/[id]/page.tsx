@@ -15,6 +15,7 @@ import {
 import { FormRenderer } from "@/components/workflow/form-renderer"
 import { EventHistory } from "@/components/workflow/history"
 import { usePrompts } from "@/components/workflow/prompts"
+import { ReviewChecklist } from "@/components/workflow/review-checklist"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -24,7 +25,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
-import { actionsOf, reasonCodesOf } from "@/lib/workflow/engine"
+import { actionsOf, reasonCodesOf, reviewProgress } from "@/lib/workflow/engine"
 import { useWorkflow } from "@/lib/workflow/store"
 import type { DisbursementInstrument, DecisionAction, Step } from "@/lib/workflow/types"
 import { APPLICATION_STATUS_LABEL, INSTRUMENT_LABEL } from "@/lib/workflow/types"
@@ -65,6 +66,7 @@ export default function ReviewDetailPage() {
   const reasons = stepAction ? reasonCodesOf(state, stepAction.id) : []
   const needsReason = action === "return" || action === "reject"
   const commentMissing = !!stepAction?.commentRequired && comment.trim() === ""
+  const reviewComplete = step ? reviewProgress(state, app, step).complete : true
   const reasonMissing = needsReason && reasons.length > 0 && !reasonCodeId
 
   const pick = (a: DecisionAction) => {
@@ -122,6 +124,9 @@ export default function ReviewDetailPage() {
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <div className="grid gap-4 self-start">
+          {step?.type === "review" && (
+            <ReviewChecklist app={app} step={step} stepSetId={version.stepSetId} />
+          )}
           <Card>
             <CardHeader>
               <CardTitle>Submitted answers</CardTitle>
@@ -157,6 +162,8 @@ export default function ReviewDetailPage() {
                     <Button
                       size="sm"
                       variant={action === "approve" ? "default" : "outline"}
+                      disabled={!reviewComplete}
+                      title={reviewComplete ? undefined : "Verify all checklist items first"}
                       onClick={() => pick("approve")}
                     >
                       <CheckIcon /> Approve

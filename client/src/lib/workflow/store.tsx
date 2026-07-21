@@ -101,6 +101,7 @@ interface WorkflowStore {
     instrument: DisbursementInstrument
   }) => MutationResult
   allowedActionsFor: (app: WorkflowApplication) => DecisionAction[]
+  toggleReviewItem: (applicationId: string, stepId: string, itemKey: string) => MutationResult
 }
 
 const StoreContext = React.createContext<WorkflowStore | null>(null)
@@ -752,6 +753,40 @@ export function WorkflowProvider({ children }: { children: React.ReactNode }) {
         }),
 
       allowedActionsFor: (app) => allowedActions(state, app, actingUser),
+
+      toggleReviewItem: (applicationId, stepId, itemKey) =>
+        apply((prev) => {
+          const app = prev.applications.find((a) => a.id === applicationId)
+          if (!app) return { error: "Application not found" }
+          const step = prev.steps.find((s) => s.id === stepId)
+          if (!step || step.type !== "review")
+            return { error: "Not a review step" }
+          if (app.status !== "submitted" || app.currentStepId !== stepId)
+            return { error: "Application is not at this review step" }
+          if (!step.assignedRole || !actingUser.roles.includes(step.assignedRole))
+            return { error: `Only a ${step.assignedRole ?? "qualified"} can verify items` }
+          const existing = prev.reviewChecks.find(
+            (c) => c.applicationId === applicationId && c.stepId === stepId && c.itemKey === itemKey
+          )
+          return {
+            state: {
+              ...prev,
+              reviewChecks: existing
+                ? prev.reviewChecks.filter((c) => c !== existing)
+                : [
+                    ...prev.reviewChecks,
+                    {
+                      id: nextId("RCK"),
+                      applicationId,
+                      stepId,
+                      itemKey,
+                      checkedBy: prev.actingUserId,
+                      at: now(),
+                    },
+                  ],
+            },
+          }
+        }),
     }
   }, [state, hydrated])
 

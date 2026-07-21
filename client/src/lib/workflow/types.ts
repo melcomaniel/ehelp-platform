@@ -18,13 +18,14 @@ export type FieldType =
 
 export type DecisionAction = "approve" | "return" | "reject"
 
-export type RoleKey = "admin" | "applicant" | "reviewer" | "approver"
+export type RoleKey = "admin" | "applicant" | "reviewer" | "approver" | "social_worker"
 
 export const ROLE_LABEL: Record<RoleKey, string> = {
   admin: "Admin",
   applicant: "Applicant",
   reviewer: "Reviewer",
   approver: "Approver",
+  social_worker: "Social Worker",
 }
 
 export type Classification = "simple" | "complex" | "highly_technical"
@@ -237,6 +238,19 @@ export interface Disbursement {
   at: string
 }
 
+/**
+ * A single verified checklist item on a review step. itemKey is stable per
+ * submitted input: the field id for an answer, `${fieldId}#${index}` per file.
+ */
+export interface ReviewCheck {
+  id: string
+  applicationId: string
+  stepId: string
+  itemKey: string
+  checkedBy: string
+  at: string
+}
+
 export interface WorkflowState {
   actingUserId: string
   users: AppUser[]
@@ -255,4 +269,5 @@ export interface WorkflowState {
   events: ApplicationEvent[]
   verifyResults: VerifyResult[]
   disbursements: Disbursement[]
+  reviewChecks: ReviewCheck[]
 }
