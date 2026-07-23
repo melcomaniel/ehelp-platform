@@ -11,6 +11,7 @@ import '../../liveness/screens/face_liveness_screen.dart';
 import '../../shared/widgets/app_confirm_dialog.dart';
 import '../../shared/widgets/common_widgets.dart';
 import '../../../services/liveness_service.dart';
+import '../data/program_catalog.dart';
 
 final myApplicationsProvider = FutureProvider.autoDispose<List<Application>>((ref) async {
   final profile = await ref.watch(currentProfileProvider.future);
@@ -60,13 +61,6 @@ class CustomerHomeScreen extends ConsumerWidget {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/customer/apply'),
-        icon: const Icon(Icons.add),
-        label: const Text('Apply'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-      ),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('$e')),
@@ -86,13 +80,24 @@ class CustomerHomeScreen extends ConsumerWidget {
               padding: const EdgeInsets.all(20),
               children: [
                 Text(
-                  'Hello, ${profile.fullName.isEmpty ? 'Customer' : profile.fullName}',
+                  // Demo: greet the AKAP applicant persona regardless of the
+                  // signed-in profile name.
+                  'Hello, Mario',
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'Track applications, set disbursement preference, and manage dependents.',
+                  'Choose a program to apply, or track your existing applications.',
                   style: TextStyle(color: AppColors.muted),
+                ),
+                const SizedBox(height: 24),
+                const SectionHeader(title: 'Programs'),
+                const SizedBox(height: 12),
+                ...kPrograms.map(
+                  (p) => _ProgramCard(
+                    program: p,
+                    onTap: () => context.push('/customer/programs/${p.id}'),
+                  ),
                 ),
                 const SizedBox(height: 20),
                 Row(
@@ -176,6 +181,81 @@ class _QuickTile extends StatelessWidget {
               Icon(icon, color: AppColors.ocean),
               const SizedBox(height: 8),
               Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProgramCard extends StatelessWidget {
+  const _ProgramCard({required this.program, required this.onTap});
+
+  final Program program;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: program.color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(program.icon, color: program.color),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            program.code,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      program.name,
+                      style: const TextStyle(
+                        color: AppColors.ink,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      program.tagline,
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 12,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: AppColors.muted),
             ],
           ),
         ),

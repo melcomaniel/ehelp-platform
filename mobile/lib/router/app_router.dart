@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../features/approver/screens/approver_screens.dart';
 import '../features/auth/screens/login_screen.dart';
 import '../features/customer/screens/customer_screens.dart';
+import '../features/customer/screens/program_apply_screen.dart';
 import '../features/evaluator/screens/evaluator_screens.dart';
 import '../features/shared/screens/application_detail_screen.dart';
 import '../models/app_role.dart';
@@ -69,6 +70,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Customer
       GoRoute(path: '/customer', builder: (_, __) => const CustomerHomeScreen()),
       GoRoute(path: '/customer/apply', builder: (_, __) => const ApplyScreen()),
+      GoRoute(
+        path: '/customer/programs/:id',
+        builder: (_, state) => ProgramApplyScreen(
+          programId: state.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
+        path: '/customer/programs/:id/disbursement',
+        builder: (_, state) => DisbursementQrScreen(
+          programId: state.pathParameters['id']!,
+        ),
+      ),
       GoRoute(
         path: '/customer/disbursement',
         builder: (_, __) => const DisbursementScreen(),
