@@ -18,23 +18,9 @@ import type { DisbursementInstrument, Step } from "@/lib/workflow/types"
 import { INSTRUMENT_LABEL } from "@/lib/workflow/types"
 import {
   BanknoteIcon,
-  CameraOffIcon,
   CheckCircle2Icon,
   QrCodeIcon,
 } from "lucide-react"
-
-// Native BarcodeDetector is not in the TS DOM lib yet (Chromium-only API).
-interface DetectedBarcode {
-  rawValue: string
-}
-interface BarcodeDetectorLike {
-  detect(source: CanvasImageSource): Promise<DetectedBarcode[]>
-}
-declare global {
-  interface Window {
-    BarcodeDetector?: new (options?: { formats?: string[] }) => BarcodeDetectorLike
-  }
-}
 
 /** Release form for an approved application waiting at a disbursement step. */
 export function DisbursementReleaseCard({
@@ -109,12 +95,15 @@ export function DisbursementReleaseCard({
   )
 }
 
-type ScanStatus = "starting" | "scanning" | "no-camera" | "success"
+type ScanStatus = "scanning" | "success"
+
+// How long the mocked scan animation runs before auto-succeeding.
+const SCAN_MS = 5000
 
 /**
- * Camera QR scanner in a modal. Uses the native BarcodeDetector where
- * available; the simulate button covers browsers without it (demo escape
- * hatch, also works when no camera is present).
+ * Mocked payout-QR scan for the demo. No real camera or BarcodeDetector —
+ * shows an animated QR + scanning line for a few seconds, then auto-succeeds
+ * and releases the funds. Cancel is available until it completes.
  */
 function QrScanModal({
   description,
@@ -125,82 +114,26 @@ function QrScanModal({
   onScanned: (payload: string) => void
   onCancel: () => void
 }) {
-  const videoRef = React.useRef<HTMLVideoElement>(null)
-  const [status, setStatus] = React.useState<ScanStatus>("starting")
-  const [detectorMissing, setDetectorMissing] = React.useState(false)
+  const [status, setStatus] = React.useState<ScanStatus>("scanning")
 
   const doneRef = React.useRef(false)
-  // Kept in a ref so the camera effect doesn't restart when the parent
+  // Kept in a ref so the timer effect doesn't restart when the parent
   // re-renders and hands us a new callback identity.
   const onScannedRef = React.useRef(onScanned)
   React.useEffect(() => {
     onScannedRef.current = onScanned
   }, [onScanned])
 
-  const succeed = React.useCallback((payload: string) => {
-    if (doneRef.current) return
-    doneRef.current = true
-    setStatus("success")
-    // Hold the success state briefly so the scan feels acknowledged.
-    window.setTimeout(() => onScannedRef.current(payload), 900)
-  }, [])
-
   React.useEffect(() => {
-    let cancelled = false
-    let stream: MediaStream | null = null
-    let timer: number | undefined
-
-    const start = async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" },
-          audio: false,
-        })
-      } catch {
-        if (!cancelled) setStatus("no-camera")
-        return
-      }
-      const video = videoRef.current
-      if (cancelled || !video) {
-        stream.getTracks().forEach((t) => t.stop())
-        return
-      }
-      video.srcObject = stream
-      try {
-        await video.play()
-      } catch {
-        // play() rejects if the modal unmounts mid-start; cleanup handles it
-      }
-      if (cancelled) return
-      setStatus("scanning")
-
-      if (!window.BarcodeDetector) {
-        setDetectorMissing(true)
-        return
-      }
-      const detector = new window.BarcodeDetector({ formats: ["qr_code"] })
-      timer = window.setInterval(async () => {
-        const v = videoRef.current
-        if (cancelled || doneRef.current || !v || v.readyState < 2) return
-        try {
-          const codes = await detector.detect(v)
-          if (!cancelled && codes.length > 0) {
-            window.clearInterval(timer)
-            succeed(codes[0].rawValue)
-          }
-        } catch {
-          // frame not decodable yet — keep polling
-        }
-      }, 250)
-    }
-
-    start()
-    return () => {
-      cancelled = true
-      if (timer) window.clearInterval(timer)
-      stream?.getTracks().forEach((t) => t.stop())
-    }
-  }, [succeed])
+    const flash = window.setTimeout(() => {
+      if (doneRef.current) return
+      doneRef.current = true
+      setStatus("success")
+      // Hold the success state briefly so the scan feels acknowledged.
+      window.setTimeout(() => onScannedRef.current("demo-mock-scan"), 900)
+    }, SCAN_MS)
+    return () => window.clearTimeout(flash)
+  }, [])
 
   return (
     <div
@@ -219,28 +152,21 @@ function QrScanModal({
         </div>
         <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>
 
-        <div className="relative mt-4 aspect-square w-full overflow-hidden rounded-lg bg-black">
-          <video
-            ref={videoRef}
-            muted
-            playsInline
-            className="absolute inset-0 size-full object-cover"
-          />
+        <div className="relative mt-4 aspect-square w-full overflow-hidden rounded-lg bg-neutral-900">
           {status === "scanning" && (
-            <div className="pointer-events-none absolute inset-8 rounded-lg border-2 border-white/70" />
-          )}
-          {status === "starting" && (
-            <div className="absolute inset-0 flex items-center justify-center text-sm text-white/80">
-              Starting camera…
-            </div>
-          )}
-          {status === "no-camera" && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center text-white/80">
-              <CameraOffIcon className="size-6" />
-              <p className="text-sm">
-                Camera unavailable. Grant camera access, or simulate the scan below.
+            <>
+              {/* mock QR — flashing to read as "acquiring" */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <MockQr className="size-2/3 animate-pulse text-white" />
+              </div>
+              {/* scan viewport + travelling line */}
+              <div className="pointer-events-none absolute inset-8 overflow-hidden rounded-lg border-2 border-white/70 @container-size">
+                <div className="absolute inset-x-0 top-0 h-0.5 animate-scan-line bg-primary shadow-[0_0_12px_2px] shadow-primary" />
+              </div>
+              <p className="absolute inset-x-0 bottom-3 text-center text-xs text-white/70">
+                Reading QR…
               </p>
-            </div>
+            </>
           )}
           {status === "success" && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-green-600/90 text-white">
@@ -250,26 +176,50 @@ function QrScanModal({
           )}
         </div>
 
-        {detectorMissing && status === "scanning" && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            This browser cannot decode QR codes natively — use the simulate button below.
-          </p>
-        )}
-
-        <div className="mt-5 flex items-center justify-between gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={status === "success"}
-            onClick={() => succeed("demo-simulated-scan")}
-          >
-            Simulate scan
-          </Button>
+        <div className="mt-5 flex items-center justify-end gap-2">
           <Button variant="outline" size="sm" disabled={status === "success"} onClick={onCancel}>
             Cancel
           </Button>
         </div>
       </div>
     </div>
+  )
+}
+
+/** Decorative fake QR glyph (not a real scannable code). */
+function MockQr({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 100 100" fill="currentColor" className={className} aria-hidden>
+      {/* finder patterns */}
+      <path d="M0 0h28v28H0zM6 6v16h16V6z" />
+      <rect x="10" y="10" width="8" height="8" />
+      <path d="M72 0h28v28H72zM78 6v16h16V6z" />
+      <rect x="82" y="10" width="8" height="8" />
+      <path d="M0 72h28v28H0zM6 78v16h16V78z" />
+      <rect x="10" y="82" width="8" height="8" />
+      {/* scattered data modules */}
+      <rect x="36" y="4" width="8" height="8" />
+      <rect x="52" y="4" width="8" height="8" />
+      <rect x="36" y="20" width="8" height="8" />
+      <rect x="60" y="20" width="8" height="8" />
+      <rect x="4" y="36" width="8" height="8" />
+      <rect x="20" y="36" width="8" height="8" />
+      <rect x="40" y="40" width="8" height="8" />
+      <rect x="56" y="36" width="8" height="8" />
+      <rect x="72" y="40" width="8" height="8" />
+      <rect x="88" y="36" width="8" height="8" />
+      <rect x="36" y="52" width="8" height="8" />
+      <rect x="52" y="56" width="8" height="8" />
+      <rect x="68" y="56" width="8" height="8" />
+      <rect x="88" y="52" width="8" height="8" />
+      <rect x="40" y="72" width="8" height="8" />
+      <rect x="56" y="72" width="8" height="8" />
+      <rect x="72" y="72" width="8" height="8" />
+      <rect x="88" y="72" width="8" height="8" />
+      <rect x="40" y="88" width="8" height="8" />
+      <rect x="60" y="88" width="8" height="8" />
+      <rect x="76" y="88" width="8" height="8" />
+      <rect x="92" y="88" width="8" height="8" />
+    </svg>
   )
 }

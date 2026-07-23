@@ -44,7 +44,7 @@ export default function SocialWorkerDashboard() {
   return (
     <>
       <PageHeader
-        title="4Ps Case Review"
+        title="Evaluator"
         description={`Acting as ${actingUser.name}. Open a program, pick an applicant, verify each item, then approve.`}
       />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

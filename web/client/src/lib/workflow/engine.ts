@@ -132,6 +132,17 @@ export interface ReviewItem {
 }
 
 /**
+ * Field labels surfaced elsewhere (header summary) and therefore not repeated
+ * as check-off rows in the review checklist. Matched case-insensitively.
+ */
+const CHECKLIST_HIDDEN_LABELS = new Set(
+  [
+    "Type of assistance",
+    "I certify that the above information is true.",
+  ].map((l) => l.toLowerCase())
+)
+
+/**
  * Checklist items for a review step, derived from the application's real
  * submitted inputs: one per answered field, one per uploaded document.
  * Empty optional answers are skipped (nothing to verify).
@@ -143,6 +154,7 @@ export function reviewItemsOf(
 ): ReviewItem[] {
   const items: ReviewItem[] = []
   for (const field of formFieldsOfStepSet(state, stepSetId)) {
+    if (CHECKLIST_HIDDEN_LABELS.has(field.label.trim().toLowerCase())) continue
     const answer = answerFor(state, applicationId, field.id)
     if (field.type === "file") {
       const files = answer?.files ?? []
@@ -173,6 +185,28 @@ export function reviewItemsOf(
     items.push({ key: field.id, label: field.label, value: display, kind: "answer" })
   }
   return items
+}
+
+/**
+ * The applicant's "Type of assistance" selection, resolved to its option
+ * label (e.g. "Burial Assistance"). Undefined if the program has no such
+ * field or it was left blank. Used in the review header.
+ */
+export function assistanceTypeOf(
+  state: WorkflowState,
+  applicationId: string,
+  stepSetId: string
+): string | undefined {
+  const field = formFieldsOfStepSet(state, stepSetId).find(
+    (f) => f.label.trim().toLowerCase() === "type of assistance"
+  )
+  if (!field) return undefined
+  const value = answerFor(state, applicationId, field.id)?.value?.trim()
+  if (!value) return undefined
+  if (field.type === "select") {
+    return optionsOf(state, field.id).find((o) => o.value === value)?.label ?? value
+  }
+  return value
 }
 
 export function itemVerdict(

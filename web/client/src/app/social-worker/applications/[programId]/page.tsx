@@ -11,7 +11,7 @@ import {
   Td,
   timeAgo,
 } from "@/components/workflow/bits"
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/card"
 import { useWorkflow } from "@/lib/workflow/store"
 import { APPLICATION_STATUS_LABEL } from "@/lib/workflow/types"
+import { cn } from "@/lib/utils"
 import {
   applicationsOfProgram,
   isActionableByReviewer,
@@ -43,9 +44,12 @@ export default function ProgramApplicants() {
   return (
     <>
       <PageHeader title={program.name} description="All applicants — open one to review their submission">
-        <Button size="sm" variant="ghost" render={<Link href="/social-worker/applications" />}>
+        <Link
+          href="/social-worker/applications"
+          className={cn(buttonVariants({ size: "sm", variant: "ghost" }))}
+        >
           <ArrowLeftIcon /> Programs
-        </Button>
+        </Link>
       </PageHeader>
 
       <Card>
@@ -73,13 +77,12 @@ export default function ProgramApplicants() {
                   <Td className="text-xs text-muted-foreground">{step?.name ?? "—"}</Td>
                   <Td className="text-xs text-muted-foreground">{timeAgo(a.updatedAt)}</Td>
                   <Td>
-                    <Button
-                      size="xs"
-                      variant={actionable ? "outline" : "ghost"}
-                      render={<Link href={`/social-worker/applications/${program.id}/${a.id}`} />}
+                    <Link
+                      href={`/social-worker/applications/${program.id}/${a.id}`}
+                      className={cn(buttonVariants({ size: "xs", variant: actionable ? "outline" : "ghost" }))}
                     >
                       {actionable ? <><GavelIcon /> Review</> : <><EyeIcon /> View</>}
-                    </Button>
+                    </Link>
                   </Td>
                 </tr>
               )

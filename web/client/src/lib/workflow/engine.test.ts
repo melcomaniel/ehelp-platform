@@ -518,12 +518,14 @@ describe("4Ps review checklist", () => {
 
   it("derives one item per answered field and per uploaded document", () => {
     const items = reviewItemsOf(SEED, APP, "SS-F")
-    // AICS form: 5 text/select/textarea answers (name, type, id, amount, nature)
-    // + checkbox (checked) + 3 files (valid ID, support doc, barangay cert) = 9
-    expect(items.length).toBe(9)
-    expect(items.filter((i) => i.kind === "file").length).toBe(3)
-    // real values surfaced, not placeholders
-    expect(items.some((i) => i.value === "Maria Reyes")).toBe(true)
+    // AKAP form: the assistance-type select + consent checkbox are surfaced in
+    // the header (hidden from the checklist), leaving the 6 uploaded documents
+    // (employment contract, COE, ITR/2316, case summary, affidavit, other) as
+    // the only check-off rows.
+    expect(items.length).toBe(6)
+    expect(items.filter((i) => i.kind === "file").length).toBe(6)
+    // the assistance-type answer is not repeated as a checklist row
+    expect(items.some((i) => i.label === "Type of assistance")).toBe(false)
   })
 
   it("refuses approve until every item is verified", () => {

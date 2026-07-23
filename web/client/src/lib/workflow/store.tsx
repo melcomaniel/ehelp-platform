@@ -35,7 +35,7 @@ import type {
 
 // Bump the version whenever the seed shape changes so stale localStorage
 // (missing new programs/steps) is discarded and fresh fixtures load.
-const STORAGE_KEY = "workflow-engine-state-v5"
+const STORAGE_KEY = "workflow-engine-state-v7"
 
 export type MutationResult = { ok: true; id?: string } | { ok: false; error: string }
 

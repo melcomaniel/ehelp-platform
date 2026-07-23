@@ -5,7 +5,6 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 
 import { SignOutButton } from "@/components/auth/sign-out-button"
-import { usePrompts } from "@/components/workflow/prompts"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,31 +31,17 @@ import {
   FolderKanbanIcon,
   GaugeIcon,
   HandHeartIcon,
-  RotateCcwIcon,
 } from "lucide-react"
 
 export function SocialWorkerSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
-  const { state, actingUser, setActingUser, resetAll } = useWorkflow()
-  const { confirm, toast } = usePrompts()
+  const { state, actingUser, setActingUser } = useWorkflow()
 
   const links = [
     { href: "/social-worker/dashboard", label: "Dashboard", icon: GaugeIcon },
     { href: "/social-worker/applications", label: "Applications", icon: FolderKanbanIcon },
   ]
   const isActive = (url: string) => pathname === url || pathname.startsWith(url + "/")
-
-  const onReset = async () => {
-    const ok = await confirm({
-      title: "Reset demo data?",
-      description: "All changes made while testing will be discarded and the seeded fixtures restored.",
-      confirmLabel: "Reset data",
-      destructive: true,
-    })
-    if (!ok) return
-    resetAll()
-    toast({ title: "Demo data reset", variant: "success" })
-  }
 
   const initials = (actingUser?.name ?? "?").split(" ").map((w) => w[0]).join("").slice(0, 2)
 
@@ -71,7 +56,7 @@ export function SocialWorkerSidebar({ ...props }: React.ComponentProps<typeof Si
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">Social Worker</span>
-                <span className="truncate text-xs">4Ps Case Review</span>
+                <span className="truncate text-xs">Evaluator</span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -99,14 +84,6 @@ export function SocialWorkerSidebar({ ...props }: React.ComponentProps<typeof Si
 
       <SidebarFooter>
         <SidebarMenu>
-          <SidebarMenuItem>
-            <button
-              onClick={onReset}
-              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              <RotateCcwIcon className="size-4" /> Reset demo data
-            </button>
-          </SidebarMenuItem>
           <SidebarMenuItem>
             <SignOutButton />
           </SidebarMenuItem>

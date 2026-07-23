@@ -96,11 +96,11 @@ const T = buildStepSet("T") // owned by the template
 const P = buildStepSet("P") // the Financial Assistance program version's copy
 
 /**
- * AICS program step set — Aid to Individuals in Crisis Situation
- * (DSWD Citizens Charter, Crisis Intervention Section):
+ * AKAP program step set — Ayuda sa Kapos ang Kita Program (DSWD):
  * Form → Identity Verify → Social Worker Review → Cash Grant Disbursement.
- * Fields mirror the charter's Checklist of Requirements; the social worker
- * assesses eligibility and verifies each submitted item before releasing aid.
+ * The form collects the applicant's assistance type plus the supporting
+ * documents; the social worker verifies each submitted item before releasing
+ * aid to minimum-wage / low-income earners.
  */
 function buildAics() {
   const stepSetId = "SS-F"
@@ -116,31 +116,34 @@ function buildAics() {
     { id: disburseId, stepSetId, position: 4, type: "disbursement", name: "Cash Grant Disbursement", assignedRole: "social_worker", autoAdvance: false },
   ]
 
-  // Fields from the AICS Checklist of Requirements (Medical / Burial etc.)
+  // AKAP Application Form — one select (assistance type), six document uploads,
+  // and a certification checkbox. Files are the requirements the social worker
+  // verifies during review.
+  const fileMime = ["application/pdf", "image/jpeg", "image/png"]
   const fields: FormField[] = [
-    { id: "FLD-F-1", stepId: formId, position: 1, type: "text", label: "Client's full name", helpText: "As it appears on the valid ID presented", required: true },
-    { id: "FLD-F-2", stepId: formId, position: 2, type: "select", label: "Type of assistance", helpText: "AICS category being applied for", required: true },
-    { id: "FLD-F-3", stepId: formId, position: 3, type: "text", label: "Valid ID type & number", helpText: "e.g. PhilSys — 1234-5678-9012", required: true },
-    { id: "FLD-F-4", stepId: formId, position: 4, type: "number", label: "Amount of assistance requested (PHP)", helpText: "", required: true },
-    { id: "FLD-F-5", stepId: formId, position: 5, type: "textarea", label: "Nature of crisis / need", helpText: "Brief statement for the social worker's assessment", required: true },
-    { id: "FLD-F-6", stepId: formId, position: 6, type: "file", label: "Valid ID card", helpText: "Any valid government ID of the client", required: true },
-    { id: "FLD-F-7", stepId: formId, position: 7, type: "file", label: "Supporting document", helpText: "Medical: hospital bill / prescription. Burial: death certificate / funeral contract.", required: true },
-    { id: "FLD-F-8", stepId: formId, position: 8, type: "file", label: "Barangay Certificate of Indigency", helpText: "Certificate of Residency / Indigency from the client's Barangay Hall", required: true },
-    { id: "FLD-F-9", stepId: formId, position: 9, type: "checkbox", label: "I certify the information is true and consent to verification", helpText: "", required: true },
+    { id: "FLD-F-1", stepId: formId, position: 1, type: "select", label: "Type of assistance", helpText: "AKAP category being applied for", required: true },
+    { id: "FLD-F-2", stepId: formId, position: 2, type: "file", label: "Employment Contract", helpText: "Signed by the HR/Employer", required: true },
+    { id: "FLD-F-3", stepId: formId, position: 3, type: "file", label: "Certificate of Employment with Compensation (COE)", helpText: "", required: true },
+    { id: "FLD-F-4", stepId: formId, position: 4, type: "file", label: "Income Tax Return or BIR Form 2316", helpText: "", required: true },
+    { id: "FLD-F-5", stepId: formId, position: 5, type: "file", label: "Social Case Summary", helpText: "", required: true },
+    { id: "FLD-F-6", stepId: formId, position: 6, type: "file", label: "Notarized Affidavit", helpText: "", required: true },
+    { id: "FLD-F-7", stepId: formId, position: 7, type: "file", label: "Other Supporting Documents", helpText: "", required: true },
+    { id: "FLD-F-8", stepId: formId, position: 8, type: "checkbox", label: "I certify that the above information is true.", helpText: "", required: true },
   ]
 
   const options: FieldOption[] = [
-    { id: "OPT-F-1", fieldId: "FLD-F-2", position: 1, value: "medical", label: "Medical Assistance" },
-    { id: "OPT-F-2", fieldId: "FLD-F-2", position: 2, value: "burial", label: "Burial Assistance" },
-    { id: "OPT-F-3", fieldId: "FLD-F-2", position: 3, value: "transportation", label: "Transportation Assistance" },
-    { id: "OPT-F-4", fieldId: "FLD-F-2", position: 4, value: "educational", label: "Educational Assistance" },
-    { id: "OPT-F-5", fieldId: "FLD-F-2", position: 5, value: "food", label: "Food Assistance" },
+    { id: "OPT-F-1", fieldId: "FLD-F-1", position: 1, value: "medical", label: "Medical Assistance" },
+    { id: "OPT-F-2", fieldId: "FLD-F-1", position: 2, value: "funeral", label: "Funeral Assistance" },
+    { id: "OPT-F-3", fieldId: "FLD-F-1", position: 3, value: "rice_food", label: "Rice and Food Assistance" },
   ]
 
   const fileRules: FileRule[] = [
-    { id: "FR-F-1", fieldId: "FLD-F-6", allowedMime: ["application/pdf", "image/jpeg", "image/png"], maxSizeMb: 5, minCount: 1, maxCount: 2 },
-    { id: "FR-F-2", fieldId: "FLD-F-7", allowedMime: ["application/pdf", "image/jpeg", "image/png"], maxSizeMb: 5, minCount: 1, maxCount: 3 },
-    { id: "FR-F-3", fieldId: "FLD-F-8", allowedMime: ["application/pdf", "image/jpeg", "image/png"], maxSizeMb: 5, minCount: 1, maxCount: 1 },
+    { id: "FR-F-2", fieldId: "FLD-F-2", allowedMime: fileMime, maxSizeMb: 5, minCount: 1, maxCount: 1 },
+    { id: "FR-F-3", fieldId: "FLD-F-3", allowedMime: fileMime, maxSizeMb: 5, minCount: 1, maxCount: 1 },
+    { id: "FR-F-4", fieldId: "FLD-F-4", allowedMime: fileMime, maxSizeMb: 5, minCount: 1, maxCount: 1 },
+    { id: "FR-F-5", fieldId: "FLD-F-5", allowedMime: fileMime, maxSizeMb: 5, minCount: 1, maxCount: 1 },
+    { id: "FR-F-6", fieldId: "FLD-F-6", allowedMime: fileMime, maxSizeMb: 5, minCount: 1, maxCount: 1 },
+    { id: "FR-F-7", fieldId: "FLD-F-7", allowedMime: fileMime, maxSizeMb: 5, minCount: 1, maxCount: 2 },
   ]
 
   const stepActions: StepAction[] = [
@@ -162,13 +165,8 @@ function buildAics() {
 const F = buildAics()
 
 interface AicsAnswerSpec {
-  name: string
+  /** selected assistance type option value (medical | funeral | rice_food) */
   type: string
-  idNo: string
-  amount: string
-  nature: string
-  /** support document filename (varies by assistance type) */
-  support: string
 }
 
 function aicsAnswers(appId: string, spec: AicsAnswerSpec): Answer[] {
@@ -181,16 +179,16 @@ function aicsAnswers(appId: string, spec: AicsAnswerSpec): Answer[] {
     files: [],
     ...patch,
   })
+  const doc = (name: string) => [{ name, sizeBytes: 480_000, mime: "application/pdf" }]
   return [
-    mk(1, { value: spec.name }),
-    mk(2, { value: spec.type }),
-    mk(3, { value: spec.idNo }),
-    mk(4, { value: spec.amount }),
-    mk(5, { value: spec.nature }),
-    mk(6, { files: [{ name: "philsys-id.jpg", sizeBytes: 320_000, mime: "image/jpeg" }] }),
-    mk(7, { files: [{ name: spec.support, sizeBytes: 540_000, mime: "application/pdf" }] }),
-    mk(8, { files: [{ name: "barangay-indigency.pdf", sizeBytes: 210_000, mime: "application/pdf" }] }),
-    mk(9, { checked: true }),
+    mk(1, { value: spec.type }),
+    mk(2, { files: doc("employment-contract.pdf") }),
+    mk(3, { files: doc("certificate-of-employment.pdf") }),
+    mk(4, { files: doc("bir-form-2316.pdf") }),
+    mk(5, { files: doc("social-case-summary.pdf") }),
+    mk(6, { files: doc("notarized-affidavit.pdf") }),
+    mk(7, { files: doc("other-supporting-documents.pdf") }),
+    mk(8, { checked: true }),
   ]
 }
 
@@ -209,7 +207,7 @@ const FOURPS_APPS: FourPsAppSpec[] = [
   {
     id: "FPS-001", applicantId: U.a1, status: "submitted", currentStepId: F.reviewId,
     createdAt: "2026-07-16T01:00:00.000Z",
-    answers: { name: "Maria Reyes", type: "medical", idNo: "PhilSys — 6301-2214-9087", amount: "8000", nature: "Hospitalization of youngest child; unpaid balance on hospital bill.", support: "hospital-bill.pdf" },
+    answers: { type: "medical" },
     events: [
       { id: "EFPS-001-1", actorId: U.a1, action: "submit", fromStepId: null, toStepId: F.verifyId, reasonCodeId: null, comment: null, at: "2026-07-16T01:00:00.000Z" },
       { id: "EFPS-001-2", actorId: U.a1, action: "verify", fromStepId: F.verifyId, toStepId: F.reviewId, reasonCodeId: null, comment: "Face check passed (94%)", at: "2026-07-16T01:05:00.000Z" },
@@ -218,7 +216,7 @@ const FOURPS_APPS: FourPsAppSpec[] = [
   {
     id: "FPS-002", applicantId: U.a2, status: "submitted", currentStepId: F.reviewId,
     createdAt: "2026-07-16T03:20:00.000Z",
-    answers: { name: "Jose Bautista", type: "burial", idNo: "PhilSys — 1183-0042-5521", amount: "10000", nature: "Funeral expenses for late father; family has no savings.", support: "death-certificate.pdf" },
+    answers: { type: "funeral" },
     events: [
       { id: "EFPS-002-1", actorId: U.a2, action: "submit", fromStepId: null, toStepId: F.verifyId, reasonCodeId: null, comment: null, at: "2026-07-16T03:20:00.000Z" },
       { id: "EFPS-002-2", actorId: U.a2, action: "verify", fromStepId: F.verifyId, toStepId: F.reviewId, reasonCodeId: null, comment: "Face check passed (91%)", at: "2026-07-16T03:24:00.000Z" },
@@ -227,7 +225,7 @@ const FOURPS_APPS: FourPsAppSpec[] = [
   {
     id: "FPS-003", applicantId: U.a3, status: "submitted", currentStepId: F.reviewId,
     createdAt: "2026-07-17T05:10:00.000Z",
-    answers: { name: "Ana Dela Cruz", type: "educational", idNo: "PhilSys — 7745-9910-3306", amount: "5000", nature: "School fees for two children after losing market stall.", support: "enrolment-assessment.pdf" },
+    answers: { type: "rice_food" },
     events: [
       { id: "EFPS-003-1", actorId: U.a3, action: "submit", fromStepId: null, toStepId: F.verifyId, reasonCodeId: null, comment: null, at: "2026-07-17T05:10:00.000Z" },
       { id: "EFPS-003-2", actorId: U.a3, action: "verify", fromStepId: F.verifyId, toStepId: F.reviewId, reasonCodeId: null, comment: "Face check passed (96%)", at: "2026-07-17T05:15:00.000Z" },
@@ -236,7 +234,7 @@ const FOURPS_APPS: FourPsAppSpec[] = [
   {
     id: "FPS-004", applicantId: U.a4, status: "verifying", currentStepId: F.verifyId,
     createdAt: "2026-07-18T02:30:00.000Z",
-    answers: { name: "Liza Moreno", type: "medical", idNo: "PhilSys — 2204-8831-1120", amount: "6500", nature: "Post-operative medication and follow-up consultations.", support: "prescription.pdf" },
+    answers: { type: "medical" },
     events: [
       { id: "EFPS-004-1", actorId: U.a4, action: "submit", fromStepId: null, toStepId: F.verifyId, reasonCodeId: null, comment: null, at: "2026-07-18T02:30:00.000Z" },
     ],
@@ -244,7 +242,7 @@ const FOURPS_APPS: FourPsAppSpec[] = [
   {
     id: "FPS-005", applicantId: U.a5, status: "approved", currentStepId: F.disburseId,
     createdAt: "2026-07-14T04:00:00.000Z",
-    answers: { name: "Carlo Aquino", type: "medical", idNo: "PhilSys — 3390-5521-7788", amount: "12000", nature: "Twice-weekly dialysis for mother; income cannot cover it.", support: "hospital-bill.pdf" },
+    answers: { type: "medical" },
     events: [
       { id: "EFPS-005-1", actorId: U.a5, action: "submit", fromStepId: null, toStepId: F.verifyId, reasonCodeId: null, comment: null, at: "2026-07-14T04:00:00.000Z" },
       { id: "EFPS-005-2", actorId: U.a5, action: "verify", fromStepId: F.verifyId, toStepId: F.reviewId, reasonCodeId: null, comment: "Face check passed (93%)", at: "2026-07-14T04:05:00.000Z" },
@@ -254,7 +252,7 @@ const FOURPS_APPS: FourPsAppSpec[] = [
   {
     id: "FPS-006", applicantId: U.a6, status: "disbursed", currentStepId: null,
     createdAt: "2026-07-12T06:00:00.000Z",
-    answers: { name: "Nena Flores", type: "burial", idNo: "PhilSys — 5567-1290-4432", amount: "10000", nature: "Burial assistance for late spouse; senior with no pension.", support: "funeral-contract.pdf" },
+    answers: { type: "funeral" },
     events: [
       { id: "EFPS-006-1", actorId: U.a6, action: "submit", fromStepId: null, toStepId: F.verifyId, reasonCodeId: null, comment: null, at: "2026-07-12T06:00:00.000Z" },
       { id: "EFPS-006-2", actorId: U.a6, action: "verify", fromStepId: F.verifyId, toStepId: F.reviewId, reasonCodeId: null, comment: "Face check passed (90%)", at: "2026-07-12T06:05:00.000Z" },
@@ -265,7 +263,7 @@ const FOURPS_APPS: FourPsAppSpec[] = [
   {
     id: "FPS-007", applicantId: U.a2, status: "returned", currentStepId: F.reviewId,
     createdAt: "2026-07-17T22:00:00.000Z",
-    answers: { name: "Jose Bautista", type: "medical", idNo: "PhilSys — 1183-0042-5521", amount: "4000", nature: "Check-up and laboratory fees after workplace injury.", support: "laboratory-request.pdf" },
+    answers: { type: "medical" },
     events: [
       { id: "EFPS-007-1", actorId: U.a2, action: "submit", fromStepId: null, toStepId: F.verifyId, reasonCodeId: null, comment: null, at: "2026-07-17T22:00:00.000Z" },
       { id: "EFPS-007-2", actorId: U.a2, action: "verify", fromStepId: F.verifyId, toStepId: F.reviewId, reasonCodeId: null, comment: "Face check passed (92%)", at: "2026-07-17T22:05:00.000Z" },
@@ -456,8 +454,8 @@ export const SEED: WorkflowState = {
     },
     {
       id: "PRG-4PS",
-      name: "AICS — Aid to Individuals in Crisis Situation",
-      description: "DSWD crisis-assistance program (medical, burial, transportation, educational, food). The social worker assesses eligibility and verifies each requirement before releasing the cash grant.",
+      name: "Ayuda sa Kapos ang Kita Program (AKAP)",
+      description: "It is designed as a social safety net to provide direct financial assistance, such as medical, funeral, or cash relief, to minimum wage and low-income earners who are near the poverty line and heavily affected by inflation.",
       classification: "simple",
       createdFromTemplateId: null,
     },

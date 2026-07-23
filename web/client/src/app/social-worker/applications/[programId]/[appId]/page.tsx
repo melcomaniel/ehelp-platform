@@ -15,7 +15,7 @@ import { DisbursementReleaseCard } from "@/components/workflow/disburse-card"
 import { usePrompts } from "@/components/workflow/prompts"
 import { ReviewChecklist } from "@/components/workflow/review-checklist"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -26,18 +26,22 @@ import {
 import { Label } from "@/components/ui/label"
 import {
   actionsOf,
+  assistanceTypeOf,
   reasonCodesOf,
   reviewProgress,
   stepsOf,
 } from "@/lib/workflow/engine"
 import { useWorkflow } from "@/lib/workflow/store"
-import { APPLICATION_STATUS_LABEL } from "@/lib/workflow/types"
+import { APPLICATION_STATUS_LABEL, INSTRUMENT_LABEL } from "@/lib/workflow/types"
 import { cn } from "@/lib/utils"
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  BanknoteIcon,
   CheckIcon,
   CheckCircle2Icon,
+  PartyPopperIcon,
+  UserIcon,
   XIcon,
 } from "lucide-react"
 
@@ -88,10 +92,17 @@ export default function ApplicationReview() {
   const steps = stepsOf(state, version.stepSetId)
   const currentIdx = step ? steps.findIndex((s) => s.id === step.id) : steps.length
   const allDone = app.status === "disbursed"
+  const disbursement = allDone
+    ? state.disbursements.find((d) => d.applicationId === app.id)
+    : undefined
+  const releasedBy = disbursement
+    ? state.users.find((u) => u.id === disbursement.releasedBy)
+    : undefined
 
   const assignedTo = step?.assignedRole
     ? state.users.find((u) => u.roles.includes(step.assignedRole!))
     : null
+  const assistanceType = assistanceTypeOf(state, app.id, version.stepSetId)
 
   const onApprove = () => {
     const r = decideApplication({ applicationId: app.id, action: "approve" })
@@ -133,9 +144,12 @@ export default function ApplicationReview() {
   return (
     <div className="mx-auto grid w-full max-w-4xl gap-4">
       <div>
-        <Button size="sm" variant="ghost" render={<Link href={`/social-worker/applications/${programId}`} />}>
+        <Link
+          href={`/social-worker/applications/${programId}`}
+          className={cn(buttonVariants({ size: "sm", variant: "ghost" }))}
+        >
           <ArrowLeftIcon /> Back to Applicants
-        </Button>
+        </Link>
       </div>
 
       {/* header card */}
@@ -148,7 +162,14 @@ export default function ApplicationReview() {
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0 flex-1">
-              <h1 className="font-heading text-2xl font-semibold">{applicant?.name ?? app.applicantId}</h1>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="font-heading text-2xl font-semibold">{applicant?.name ?? app.applicantId}</h1>
+                {assistanceType && (
+                  <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
+                    {assistanceType}
+                  </span>
+                )}
+              </div>
               <p className="text-sm text-muted-foreground">
                 {app.id} · {program.name}
               </p>
@@ -161,8 +182,8 @@ export default function ApplicationReview() {
               <p className="font-medium">{assignedTo?.name ?? "—"}</p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Type</p>
-              <p className="font-medium">{program.name}</p>
+              <p className="text-xs text-muted-foreground">Type of assistance</p>
+              <p className="font-medium">{assistanceType ?? "—"}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Submitted on</p>
@@ -268,6 +289,72 @@ export default function ApplicationReview() {
           applicationId={app.id}
           applicantName={applicant?.name ?? app.applicantId}
         />
+      )}
+
+      {/* completion celebration */}
+      {allDone && (
+        <Card className="relative overflow-hidden border-green-200 bg-linear-to-b from-green-50 to-card">
+          {/* decorative confetti dots */}
+          <div className="pointer-events-none absolute inset-0" aria-hidden>
+            <span className="absolute left-[12%] top-6 size-2 animate-bounce rounded-full bg-green-400/70 [animation-delay:0ms]" />
+            <span className="absolute left-[28%] top-10 size-1.5 rotate-45 bg-amber-400/70 [animation-delay:150ms] animate-bounce" />
+            <span className="absolute right-[18%] top-5 size-2 animate-bounce rounded-full bg-blue-400/70 [animation-delay:300ms]" />
+            <span className="absolute right-[32%] top-12 size-1.5 rotate-12 bg-green-500/70 [animation-delay:450ms] animate-bounce" />
+            <span className="absolute right-[8%] top-16 size-1.5 animate-bounce rounded-full bg-amber-400/70 [animation-delay:600ms]" />
+          </div>
+
+          <CardContent className="flex flex-col items-center gap-4 py-8 text-center">
+            <div className="flex size-16 items-center justify-center rounded-full bg-green-100 text-green-600 ring-8 ring-green-50">
+              <PartyPopperIcon className="size-8" />
+            </div>
+            <div>
+              <h2 className="font-heading text-xl font-semibold text-green-800">
+                Cash grant released!
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {applicant?.name ?? app.applicantId}&rsquo;s application is complete — every step
+                is done and the funds are on their way.
+              </p>
+            </div>
+
+            {disbursement && (
+              <div className="mt-1 grid w-full max-w-md gap-2 rounded-xl border bg-card/60 p-4 text-left text-sm sm:grid-cols-2">
+                <div className="sm:col-span-2 flex items-baseline justify-between border-b pb-2">
+                  <span className="text-muted-foreground">Amount released</span>
+                  <span className="font-heading text-2xl font-semibold text-green-700 tabular-nums">
+                    ₱{disbursement.amount.toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <UserIcon className="size-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Payee</p>
+                    <p className="font-medium">{disbursement.payee}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <BanknoteIcon className="size-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Via</p>
+                    <p className="font-medium">{INSTRUMENT_LABEL[disbursement.instrument]}</p>
+                  </div>
+                </div>
+                {releasedBy && (
+                  <div className="sm:col-span-2 border-t pt-2 text-xs text-muted-foreground">
+                    Released by {releasedBy.name} · {timeAgo(disbursement.at)}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <Link
+              href={`/social-worker/applications/${programId}`}
+              className={cn(buttonVariants({ size: "sm", variant: "outline" }), "mt-1")}
+            >
+              <ArrowLeftIcon /> Back to Applicants
+            </Link>
+          </CardContent>
+        </Card>
       )}
 
       {/* requirements checklist */}

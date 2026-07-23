@@ -5,7 +5,7 @@ import { fetchProfile } from "@/lib/auth/profile";
 import { homeRouteForRole, type AppRole } from "@/lib/auth/types";
 
 const AUTH_PATHS = new Set(["/signin", "/signup", "/otp"]);
-const PROTECTED_PREFIXES = ["/dashboard", "/admin", "/social-worker"];
+const PROTECTED_PREFIXES = ["/dashboard", "/admin"];
 
 function isAuthPath(pathname: string) {
   return AUTH_PATHS.has(pathname);
