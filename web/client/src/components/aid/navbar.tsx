@@ -6,11 +6,9 @@ import Link from "next/link";
 import { Menu, X } from "lucide-react";
 
 const links = [
-  { label: "The Problem", href: "#problem" },
-  { label: "Landscape", href: "#landscape" },
-  { label: "How It Works", href: "#how-it-works" },
-  { label: "Platform APIs", href: "#apis" },
-  { label: "Pilot", href: "#pilot" },
+  { label: "Who it's for", href: "#roles" },
+  { label: "How it works", href: "#how-it-works" },
+  { label: "Mobile app", href: "#mobile" },
 ];
 
 export function Navbar() {
@@ -30,7 +28,7 @@ export function Navbar() {
         <Link href="/" aria-label="Home" className="flex items-center gap-2">
           <img src="/egov/logo.png" alt="eGovPH" className="h-8 w-auto" />
           <span className="hidden sm:inline text-sm font-semibold text-[#1a1a2e]">
-            Aid Front Door
+            EHelp
           </span>
         </Link>
 
@@ -45,10 +43,16 @@ export function Navbar() {
             </a>
           ))}
           <Link
+            href="/get-app"
+            className="text-[0.875rem] text-[#1a1a2e]/70 hover:text-[#0040E7]"
+          >
+            Get the app
+          </Link>
+          <Link
             href="/signin"
             className="bg-[#0040E7] text-white text-[0.875rem] font-medium rounded-full px-6 py-2.5 hover:bg-[#0035c2] transition-colors"
           >
-            Sign In
+            Staff sign in
           </Link>
         </div>
 
@@ -78,7 +82,7 @@ export function Navbar() {
             onClick={() => setOpen(false)}
             className="bg-[#0040E7] text-white text-center text-[0.875rem] rounded-full px-5 py-2.5"
           >
-            Sign In
+            Staff sign in
           </Link>
         </div>
       )}

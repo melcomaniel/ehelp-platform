@@ -16,7 +16,6 @@ class LoginScreen extends ConsumerStatefulWidget {
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
-  bool _useOtp = false;
   bool _obscure = true;
 
   @override
@@ -26,24 +25,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
-  Future<void> _submit() async {
+  Future<void> _devSignIn() async {
     final email = _email.text.trim();
     if (email.isEmpty) return;
-
-    if (_useOtp) {
-      await ref.read(authControllerProvider.notifier).sendOtp(email);
-      if (!mounted) return;
-      final err = ref.read(authControllerProvider).error;
-      if (err != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(err.toString())),
-        );
-        return;
-      }
-      context.push('/otp', extra: email);
-      return;
-    }
-
     await ref
         .read(authControllerProvider.notifier)
         .signIn(email, _password.text);
@@ -56,10 +40,61 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  Future<void> _sso() async {
+    final code = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final c = TextEditingController();
+        return AlertDialog(
+          title: const Text('eGov SSO'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Paste a freshly minted exchange code. In the eGov portal, set '
+                'Partner code to your real value (same as backend EGOV_PARTNER_CODE) — '
+                'not {{partner_code}}.',
+                style: TextStyle(fontSize: 13, height: 1.35),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: c,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'exchange_code',
+                  hintText: 'Paste from SSO portal',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, c.text.trim()),
+              child: const Text('Continue'),
+            ),
+          ],
+        );
+      },
+    );
+    if (code == null || code.isEmpty) return;
+    await ref.read(authControllerProvider.notifier).exchangeSso(code);
+    if (!mounted) return;
+    final err = ref.read(authControllerProvider).error;
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(err.toString())),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authControllerProvider);
-    final loading = authState.isLoading;
+    final loading = ref.watch(authControllerProvider).isLoading;
 
     return Scaffold(
       body: Container(
@@ -82,7 +117,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Social assistance for approvers, evaluators, and customers.',
+                      'Citizen auth via eGov SSO · eVerify · Face Liveness',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: AppColors.muted, fontSize: 14),
                     ),
@@ -98,7 +133,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Text(
-                            'Welcome back',
+                            'Sign in',
                             textAlign: TextAlign.center,
                             style: Theme.of(context)
                                 .textTheme
@@ -107,7 +142,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                           const SizedBox(height: 6),
                           const Text(
-                            'Sign in to check your applications and aid status',
+                            'New and returning citizens use eGov SSO. First-time users then complete Face Liveness + eVerify.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: AppColors.muted,
@@ -115,60 +150,66 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                           ),
                           const SizedBox(height: 24),
+                          FilledButton(
+                            onPressed: loading ? null : _sso,
+                            child: const Text('Continue with eGov SSO'),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'No EHELP account yet? SSO creates one, then asks for face + National ID verification.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AppColors.muted,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          const Divider(),
+                          const SizedBox(height: 12),
                           TextField(
                             controller: _email,
                             keyboardType: TextInputType.emailAddress,
                             decoration: const InputDecoration(
-                              labelText: 'Email',
+                              labelText: 'Email (dev)',
                               prefixIcon: Icon(Icons.mail_outline),
                             ),
                           ),
-                          if (!_useOtp) ...[
-                            const SizedBox(height: 14),
-                            TextField(
-                              controller: _password,
-                              obscureText: _obscure,
-                              decoration: InputDecoration(
-                                labelText: 'Password',
-                                prefixIcon: const Icon(Icons.lock_outline),
-                                suffixIcon: IconButton(
-                                  onPressed: () =>
-                                      setState(() => _obscure = !_obscure),
-                                  icon: Icon(
-                                    _obscure
-                                        ? Icons.visibility_outlined
-                                        : Icons.visibility_off_outlined,
-                                  ),
+                          const SizedBox(height: 14),
+                          TextField(
+                            controller: _password,
+                            obscureText: _obscure,
+                            decoration: InputDecoration(
+                              labelText: 'Password (dev)',
+                              prefixIcon: const Icon(Icons.lock_outline),
+                              suffixIcon: IconButton(
+                                onPressed: () =>
+                                    setState(() => _obscure = !_obscure),
+                                icon: Icon(
+                                  _obscure
+                                      ? Icons.visibility_outlined
+                                      : Icons.visibility_off_outlined,
                                 ),
                               ),
                             ),
-                          ],
-                          const SizedBox(height: 20),
-                          FilledButton(
-                            onPressed: loading ? null : _submit,
+                          ),
+                          const SizedBox(height: 18),
+                          OutlinedButton(
+                            onPressed: loading ? null : _devSignIn,
                             child: loading
                                 ? const SizedBox(
-                                    height: 22,
-                                    width: 22,
+                                    height: 20,
+                                    width: 20,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
                                     ),
                                   )
-                                : Text(_useOtp ? 'Send OTP' : 'Sign in'),
+                                : const Text('Dev sign in'),
                           ),
-                          const SizedBox(height: 12),
                           TextButton(
-                            onPressed: () =>
-                                setState(() => _useOtp = !_useOtp),
-                            child: Text(
-                              _useOtp
-                                  ? 'Use password instead'
-                                  : 'Sign in with email OTP',
-                            ),
-                          ),
-                          OutlinedButton(
-                            onPressed: () => context.push('/register'),
-                            child: const Text('Create account'),
+                            onPressed: loading
+                                ? null
+                                : () => context.push('/register'),
+                            child: const Text('Create account (dev)'),
                           ),
                         ],
                       ),
@@ -197,14 +238,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _email = TextEditingController();
   final _phone = TextEditingController();
   final _password = TextEditingController();
-  String _role = AppRole.customer.value;
-
-  static const _mobileRoles = [
-    AppRole.customer,
-    AppRole.dependent,
-    AppRole.evaluator,
-    AppRole.approver,
-  ];
 
   @override
   void dispose() {
@@ -221,7 +254,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           email: _email.text.trim(),
           password: _password.text,
           fullName: _name.text.trim(),
-          roleValue: _role,
+          roleValue: AppRole.customer.value,
           phone: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
         );
     if (!mounted) return;
@@ -230,14 +263,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(err.toString())),
       );
-      return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Account created. Check email if confirmation is required.'),
-      ),
-    );
-    context.go('/login');
   }
 
   @override
@@ -245,13 +271,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final loading = ref.watch(authControllerProvider).isLoading;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Create account')),
+      appBar: AppBar(title: const Text('Create account (dev)')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Form(
           key: _formKey,
           child: Column(
             children: [
+              const Text(
+                'Mobile accounts are beneficiaries only. Staff use the web portal.',
+                style: TextStyle(color: Colors.black54),
+              ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _name,
                 decoration: const InputDecoration(labelText: 'Full name'),
@@ -263,28 +294,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
                 decoration: const InputDecoration(labelText: 'Email'),
-                validator: (v) =>
-                    (v == null || !v.contains('@')) ? 'Valid email required' : null,
+                validator: (v) => (v == null || !v.contains('@'))
+                    ? 'Valid email required'
+                    : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _phone,
                 keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'Phone (optional)'),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _role,
-                decoration: const InputDecoration(labelText: 'Role'),
-                items: _mobileRoles
-                    .map(
-                      (r) => DropdownMenuItem(
-                        value: r.value,
-                        child: Text(r.label),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) => setState(() => _role = v ?? _role),
+                decoration:
+                    const InputDecoration(labelText: 'Phone (optional)'),
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -323,52 +342,13 @@ class OtpScreen extends ConsumerStatefulWidget {
 }
 
 class _OtpScreenState extends ConsumerState<OtpScreen> {
-  final _otp = TextEditingController();
-
-  @override
-  void dispose() {
-    _otp.dispose();
-    super.dispose();
-  }
-
-  Future<void> _verify() async {
-    await ref
-        .read(authControllerProvider.notifier)
-        .verifyOtp(widget.email, _otp.text.trim());
-    if (!mounted) return;
-    final err = ref.read(authControllerProvider).error;
-    if (err != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(err.toString())),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final loading = ref.watch(authControllerProvider).isLoading;
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Verify OTP')),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Enter the code sent to ${widget.email}'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _otp,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'OTP code'),
-            ),
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: loading ? null : _verify,
-              child: const Text('Verify'),
-            ),
-          ],
-        ),
+      appBar: AppBar(title: const Text('OTP')),
+      body: const Padding(
+        padding: EdgeInsets.all(24),
+        child: Text('OTP login removed — use eGov SSO.'),
       ),
     );
   }

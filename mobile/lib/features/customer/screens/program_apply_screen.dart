@@ -1,33 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../../providers/auth_provider.dart';
 import '../../../services/liveness_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../liveness/screens/face_liveness_screen.dart';
 import '../data/program_catalog.dart';
 
-/// Application flow for a [Program], mirroring the web workflow seed's stages:
-/// Application Form → Identity Verification → Social Worker Review →
-/// Cash Grant Disbursement.
-///
-/// Mock only: nothing is written to Supabase. The form collects all fields,
-/// identity verification is faked (5s), and submission lands the applicant at
-/// the "Social Worker Review" stage (pending), then the applicant proceeds to
-/// the Cash Grant Disbursement QR screen (step 4).
-class ProgramApplyScreen extends StatefulWidget {
+/// Application flow for a [Program]: form → liveness → Nest submit → review.
+class ProgramApplyScreen extends ConsumerStatefulWidget {
   const ProgramApplyScreen({super.key, required this.programId});
 
   final String programId;
 
   @override
-  State<ProgramApplyScreen> createState() => _ProgramApplyScreenState();
+  ConsumerState<ProgramApplyScreen> createState() => _ProgramApplyScreenState();
 }
 
-class _ProgramApplyScreenState extends State<ProgramApplyScreen> {
+class _ProgramApplyScreenState extends ConsumerState<ProgramApplyScreen> {
   late final Program? _program;
   final _formKey = GlobalKey<FormState>();
+  bool _submitting = false;
 
   /// key -> current value (String for most, bool for toggles/consent).
   final Map<String, dynamic> _values = {};
@@ -71,15 +67,12 @@ class _ProgramApplyScreenState extends State<ProgramApplyScreen> {
   Future<void> _submit() async {
     final program = _program!;
     if (!(_formKey.currentState?.validate() ?? false)) {
-      // Scroll isn't automatic; nudge the user.
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Complete all required fields.')),
       );
       return;
     }
 
-    // Stage 2 — Identity verification via hosted Face Liveness (real e.gov.ph
-    // check through the Supabase edge functions; SUCCEEDED ≥ 95 passes).
     final outcome = await FaceLivenessScreen.open(
       context,
       purpose: LivenessPurpose.application,
@@ -87,17 +80,74 @@ class _ProgramApplyScreenState extends State<ProgramApplyScreen> {
       subtitle:
           'Complete the face liveness check to submit your ${program.code} application.',
     );
-    if (!mounted || outcome?.passed != true) return;
+    if (!mounted || outcome == null || !outcome.passed) return;
 
-    // Stage 3 — application now waiting for social worker review. Pushed on
-    // the same local Navigator; its "Back to home" pops these imperative
-    // routes and then hands control back to go_router (see _goHome).
-    if (!mounted) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => _ReviewPendingScreen(program: program),
-      ),
-    );
+    final profile = await ref.read(currentProfileProvider.future);
+    if (profile == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign in required to submit.')),
+      );
+      return;
+    }
+
+    setState(() => _submitting = true);
+    try {
+      final svc = ref.read(applicationServiceProvider);
+      final templates = await svc.listTemplates();
+      if (templates.isEmpty) {
+        throw Exception(
+          'No published programs in the database yet. Auth works; program apply will be enabled when programs are seeded.',
+        );
+      }
+      final offices = await svc.listRegions();
+      if (offices.isEmpty) {
+        throw Exception('No offices available — check Nest bootstrap seed');
+      }
+      // Prefer NCR regional office when present; else first office.
+      final office = offices.firstWhere(
+        (o) => o.name.toLowerCase().contains('ncr'),
+        orElse: () => offices.first,
+      );
+
+      final matched = templates.where(
+        (t) =>
+            t.id == program.id ||
+            (t.code?.toLowerCase() == program.code.toLowerCase()),
+      );
+      final templateId =
+          matched.isNotEmpty ? matched.first.id : templates.first.id;
+
+      // Collect form values (controllers override map for text fields).
+      final formData = <String, dynamic>{..._values};
+      for (final e in _controllers.entries) {
+        formData[e.key] = e.value.text;
+      }
+
+      await svc.createApplication(
+        customerId: profile.id,
+        regionId: office.id,
+        templateId: templateId,
+        formData: formData,
+        submit: true,
+        livenessConfidence: outcome.confidenceScore,
+        livenessSessionToken: outcome.sessionToken,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => _ReviewPendingScreen(program: program),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Submit failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
@@ -172,8 +222,14 @@ class _ProgramApplyScreenState extends State<ProgramApplyScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: FilledButton(
-                  onPressed: _submit,
-                  child: const Text('Submit'),
+                  onPressed: _submitting ? null : _submit,
+                  child: _submitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Submit'),
                 ),
               ),
             ],

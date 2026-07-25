@@ -1,10 +1,14 @@
-import { OtpForm } from "@/components/auth/otp-form";
+import { redirect } from "next/navigation";
 
+/** OTP flow retired with Supabase Auth — use Nest sign-in. */
 export default async function OtpPage({
   searchParams,
 }: {
-  searchParams: Promise<{ email?: string; next?: string }>;
+  searchParams: Promise<{ email?: string }>;
 }) {
-  const { email, next } = await searchParams;
-  return <OtpForm email={email ?? ""} next={next} />;
+  const params = await searchParams;
+  const q = params.email
+    ? `?email=${encodeURIComponent(params.email)}`
+    : "";
+  redirect(`/signin${q}`);
 }

@@ -4,7 +4,6 @@ import * as React from "react"
 
 import { useAdminAccess } from "@/lib/admin/access-provider"
 import {
-  approveStaffAccount,
   listStaffAccounts,
   registerStaffAccount,
   type StaffAccountRow,
@@ -39,10 +38,11 @@ import { UserPlusIcon } from "lucide-react"
 const REGISTERABLE = [
   { value: "approver" as const, label: "Approver" },
   { value: "evaluator" as const, label: "Evaluator" },
+  { value: "satellite_admin" as const, label: "Office Admin" },
 ]
 
 export default function AccountsPage() {
-  const { can, isDswdAdmin, isSatelliteAdmin, region, loading: accessLoading } =
+  const { can, isDswdAdmin, isSatelliteAdmin, isPlatformAdmin, region, loading: accessLoading } =
     useAdminAccess()
 
   const [accounts, setAccounts] = React.useState<StaffAccountRow[]>([])
@@ -50,9 +50,14 @@ export default function AccountsPage() {
   const [name, setName] = React.useState("")
   const [email, setEmail] = React.useState("")
   const [password, setPassword] = React.useState("")
-  const [role, setRole] = React.useState<"approver" | "evaluator">("evaluator")
+  const [role, setRole] = React.useState<"approver" | "evaluator" | "satellite_admin">("evaluator")
   const [busy, setBusy] = React.useState(false)
   const [message, setMessage] = React.useState<string | null>(null)
+
+  const canRegister = can("register-accounts") && (isSatelliteAdmin || isDswdAdmin || isPlatformAdmin)
+  const roleOptions = isPlatformAdmin || isDswdAdmin
+    ? REGISTERABLE
+    : REGISTERABLE.filter((r) => r.value === "approver" || r.value === "evaluator")
 
   const reload = React.useCallback(async () => {
     const rows = await listStaffAccounts()
@@ -82,32 +87,20 @@ export default function AccountsPage() {
     setEmail("")
     setPassword("")
     setRole("evaluator")
+    setMessage("Staff account created — they can sign in with email/password (mock) or eGov SSO.")
     await reload()
-    setBusy(false)
-  }
-
-  const approve = async (id: string) => {
-    setBusy(true)
-    setMessage(null)
-    const result = await approveStaffAccount(id)
-    if (!result.ok) setMessage(result.error)
-    else await reload()
     setBusy(false)
   }
 
   return (
     <>
       <PageHeader
-        title="Internal Accounts"
-        description={
-          isSatelliteAdmin
-            ? `Register approvers and evaluators for ${region?.name ?? "your region"}; DSWD Admin approves activation.`
-            : "Approve pending regional staff and review internal accounts."
-        }
+        title="Staff accounts"
+        description="Provision Nest web accounts (Evaluator, Approver, Office Admin). Staff must exist before SSO on web."
       >
-        {can("register-accounts") && isSatelliteAdmin && (
+        {canRegister && (
           <Button size="sm" onClick={() => setOpen(true)}>
-            <UserPlusIcon /> Register account
+            <UserPlusIcon /> Create staff account
           </Button>
         )}
       </PageHeader>
@@ -120,10 +113,10 @@ export default function AccountsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Staff Accounts</CardTitle>
+          <CardTitle>Directory</CardTitle>
           <CardDescription>
-            Roles: Approver and Evaluator are region-scoped; Satellite Admin owns
-            the tenant
+            Backed by Nest <code className="text-xs">GET /auth/staff</code>
+            {region ? ` · office ${region.name}` : null}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -132,10 +125,9 @@ export default function AccountsPage() {
               "Name",
               "Email",
               "Role",
-              "Region",
+              "Office",
               "Status",
               "Active",
-              "Actions",
             ]}
             empty={!accessLoading && accounts.length === 0}
           >
@@ -144,39 +136,16 @@ export default function AccountsPage() {
                 <Td>{a.fullName || "—"}</Td>
                 <Td className="text-muted-foreground">{a.email ?? "—"}</Td>
                 <Td className="text-muted-foreground">
-                  {APP_ROLE_LABEL[a.role]}
+                  {APP_ROLE_LABEL[a.role] ?? a.role}
                 </Td>
                 <Td className="text-muted-foreground">
-                  {a.regionCode ?? "—"}
+                  {a.regionId ? a.regionId.slice(0, 8) : "—"}
                 </Td>
                 <Td>
-                  <StatusPill
-                    value={
-                      a.validationStatus === "validated"
-                        ? "Active"
-                        : a.validationStatus === "rejected"
-                          ? "Declined"
-                          : "Pending Approval"
-                    }
-                  />
+                  <StatusPill value="Active" />
                 </Td>
                 <Td>
-                  <StatusPill value={a.isActive ? "Active" : "Pending"} />
-                </Td>
-                <Td>
-                  {can("approve-accounts") &&
-                  isDswdAdmin &&
-                  a.validationStatus === "pending" ? (
-                    <Button
-                      size="xs"
-                      disabled={busy}
-                      onClick={() => void approve(a.id)}
-                    >
-                      Approve
-                    </Button>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
-                  )}
+                  <StatusPill value={a.isActive ? "Yes" : "No"} />
                 </Td>
               </tr>
             ))}
@@ -187,10 +156,11 @@ export default function AccountsPage() {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent>
           <SheetHeader>
-            <SheetTitle>Register internal account</SheetTitle>
+            <SheetTitle>Create staff account</SheetTitle>
             <SheetDescription>
-              Created for {region?.name ?? "your region"} as Approver or
-              Evaluator. Lands pending until DSWD Admin approval.
+              Creates a Nest <code className="text-xs">user_accounts</code> row +
+              role assignment. Temporary password is for mock login; live SSO
+              matches on email.
             </SheetDescription>
           </SheetHeader>
           <div className="grid gap-4 px-4">
@@ -205,7 +175,7 @@ export default function AccountsPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="staff@example.gov.ph"
+              placeholder="staff@agency.gov.ph"
             />
             <Field
               label="Temporary password"
@@ -216,11 +186,11 @@ export default function AccountsPage() {
             />
             <MenuSelect
               label="Role"
-              value={REGISTERABLE.find((r) => r.value === role)?.label ?? ""}
-              options={REGISTERABLE.map((r) => r.label)}
+              value={roleOptions.find((r) => r.value === role)?.label ?? ""}
+              options={roleOptions.map((r) => r.label)}
               onChange={(v) =>
                 setRole(
-                  REGISTERABLE.find((r) => r.label === v)?.value ?? "evaluator",
+                  roleOptions.find((r) => r.label === v)?.value ?? "evaluator",
                 )
               }
             />
@@ -230,7 +200,7 @@ export default function AccountsPage() {
               onClick={() => void submit()}
               disabled={busy || !name || !email || password.length < 8}
             >
-              Register (pending approval)
+              Create account
             </Button>
           </SheetFooter>
         </SheetContent>

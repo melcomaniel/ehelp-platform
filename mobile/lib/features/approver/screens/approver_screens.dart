@@ -11,9 +11,9 @@ import '../../shared/widgets/common_widgets.dart';
 final approverQueueProvider =
     FutureProvider.autoDispose<List<Application>>((ref) async {
   final profile = await ref.watch(currentProfileProvider.future);
-  if (profile?.regionId == null) return [];
+  final regionId = profile?.regionId ?? '';
   return ref.watch(applicationServiceProvider).listRegionQueue(
-        regionId: profile!.regionId!,
+        regionId: regionId,
         statuses: ['submitted', 'under_review', 'recommended'],
       );
 });
@@ -21,10 +21,9 @@ final approverQueueProvider =
 final approverRecommendationsProvider =
     FutureProvider.autoDispose<List<Recommendation>>((ref) async {
   final profile = await ref.watch(currentProfileProvider.future);
-  if (profile?.regionId == null) return [];
   return ref
       .watch(applicationServiceProvider)
-      .listPendingRecommendations(profile!.regionId!);
+      .listPendingRecommendations(profile?.regionId ?? '');
 });
 
 class ApproverHomeScreen extends ConsumerWidget {
@@ -54,14 +53,6 @@ class ApproverHomeScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('$e')),
         data: (profile) {
-          if (profile?.regionId == null) {
-            return const EmptyState(
-              icon: Icons.map_outlined,
-              title: 'Region not assigned',
-              subtitle: 'Ask Satellite Admin to assign your region.',
-            );
-          }
-
           return RefreshIndicator(
             onRefresh: () async {
               ref.invalidate(approverQueueProvider);
@@ -75,9 +66,11 @@ class ApproverHomeScreen extends ConsumerWidget {
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  'Approve or decline applications and act on evaluator recommendations. No template or RBAC editing rights.',
-                  style: TextStyle(color: AppColors.muted),
+                Text(
+                  profile?.regionId == null
+                      ? 'Showing all org applications (no office assigned).'
+                      : 'Approve or decline applications and act on evaluator recommendations. No template or RBAC editing rights.',
+                  style: const TextStyle(color: AppColors.muted),
                 ),
                 const SizedBox(height: 24),
                 const SectionHeader(title: 'Priority recommendations'),

@@ -1,4 +1,5 @@
 export type AppRole =
+  | "platform_admin"
   | "dswd_admin"
   | "satellite_admin"
   | "approver"
@@ -7,21 +8,17 @@ export type AppRole =
   | "dependent";
 
 export const APP_ROLE_LABEL: Record<AppRole, string> = {
-  dswd_admin: "DSWD Admin",
-  satellite_admin: "Satellite Admin",
+  platform_admin: "Platform Admin",
+  dswd_admin: "Organization Admin",
+  satellite_admin: "Office Admin",
   approver: "Approver",
   evaluator: "Evaluator",
-  customer: "Customer",
+  customer: "Beneficiary",
   dependent: "Dependent / Guarantor",
 };
 
-/** Roles selectable during self-registration (matches mobile). */
-export const SIGNUP_ROLES: AppRole[] = [
-  "customer",
-  "dependent",
-  "evaluator",
-  "approver",
-];
+/** Self-registration on web is staff-only (beneficiaries use mobile). */
+export const SIGNUP_ROLES: AppRole[] = ["evaluator", "approver"];
 
 export type AccountValidationStatus = "pending" | "validated" | "rejected";
 
@@ -43,19 +40,32 @@ export function parseAppRole(value: string | null | undefined): AppRole {
   return "customer";
 }
 
-/** Web home route for a profile role (mobile uses /approver, /evaluator, etc.). */
+export function isWebAdminRole(role: AppRole): boolean {
+  return (
+    role === "platform_admin" ||
+    role === "dswd_admin" ||
+    role === "satellite_admin"
+  );
+}
+
+export function isWebStaffRole(role: AppRole): boolean {
+  return role === "evaluator" || role === "approver";
+}
+
+/** Web home route — beneficiaries are directed to the mobile app CTA. */
 export function homeRouteForRole(role: AppRole): string {
   switch (role) {
     case "approver":
     case "evaluator":
-      return "/social-worker/dashboard";
+      return "/staff";
+    case "platform_admin":
     case "dswd_admin":
     case "satellite_admin":
       return "/admin";
     case "dependent":
     case "customer":
     default:
-      return "/dashboard";
+      return "/get-app";
   }
 }
 

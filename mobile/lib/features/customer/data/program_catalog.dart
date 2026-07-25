@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 /// Static, mock program catalog used for demos.
 ///
-/// This intentionally does NOT hit Supabase. It mirrors the web workflow seed
+/// This intentionally does NOT hit the Nest API yet. It mirrors the web workflow seed
 /// so the mobile applicant experience lines up 1:1 with the social worker's
 /// review side.
 ///
@@ -244,7 +244,7 @@ const List<Program> kPrograms = [
 
 Program? programById(String id) {
   for (final p in kPrograms) {
-    if (p.id == id) return p;
+    if (p.id == id || p.code.toLowerCase() == id.toLowerCase()) return p;
   }
   return null;
 }

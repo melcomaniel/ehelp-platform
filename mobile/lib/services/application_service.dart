@@ -1,39 +1,74 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:convert';
 
+import 'package:http/http.dart' as http;
+
+import '../config/api_config.dart';
 import '../models/application.dart';
+import 'auth_service.dart';
 
+/// NestJS domain API client (programs, offices, applications, relationships).
 class ApplicationService {
-  ApplicationService(this._client);
+  ApplicationService(this._auth);
 
-  final SupabaseClient _client;
+  final AuthService _auth;
+
+  Uri _uri(String path, [Map<String, String>? query]) => Uri.parse(
+        '${ApiConfig.baseUrl}$path',
+      ).replace(queryParameters: query);
+
+  Map<String, String> get _headers {
+    final token = _auth.currentSession?.accessToken;
+    return {
+      'Content-Type': 'application/json',
+      'X-Client-Platform': 'mobile',
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+  }
+
+  Future<Map<String, dynamic>> _json(
+    http.Response res, {
+    String fallback = 'Request failed',
+  }) async {
+    final body = res.body.isEmpty ? {} : jsonDecode(res.body);
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      if (body is Map<String, dynamic>) return body;
+      throw StateError('Expected object response');
+    }
+    final msg = body is Map ? (body['message'] ?? fallback) : fallback;
+    throw Exception(msg is List ? msg.join(', ') : msg.toString());
+  }
+
+  Future<List<dynamic>> _jsonList(http.Response res) async {
+    final body = res.body.isEmpty ? [] : jsonDecode(res.body);
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      if (body is List) return body;
+      throw StateError('Expected list response');
+    }
+    final msg = body is Map ? body['message'] : 'Request failed';
+    throw Exception(msg is List ? msg.join(', ') : msg.toString());
+  }
 
   Future<List<ProgramTemplate>> listTemplates() async {
-    final data = await _client
-        .from('program_templates')
-        .select()
-        .eq('is_active', true)
-        .order('name');
-    return (data as List)
-        .map((e) => ProgramTemplate.fromJson(e as Map<String, dynamic>))
+    final res = await http.get(_uri('/templates'), headers: _headers);
+    final list = await _jsonList(res);
+    return list
+        .map((e) => ProgramTemplate.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
   }
 
   Future<List<Region>> listRegions() async {
-    final data =
-        await _client.from('regions').select().eq('is_active', true).order('code');
-    return (data as List)
-        .map((e) => Region.fromJson(e as Map<String, dynamic>))
+    final res = await http.get(_uri('/regions'), headers: _headers);
+    final list = await _jsonList(res);
+    return list
+        .map((e) => Region.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
   }
 
   Future<List<Application>> listMyApplications(String customerId) async {
-    final data = await _client
-        .from('applications')
-        .select('*, program_templates(name), profiles!applications_customer_id_fkey(full_name)')
-        .eq('customer_id', customerId)
-        .order('created_at', ascending: false);
-    return (data as List)
-        .map((e) => Application.fromJson(e as Map<String, dynamic>))
+    final res = await http.get(_uri('/applications/me'), headers: _headers);
+    final list = await _jsonList(res);
+    return list
+        .map((e) => Application.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
   }
 
@@ -41,32 +76,25 @@ class ApplicationService {
     required String regionId,
     List<String>? statuses,
   }) async {
-    var query = _client
-        .from('applications')
-        .select(
-          '*, program_templates(name), profiles!applications_customer_id_fkey(full_name)',
-        )
-        .eq('region_id', regionId);
-
-    if (statuses != null && statuses.isNotEmpty) {
-      query = query.inFilter('status', statuses);
-    }
-
-    final data = await query.order('created_at', ascending: false);
-    return (data as List)
-        .map((e) => Application.fromJson(e as Map<String, dynamic>))
+    final res = await http.get(
+      _uri('/applications/queue', {
+        if (statuses != null && statuses.isNotEmpty)
+          'statuses': statuses.join(','),
+      }),
+      headers: _headers,
+    );
+    final list = await _jsonList(res);
+    // Client-side office filter when staff profile office differs
+    return list
+        .map((e) => Application.fromJson(Map<String, dynamic>.from(e as Map)))
+        .where((a) => regionId.isEmpty || a.regionId == regionId)
         .toList();
   }
 
   Future<Application> getApplication(String id) async {
-    final data = await _client
-        .from('applications')
-        .select(
-          '*, program_templates(name), profiles!applications_customer_id_fkey(full_name)',
-        )
-        .eq('id', id)
-        .single();
-    return Application.fromJson(data);
+    final res = await http.get(_uri('/applications/$id'), headers: _headers);
+    final json = await _json(res);
+    return Application.fromJson(json);
   }
 
   Future<Application> createApplication({
@@ -81,72 +109,50 @@ class ApplicationService {
     String? livenessStatus,
     double? livenessConfidence,
     String? livenessReferenceImageUrl,
+    String? livenessImageUrl,
   }) async {
-    if (submit) {
-      if (livenessSessionToken == null ||
-          livenessStatus != 'succeeded' ||
-          (livenessConfidence ?? 0) < 80) {
-        throw Exception(
-          'Face liveness required before submit (SUCCEEDED with confidence ≥ 80).',
-        );
-      }
-    }
-
-    final payload = {
-      'customer_id': customerId,
-      'region_id': regionId,
-      'template_id': templateId,
-      'submitted_by': submittedBy ?? customerId,
-      'form_data': formData,
-      'amount_requested': amountRequested,
-      'status': submit ? 'submitted' : 'draft',
-      if (submit) 'submitted_at': DateTime.now().toIso8601String(),
-      'reference_no': '',
-      if (livenessSessionToken != null)
-        'liveness_session_token': livenessSessionToken,
-      if (livenessStatus != null) 'liveness_status': livenessStatus,
-      if (livenessConfidence != null)
-        'liveness_confidence': livenessConfidence,
-      if (livenessReferenceImageUrl != null)
-        'liveness_reference_image_url': livenessReferenceImageUrl,
-      if (livenessStatus == 'succeeded')
-        'liveness_verified_at': DateTime.now().toIso8601String(),
-    };
-
-    final data =
-        await _client.from('applications').insert(payload).select().single();
-
-    final app = Application.fromJson(data);
-    await _logEvent(
-      applicationId: app.id,
-      actorId: submittedBy ?? customerId,
-      toStatus: submit ? 'submitted' : 'draft',
-      note: submit
-          ? 'Application submitted with face liveness'
-          : 'Draft created',
+    final res = await http.post(
+      _uri('/applications'),
+      headers: _headers,
+      body: jsonEncode({
+        'office_id': regionId,
+        'template_id': templateId,
+        'customer_user_id': customerId,
+        'form_data': formData,
+        if (amountRequested != null) 'amount_requested': amountRequested,
+        'submit': submit,
+      }),
     );
-    return app;
+    final json = await _json(res, fallback: 'Create application failed');
+    return Application.fromJson(json);
   }
 
   Future<Application> submitApplication(String id, String actorId) async {
-    final data = await _client
-        .from('applications')
-        .update({
-          'status': 'submitted',
-          'submitted_at': DateTime.now().toIso8601String(),
-        })
-        .eq('id', id)
-        .select()
-        .single();
-
-    await _logEvent(
-      applicationId: id,
-      actorId: actorId,
-      fromStatus: 'draft',
-      toStatus: 'submitted',
-      note: 'Submitted for review',
+    final res = await http.post(
+      _uri('/applications/$id/submit'),
+      headers: _headers,
+      body: '{}',
     );
-    return Application.fromJson(data);
+    final json = await _json(res, fallback: 'Submit failed');
+    return Application.fromJson(json);
+  }
+
+  Future<Application> updateApplication(
+    String id,
+    Map<String, dynamic> updates,
+  ) async {
+    final res = await http.patch(
+      _uri('/applications/$id'),
+      headers: _headers,
+      body: jsonEncode({
+        if (updates.containsKey('form_data')) 'form_data': updates['form_data'],
+        if (updates.containsKey('amount_requested'))
+          'amount_requested': updates['amount_requested'],
+        if (updates.containsKey('status')) 'status': updates['status'],
+      }),
+    );
+    final json = await _json(res, fallback: 'Update failed');
+    return Application.fromJson(json);
   }
 
   Future<Application> decideApplication({
@@ -156,27 +162,17 @@ class ApplicationService {
     String? notes,
     double? amountApproved,
   }) async {
-    final status = approve ? 'approved' : 'declined';
-    final data = await _client
-        .from('applications')
-        .update({
-          'status': status,
-          'approver_notes': notes,
-          'approved_by': approverId,
-          'amount_approved': amountApproved,
-          'decided_at': DateTime.now().toIso8601String(),
-        })
-        .eq('id', id)
-        .select()
-        .single();
-
-    await _logEvent(
-      applicationId: id,
-      actorId: approverId,
-      toStatus: status,
-      note: notes,
+    final res = await http.post(
+      _uri('/applications/$id/decide'),
+      headers: _headers,
+      body: jsonEncode({
+        'approve': approve,
+        if (notes != null) 'notes': notes,
+        if (amountApproved != null) 'amount_approved': amountApproved,
+      }),
     );
-    return Application.fromJson(data);
+    final json = await _json(res, fallback: 'Decision failed');
+    return Application.fromJson(json);
   }
 
   Future<Recommendation> addRecommendation({
@@ -185,85 +181,80 @@ class ApplicationService {
     required RecommendationPriority priority,
     String? rationale,
   }) async {
-    await _client.from('applications').update({
-      'priority': priority.value,
-      'status': 'recommended',
-      'evaluator_notes': rationale,
-      'reviewed_by': recommendedBy,
-    }).eq('id', applicationId);
-
-    final data = await _client
-        .from('recommendations')
-        .insert({
-          'application_id': applicationId,
-          'recommended_by': recommendedBy,
-          'priority': priority.value,
-          'rationale': rationale,
-        })
-        .select()
-        .single();
-
-    await _logEvent(
-      applicationId: applicationId,
-      actorId: recommendedBy,
-      toStatus: 'recommended',
-      note: 'Priority: ${priority.label}. ${rationale ?? ''}',
+    final res = await http.post(
+      _uri('/applications/$applicationId/recommend'),
+      headers: _headers,
+      body: jsonEncode({
+        'notes': rationale,
+        'priority': priority.value,
+      }),
     );
-
-    return Recommendation.fromJson(data);
+    final json = await _json(res, fallback: 'Recommend failed');
+    return Recommendation.fromJson(json);
   }
 
-  Future<List<Recommendation>> listPendingRecommendations(String regionId) async {
-    final data = await _client
-        .from('recommendations')
-        .select(
-          '*, applications!inner(*, program_templates(name), profiles!applications_customer_id_fkey(full_name))',
+  Future<List<Recommendation>> listPendingRecommendations(
+    String regionId,
+  ) async {
+    final res = await http.get(
+      _uri('/recommendations/pending'),
+      headers: _headers,
+    );
+    final list = await _jsonList(res);
+    return list
+        .map(
+          (e) => Recommendation.fromJson(Map<String, dynamic>.from(e as Map)),
         )
-        .eq('is_acted_on', false)
-        .eq('applications.region_id', regionId)
-        .order('created_at', ascending: false);
-
-    return (data as List)
-        .map((e) => Recommendation.fromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  Future<List<Recommendation>> listRecommendations({
+    String? regionId,
+  }) async {
+    return listPendingRecommendations(regionId ?? '');
   }
 
   Future<void> markRecommendationActedOn({
     required String recommendationId,
     required String actorId,
   }) async {
-    await _client.from('recommendations').update({
-      'is_acted_on': true,
-      'acted_on_by': actorId,
-      'acted_on_at': DateTime.now().toIso8601String(),
-    }).eq('id', recommendationId);
+    // Acted-on is implied by decide(); no-op for Nest MVP.
+  }
+
+  Future<Recommendation> createRecommendation({
+    required String applicationId,
+    required String evaluatorId,
+    required String regionId,
+    String? notes,
+    int? priority,
+  }) {
+    return addRecommendation(
+      applicationId: applicationId,
+      recommendedBy: evaluatorId,
+      priority: RecommendationPriority.medium,
+      rationale: notes,
+    );
   }
 
   Future<List<DependentLink>> listDependents(String principalId) async {
-    final data = await _client
-        .from('dependent_links')
-        .select(
-          '*, dependent:profiles!dependent_links_dependent_id_fkey(full_name), principal:profiles!dependent_links_principal_id_fkey(full_name)',
-        )
-        .eq('principal_id', principalId)
-        .order('created_at', ascending: false);
-
-    return (data as List)
-        .map((e) => DependentLink.fromJson(e as Map<String, dynamic>))
+    final res = await http.get(
+      _uri('/relationships/dependents'),
+      headers: _headers,
+    );
+    final list = await _jsonList(res);
+    return list
+        .map((e) => DependentLink.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
   }
 
   Future<List<DependentLink>> listLinkedPrincipals(String dependentId) async {
-    final data = await _client
-        .from('dependent_links')
-        .select(
-          '*, dependent:profiles!dependent_links_dependent_id_fkey(full_name), principal:profiles!dependent_links_principal_id_fkey(full_name)',
-        )
-        .eq('dependent_id', dependentId)
-        .order('created_at', ascending: false);
-
-    return (data as List)
-        .map((e) => DependentLink.fromJson(e as Map<String, dynamic>))
+    final res = await http.get(
+      _uri('/relationships/principals'),
+      headers: _headers,
+    );
+    final list = await _jsonList(res);
+    return list
+        .map((e) => DependentLink.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
   }
 
@@ -274,33 +265,29 @@ class ApplicationService {
     bool isNotarized = false,
     String? notes,
   }) async {
-    final data = await _client
-        .from('dependent_links')
-        .insert({
-          'principal_id': principalId,
-          'dependent_id': dependentId,
-          'relationship': relationship,
-          'is_notarized': isNotarized,
-          'notes': notes,
-        })
-        .select()
-        .single();
-    return DependentLink.fromJson(data);
+    final res = await http.post(
+      _uri('/relationships'),
+      headers: _headers,
+      body: jsonEncode({
+        'principal_user_id': principalId,
+        'dependent_user_id': dependentId,
+        'relationship': relationship,
+        if (notes != null) 'notes': notes,
+      }),
+    );
+    final json = await _json(res, fallback: 'Register dependent failed');
+    return DependentLink.fromJson(json);
   }
 
-  Future<void> _logEvent({
-    required String applicationId,
-    required String actorId,
-    String? fromStatus,
-    required String toStatus,
-    String? note,
+  Future<void> createDependentLink({
+    required String principalId,
+    required String dependentId,
+    required String relationship,
   }) async {
-    await _client.from('application_events').insert({
-      'application_id': applicationId,
-      'actor_id': actorId,
-      'from_status': fromStatus,
-      'to_status': toStatus,
-      'note': note,
-    });
+    await registerDependent(
+      principalId: principalId,
+      dependentId: dependentId,
+      relationship: relationship,
+    );
   }
 }

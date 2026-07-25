@@ -66,15 +66,15 @@ const GROUPS: NavGroup[] = [
   {
     label: "Workflow",
     items: [
-      { title: "All Workflows", url: "/dashboard/workflows", icon: WorkflowIcon, roles: ["admin"] },
-      { title: "Create Workflow", url: "/dashboard/workflows/new", icon: PlusCircleIcon, roles: ["admin"] },
+      { title: "All Workflows", url: "/admin/workflows", icon: WorkflowIcon, roles: ["admin"] },
+      { title: "Create Workflow", url: "/admin/workflows/new", icon: PlusCircleIcon, roles: ["admin"] },
     ],
   },
   {
     label: "Program",
     items: [
-      { title: "All Programs", url: "/dashboard/programs", icon: FolderKanbanIcon, roles: ["admin"] },
-      { title: "Create Program", url: "/dashboard/programs/new", icon: PlusCircleIcon, roles: ["admin"] },
+      { title: "All Programs", url: "/admin/programs", icon: FolderKanbanIcon, roles: ["admin"] },
+      { title: "Create Program", url: "/admin/programs/new", icon: PlusCircleIcon, roles: ["admin"] },
     ],
   },
   {

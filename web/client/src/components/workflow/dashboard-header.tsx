@@ -15,10 +15,10 @@ import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 
 const CRUMB: { prefix: string; label: string }[] = [
-  { prefix: "/dashboard/workflows/new", label: "Create Workflow" },
-  { prefix: "/dashboard/workflows", label: "Workflows" },
-  { prefix: "/dashboard/programs/new", label: "Create Program" },
-  { prefix: "/dashboard/programs", label: "Programs" },
+  { prefix: "/admin/workflows/new", label: "Create Workflow" },
+  { prefix: "/admin/workflows", label: "Workflows" },
+  { prefix: "/admin/programs/new", label: "Create Program" },
+  { prefix: "/admin/programs", label: "Programs" },
   { prefix: "/dashboard/apply", label: "Apply" },
   { prefix: "/dashboard/applications", label: "My Applications" },
   { prefix: "/dashboard/review", label: "Review Queue" },

@@ -51,6 +51,11 @@ class Profile {
     this.disbursementPreference,
     this.disbursementDetails = const {},
     this.isActive = true,
+    this.needsEverify = false,
+    this.firstName,
+    this.middleName,
+    this.lastName,
+    this.birthDate,
   });
 
   final String id;
@@ -68,11 +73,20 @@ class Profile {
   final DisbursementMethod? disbursementPreference;
   final Map<String, dynamic> disbursementDetails;
   final bool isActive;
+  final bool needsEverify;
+  final String? firstName;
+  final String? middleName;
+  final String? lastName;
+  final String? birthDate;
 
   bool get pinExpired {
     if (pinExpiresAt == null) return true;
     return pinExpiresAt!.isBefore(DateTime.now());
   }
+
+  /// Citizens must finish Face Liveness + eVerify before using the app.
+  bool get needsOnboarding =>
+      role == AppRole.customer && needsEverify;
 
   factory Profile.fromJson(Map<String, dynamic> json) {
     return Profile(
@@ -96,6 +110,12 @@ class Profile {
       disbursementDetails:
           Map<String, dynamic>.from(json['disbursement_details'] as Map? ?? {}),
       isActive: json['is_active'] as bool? ?? true,
+      needsEverify: json['needs_everify'] as bool? ??
+          (json['egov_uniqid'] != null && json['everify_verified_at'] == null),
+      firstName: json['first_name'] as String?,
+      middleName: json['middle_name'] as String?,
+      lastName: json['last_name'] as String?,
+      birthDate: json['birth_date'] as String?,
     );
   }
 
@@ -119,6 +139,7 @@ class Profile {
     Map<String, dynamic>? disbursementDetails,
     AccountValidationStatus? validationStatus,
     bool? faceScanVerified,
+    bool? needsEverify,
   }) {
     return Profile(
       id: id,
@@ -137,6 +158,11 @@ class Profile {
           disbursementPreference ?? this.disbursementPreference,
       disbursementDetails: disbursementDetails ?? this.disbursementDetails,
       isActive: isActive,
+      needsEverify: needsEverify ?? this.needsEverify,
+      firstName: firstName,
+      middleName: middleName,
+      lastName: lastName,
+      birthDate: birthDate,
     );
   }
 }

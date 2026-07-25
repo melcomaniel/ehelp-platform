@@ -1,32 +1,36 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:http/http.dart' as http;
 
+import '../config/api_config.dart';
 import '../models/app_role.dart';
 import '../models/profile.dart';
 import '../services/application_service.dart';
 import '../services/auth_service.dart';
+import '../services/liveness_service.dart';
 
-final supabaseClientProvider = Provider<SupabaseClient>(
-  (ref) => Supabase.instance.client,
-);
-
-final authServiceProvider = Provider<AuthService>(
-  (ref) => AuthService(ref.watch(supabaseClientProvider)),
-);
+final authServiceProvider = Provider<AuthService>((ref) {
+  final service = AuthService();
+  ref.onDispose(service.dispose);
+  return service;
+});
 
 final applicationServiceProvider = Provider<ApplicationService>(
-  (ref) => ApplicationService(ref.watch(supabaseClientProvider)),
+  (ref) => ApplicationService(ref.watch(authServiceProvider)),
 );
 
-final authStateProvider = StreamProvider<AuthState>((ref) {
+final authStateProvider = StreamProvider<AuthEvent>((ref) {
   return ref.watch(authServiceProvider).authStateChanges;
 });
 
 final currentProfileProvider = FutureProvider<Profile?>((ref) async {
   ref.watch(authStateProvider);
   final auth = ref.watch(authServiceProvider);
-  if (auth.currentUser == null) return null;
+  if (auth.currentSession == null) return null;
   return auth.fetchProfile();
+});
+
+final livenessServiceProvider = Provider<LivenessService>((ref) {
+  return LivenessService(ref.watch(authServiceProvider));
 });
 
 class AuthController extends Notifier<AsyncValue<void>> {
@@ -39,6 +43,14 @@ class AuthController extends Notifier<AsyncValue<void>> {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
       await _auth.signIn(email: email, password: password);
+      ref.invalidate(currentProfileProvider);
+    });
+  }
+
+  Future<void> exchangeSso(String exchangeCode) async {
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() async {
+      await _auth.exchangeSsoCode(exchangeCode);
       ref.invalidate(currentProfileProvider);
     });
   }
@@ -84,3 +96,13 @@ class AuthController extends Notifier<AsyncValue<void>> {
 
 final authControllerProvider =
     NotifierProvider<AuthController, AsyncValue<void>>(AuthController.new);
+
+/// Health ping helper for diagnostics.
+final apiHealthProvider = FutureProvider<bool>((ref) async {
+  try {
+    final res = await http.get(Uri.parse('${ApiConfig.baseUrl}/auth/me'));
+    return res.statusCode == 401 || res.statusCode == 200;
+  } catch (_) {
+    return false;
+  }
+});

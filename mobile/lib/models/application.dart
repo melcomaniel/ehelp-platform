@@ -46,12 +46,14 @@ class ProgramTemplate {
   const ProgramTemplate({
     required this.id,
     required this.name,
+    this.code,
     this.description,
     this.disbursementCooldownDays = 90,
   });
 
   final String id;
   final String name;
+  final String? code;
   final String? description;
   final int disbursementCooldownDays;
 
@@ -59,6 +61,7 @@ class ProgramTemplate {
     return ProgramTemplate(
       id: json['id'] as String,
       name: json['name'] as String,
+      code: json['code'] as String?,
       description: json['description'] as String?,
       disbursementCooldownDays:
           json['disbursement_cooldown_days'] as int? ?? 90,
@@ -136,7 +139,7 @@ class Application {
     return Application(
       id: json['id'] as String,
       referenceNo: json['reference_no'] as String? ?? '',
-      customerId: json['customer_id'] as String,
+      customerId: (json['customer_id'] ?? customer?['id']) as String,
       submittedBy: json['submitted_by'] as String?,
       regionId: json['region_id'] as String,
       templateId: json['template_id'] as String,
@@ -157,8 +160,10 @@ class Application {
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'] as String)
           : null,
-      customerName: customer?['full_name'] as String?,
-      templateName: template?['name'] as String?,
+      customerName:
+          json['customer_name'] as String? ?? customer?['full_name'] as String?,
+      templateName:
+          json['template_name'] as String? ?? template?['name'] as String?,
       livenessStatus: json['liveness_status'] as String?,
       livenessConfidence: (json['liveness_confidence'] as num?)?.toDouble(),
       livenessVerifiedAt: json['liveness_verified_at'] != null

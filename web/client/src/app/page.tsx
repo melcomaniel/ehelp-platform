@@ -1,10 +1,8 @@
 import { Navbar } from "@/components/aid/navbar";
 import { Hero } from "@/components/aid/hero";
-import { Problem } from "@/components/aid/problem";
-import { LandscapeChart } from "@/components/aid/landscape-chart";
+import { Roles } from "@/components/aid/roles";
 import { HowItWorks } from "@/components/aid/how-it-works";
-import { Apis } from "@/components/aid/apis";
-import { Pilot } from "@/components/aid/pilot";
+import { MobileCta } from "@/components/aid/mobile-cta";
 import { Footer } from "@/components/aid/footer";
 
 export default function Home() {
@@ -13,11 +11,9 @@ export default function Home() {
       <Navbar />
       <main>
         <Hero />
-        <Problem />
-        <LandscapeChart />
+        <Roles />
         <HowItWorks />
-        <Apis />
-        <Pilot />
+        <MobileCta />
       </main>
       <Footer />
     </>

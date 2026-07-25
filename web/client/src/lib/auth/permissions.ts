@@ -83,7 +83,7 @@ export const RBAC_MATRIX_ROLE_LABEL: Record<RbacMatrixRole, string> = {
   evaluator: "Evaluator",
 };
 
-/** Fixed capabilities for DSWD admin (not stored in regional_rbac). */
+/** Fixed capabilities for Organization (DSWD) Admin. */
 export const DSWD_ADMIN_PERMISSIONS: DbPermission[] = [
   "view_analytics",
   "manage_templates",
@@ -101,6 +101,33 @@ export const DSWD_ADMIN_PERMISSIONS: DbPermission[] = [
   "register_customers",
 ];
 
+/** Fixed capabilities for Platform Admin. */
+export const PLATFORM_ADMIN_PERMISSIONS: DbPermission[] = [
+  ...DSWD_ADMIN_PERMISSIONS,
+];
+
+/** Fixed capabilities for Office (satellite) Admin. */
+export const OFFICE_ADMIN_PERMISSIONS: DbPermission[] = [
+  "view_analytics",
+  "customize_templates",
+  "manage_region_rbac",
+  "register_accounts",
+  "approve_accounts",
+  "evaluate_applications",
+  "approve_applications",
+  "submit_recommendations",
+  "act_recommendations",
+  "register_customers",
+];
+
+/** Staff console roles — case work only. */
+export const STAFF_CONSOLE_PERMISSIONS: DbPermission[] = [
+  "evaluate_applications",
+  "approve_applications",
+  "submit_recommendations",
+  "act_recommendations",
+];
+
 export function toUiPermission(db: DbPermission): UiPermission {
   return db.replaceAll("_", "-") as UiPermission;
 }
@@ -110,10 +137,22 @@ export function toDbPermission(ui: string): DbPermission | null {
   return DB_PERMISSIONS.includes(db) ? db : null;
 }
 
+/** Default Nest-backed permissions by app role (no Supabase regional_rbac). */
 export function permissionsForRole(
   role: AppRole,
-  regional: DbPermission[],
+  regional: DbPermission[] = [],
 ): DbPermission[] {
-  if (role === "dswd_admin") return [...DSWD_ADMIN_PERMISSIONS];
-  return regional;
+  switch (role) {
+    case "platform_admin":
+      return [...PLATFORM_ADMIN_PERMISSIONS];
+    case "dswd_admin":
+      return [...DSWD_ADMIN_PERMISSIONS];
+    case "satellite_admin":
+      return regional.length ? regional : [...OFFICE_ADMIN_PERMISSIONS];
+    case "evaluator":
+    case "approver":
+      return [...STAFF_CONSOLE_PERMISSIONS];
+    default:
+      return regional;
+  }
 }

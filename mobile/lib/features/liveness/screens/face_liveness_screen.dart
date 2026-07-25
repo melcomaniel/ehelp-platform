@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -12,10 +13,6 @@ import '../../../services/liveness_browser_launcher.dart';
 import '../../../services/liveness_service.dart';
 import '../../../theme/app_theme.dart';
 
-final livenessServiceProvider = Provider<LivenessService>(
-  (ref) => LivenessService(ref.watch(supabaseClientProvider)),
-);
-
 class FaceLivenessOutcome {
   const FaceLivenessOutcome({
     required this.passed,
@@ -23,16 +20,23 @@ class FaceLivenessOutcome {
     required this.confidenceScore,
     this.referenceImageUrl,
     this.message,
+    this.faceLivenessSessionId,
   });
 
   final bool passed;
+  /// Nest correlation token (for verify/bind lookups).
   final String sessionToken;
   final double confidenceScore;
   final String? referenceImageUrl;
   final String? message;
+  /// PhilSys eVerify SDK session_id — required by /api/query and /api/query/qr.
+  final String? faceLivenessSessionId;
 }
 
-/// Hosted Face Liveness — Chrome/external first (better scores), WebView optional.
+/// Hosted Face Liveness.
+///
+/// eVerify PhilSys path opens the official HTTPS liveness app in WebView
+/// (camera requires a secure top-level page) and captures session_id via JS.
 class FaceLivenessScreen extends ConsumerStatefulWidget {
   const FaceLivenessScreen({
     super.key,
@@ -79,6 +83,7 @@ class _FaceLivenessScreenState extends ConsumerState<FaceLivenessScreen> {
   bool _loading = true;
   bool _verifying = false;
   bool _useWebView = false;
+  bool _bridgeHandled = false;
   String? _error;
   String? _lastRejectMessage;
   double? _lastConfidence;
@@ -90,17 +95,16 @@ class _FaceLivenessScreenState extends ConsumerState<FaceLivenessScreen> {
   @override
   void initState() {
     super.initState();
-    // Force Chrome when possible — Opera hangs on Face Liveness "Connecting…".
-    _bootstrap(preferWebView: false);
+    _bootstrap();
   }
 
-  Future<void> _bootstrap({required bool preferWebView}) async {
+  Future<void> _bootstrap({bool? preferWebView}) async {
     setState(() {
       _loading = true;
       _error = null;
       _lastRejectMessage = null;
-      _useWebView = preferWebView;
       _controller = null;
+      _bridgeHandled = false;
     });
 
     final permitted = await _ensureCameraPermission();
@@ -114,25 +118,6 @@ class _FaceLivenessScreenState extends ConsumerState<FaceLivenessScreen> {
       return;
     }
 
-    await _startSession(loadInWebView: preferWebView);
-  }
-
-  Future<bool> _ensureCameraPermission() async {
-    final cam = await Permission.camera.request();
-    await Permission.microphone.request();
-    if (cam.isGranted) return true;
-    if (cam.isPermanentlyDenied) await openAppSettings();
-    return false;
-  }
-
-  Future<void> _startSession({required bool loadInWebView}) async {
-    setState(() {
-      _loading = true;
-      _error = null;
-      _useWebView = loadInWebView;
-      _controller = null;
-    });
-
     try {
       final session = await ref.read(livenessServiceProvider).createSession(
             purpose: widget.purpose,
@@ -140,12 +125,17 @@ class _FaceLivenessScreenState extends ConsumerState<FaceLivenessScreen> {
             applicationId: widget.applicationId,
           );
       if (!mounted) return;
+
+      // eVerify HTTPS app must run top-level in WebView so we can capture session_id.
+      final useWebView = preferWebView ?? session.isEverifySdk;
+
       setState(() {
         _session = session;
+        _useWebView = useWebView;
         _loading = false;
       });
 
-      if (loadInWebView) {
+      if (useWebView) {
         await _loadWebView(session.url);
       } else {
         await _openExternal(session.url);
@@ -157,6 +147,14 @@ class _FaceLivenessScreenState extends ConsumerState<FaceLivenessScreen> {
         _loading = false;
       });
     }
+  }
+
+  Future<bool> _ensureCameraPermission() async {
+    final cam = await Permission.camera.request();
+    await Permission.microphone.request();
+    if (cam.isGranted) return true;
+    if (cam.isPermanentlyDenied) await openAppSettings();
+    return false;
   }
 
   Future<void> _loadWebView(String url) async {
@@ -173,6 +171,12 @@ class _FaceLivenessScreenState extends ConsumerState<FaceLivenessScreen> {
     final controller = WebViewController.fromPlatformCreationParams(params)
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.white)
+      ..addJavaScriptChannel(
+        'EhelpLiveness',
+        onMessageReceived: (message) {
+          _onEverifyBridgeMessage(message.message);
+        },
+      )
       ..setNavigationDelegate(
         NavigationDelegate(
           onNavigationRequest: (request) {
@@ -182,6 +186,7 @@ class _FaceLivenessScreenState extends ConsumerState<FaceLivenessScreen> {
             }
             return NavigationDecision.navigate;
           },
+          onPageFinished: (_) => _injectEverifyBridge(),
         ),
       );
 
@@ -198,6 +203,130 @@ class _FaceLivenessScreenState extends ConsumerState<FaceLivenessScreen> {
     setState(() => _controller = controller);
   }
 
+  Future<void> _injectEverifyBridge() async {
+    final controller = _controller;
+    if (controller == null) return;
+    // SPA navigates to /?mode=aws — re-inject after each page load.
+    // Only forward a COMPLETED capture (photo + session_id). Creating a session
+    // alone must not bind — eVerify /api/query rejects unfinished sessions with
+    // face_liveness_error_exception.
+    await controller.runJavaScript(r'''
+      (function () {
+        if (window.__ehelpLivenessHooked) return;
+        window.__ehelpLivenessHooked = true;
+        function forward(payload) {
+          try {
+            if (!payload) return;
+            var p = payload;
+            if (typeof p === 'string') {
+              try { p = JSON.parse(p); } catch (e) { return; }
+            }
+            if (typeof p !== 'object') return;
+            var result = p.result || {};
+            var sid = p.session_id || result.session_id || null;
+            var photo = p.photo_url || result.photo_url || result.photo || p.face_url || result.face_url || null;
+            var status = String(p.status || result.status || '').toUpperCase();
+            var done = status === 'COMPLETED' || status === 'SUCCEEDED' || !!photo;
+            if (!sid || !done || !window.EhelpLiveness) return;
+            if (window.__ehelpForwardedSid === sid) return;
+            window.__ehelpForwardedSid = sid;
+            EhelpLiveness.postMessage(JSON.stringify({
+              session_id: sid,
+              photo_url: typeof photo === 'string' && photo.indexOf('data:') === 0 ? null : photo,
+              status: status || 'COMPLETED'
+            }));
+          } catch (e) {}
+        }
+        window.addEventListener('message', function (ev) { forward(ev.data); });
+        var origFetch = window.fetch;
+        window.fetch = function () {
+          var args = arguments;
+          return origFetch.apply(this, args).then(function (res) {
+            try {
+              var url = String(args[0] && args[0].url ? args[0].url : args[0] || '');
+              if (url.indexOf('/api/face_liveness_session') >= 0) {
+                res.clone().json().then(function (json) {
+                  var d = json && json.data ? json.data : json;
+                  if (!d) return;
+                  if (d.session_id) window.__ehelpSessionId = d.session_id;
+                  var photo = d.face_url || d.photo_url || d.image_url || null;
+                  if (photo || d.reference) {
+                    forward({
+                      session_id: d.session_id || window.__ehelpSessionId,
+                      photo_url: photo,
+                      status: 'COMPLETED',
+                      result: d
+                    });
+                  }
+                }).catch(function () {});
+              }
+            } catch (e) {}
+            return res;
+          });
+        };
+      })();
+    ''');
+  }
+
+  Future<void> _onEverifyBridgeMessage(String raw) async {
+    if (_bridgeHandled || _verifying) return;
+    final session = _session;
+    if (session == null) return;
+
+    Map<String, dynamic> payload;
+    try {
+      payload = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+    } catch (_) {
+      return;
+    }
+    final everifySessionId = payload['session_id'] as String?;
+    if (everifySessionId == null || everifySessionId.isEmpty) return;
+
+    _bridgeHandled = true;
+    setState(() => _verifying = true);
+    try {
+      await ref.read(livenessServiceProvider).bindEverifySession(
+            correlation: session.token,
+            everifySessionId: everifySessionId,
+            referenceImageUrl: payload['photo_url'] as String?,
+          );
+      final result = await ref.read(livenessServiceProvider).verifyResult(
+            sessionToken: session.token,
+            applicationId: widget.applicationId,
+            markProfile: widget.purpose == LivenessPurpose.registration,
+          );
+      if (!mounted) return;
+      if (!result.passed) {
+        setState(() {
+          _verifying = false;
+          _bridgeHandled = false;
+          _lastRejectMessage = result.message;
+          _lastConfidence = result.confidenceScore;
+          _lastStatus = result.status;
+        });
+        return;
+      }
+      Navigator.of(context).pop(
+        FaceLivenessOutcome(
+          passed: true,
+          sessionToken: session.token,
+          confidenceScore: result.confidenceScore,
+          referenceImageUrl: result.referenceImageUrl,
+          message: result.message,
+          faceLivenessSessionId:
+              result.faceLivenessSessionId ?? everifySessionId,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _verifying = false;
+        _bridgeHandled = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
   Future<void> _openExternal(String url) async {
     try {
       final package = await LivenessBrowserLauncher.open(url);
@@ -207,16 +336,9 @@ class _FaceLivenessScreenState extends ConsumerState<FaceLivenessScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Chrome not found — opened default browser. Install Chrome if Connecting… hangs (Opera often fails).',
+              'Chrome not found — opened default browser. For National ID eVerify use in-app WebView.',
             ),
             duration: Duration(seconds: 5),
-          ),
-        );
-      } else if (package != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Opened in Chrome ($package). Allow camera when asked.'),
-            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -259,6 +381,7 @@ class _FaceLivenessScreenState extends ConsumerState<FaceLivenessScreen> {
           confidenceScore: result.confidenceScore,
           referenceImageUrl: result.referenceImageUrl,
           message: result.message,
+          faceLivenessSessionId: result.faceLivenessSessionId,
         ),
       );
     } catch (e) {
@@ -270,11 +393,12 @@ class _FaceLivenessScreenState extends ConsumerState<FaceLivenessScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final everify = _session?.isEverifySdk == true;
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title ?? 'Face verification'),
         actions: [
-          if (_session != null)
+          if (_session != null && !everify)
             IconButton(
               tooltip: _useWebView ? 'Open in Chrome' : 'Use in-app WebView',
               onPressed: () => _bootstrap(preferWebView: !_useWebView),
@@ -289,9 +413,11 @@ class _FaceLivenessScreenState extends ConsumerState<FaceLivenessScreen> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
               child: Text(
-                Platform.isAndroid
-                    ? 'Face Liveness requires Google Chrome (not Opera). If Connecting… hangs, install/open Chrome and allow camera. Physical phone works best.'
-                    : 'After the page says Verification complete, wait 2–3 seconds, then tap Verify.',
+                everify
+                    ? 'National ID eVerify: complete “Start Liveness” in this screen (HTTPS). When finished, the app captures session_id automatically — then continue to National ID verify.'
+                    : Platform.isAndroid
+                        ? 'Face Liveness opens in Chrome. Allow camera, then return and tap Verify.'
+                        : 'After verification completes, return and tap Verify.',
                 style: const TextStyle(color: Color(0xFF412402), height: 1.35),
               ),
             ),
@@ -301,7 +427,7 @@ class _FaceLivenessScreenState extends ConsumerState<FaceLivenessScreen> {
               color: const Color(0xFFFAECE7),
               child: ListTile(
                 title: Text(
-                  'Last: ${_lastStatus ?? '—'} · ${_lastConfidence != null && _lastConfidence! < 1 ? _lastConfidence!.toStringAsFixed(4) : _lastConfidence?.toStringAsFixed(1) ?? '—'}',
+                  'Last: ${_lastStatus ?? '—'} · ${_lastConfidence?.toStringAsFixed(1) ?? '—'}',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 subtitle: Text(_lastRejectMessage!),
@@ -313,21 +439,7 @@ class _FaceLivenessScreenState extends ConsumerState<FaceLivenessScreen> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               child: Column(
                 children: [
-                  if (_lastRejectMessage != null) ...[
-                    FilledButton.icon(
-                      onPressed: _verifying
-                          ? null
-                          : () => _bootstrap(preferWebView: false),
-                      icon: const Icon(Icons.open_in_browser),
-                      label: const Text('Retry in Chrome'),
-                    ),
-                    const SizedBox(height: 8),
-                    OutlinedButton(
-                      onPressed:
-                          (_session == null || _verifying) ? null : _verify,
-                      child: const Text('Check result again'),
-                    ),
-                  ] else ...[
+                  if (!everify) ...[
                     FilledButton(
                       onPressed:
                           (_session == null || _verifying) ? null : _verify,
@@ -340,13 +452,18 @@ class _FaceLivenessScreenState extends ConsumerState<FaceLivenessScreen> {
                           : const Text('I finished — verify result'),
                     ),
                     const SizedBox(height: 8),
-                    OutlinedButton(
-                      onPressed: _verifying
-                          ? null
-                          : () => _bootstrap(preferWebView: true),
-                      child: const Text('Try in-app WebView instead'),
+                  ] else if (_verifying) ...[
+                    const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: CircularProgressIndicator(),
                     ),
+                    const Text('Saving eVerify session…'),
+                    const SizedBox(height: 8),
                   ],
+                  OutlinedButton(
+                    onPressed: _verifying ? null : () => _bootstrap(),
+                    child: const Text('Retry'),
+                  ),
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(),
                     child: const Text('Cancel'),
@@ -373,7 +490,7 @@ class _FaceLivenessScreenState extends ConsumerState<FaceLivenessScreen> {
             Text(_error!, textAlign: TextAlign.center),
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: () => _bootstrap(preferWebView: false),
+              onPressed: () => _bootstrap(),
               child: const Text('Retry'),
             ),
           ],
@@ -388,12 +505,13 @@ class _FaceLivenessScreenState extends ConsumerState<FaceLivenessScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.face_retouching_natural, size: 56, color: AppColors.forest),
+          const Icon(Icons.face_retouching_natural,
+              size: 56, color: AppColors.forest),
           const SizedBox(height: 16),
           Text(
             _openedBrowser != null && _openedBrowser!.contains('chrome')
                 ? 'Complete Face Liveness in Google Chrome, then return and tap Verify.'
-                : 'Complete Face Liveness in the browser, then return and tap Verify.\n\nDo not use Opera — it usually sticks on Connecting…',
+                : 'Complete Face Liveness in the browser, then return and tap Verify.',
             textAlign: TextAlign.center,
           ),
         ],

@@ -1,26 +1,23 @@
-/* eslint-disable @next/next/no-img-element */
+import Link from "next/link";
 
 export function Footer() {
   return (
-    <footer className="bg-white">
-      <div
-        aria-hidden
-        className="h-1 w-full"
-        style={{
-          background:
-            "linear-gradient(90deg, #0040E7 0%, #0040E7 55%, #A60C0C 55%, #A60C0C 75%, #F2C500 75%, #F2C500 100%)",
-        }}
-      />
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <img src="/egov/logo.png" alt="eGovPH" className="h-7 w-auto" />
-          <span className="text-sm text-[#64748b]">
-            Aid Front Door · eGovHackathon 2026 concept
-          </span>
+    <footer className="border-t border-[#e2e8f0] bg-white py-10">
+      <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+        <p className="text-sm font-semibold text-[#1a1a2e]">EHelp</p>
+        <div className="flex flex-wrap gap-4 text-sm text-[#64748b]">
+          <Link href="/signin" className="hover:text-[#0040E7]">
+            Staff sign in
+          </Link>
+          <Link href="/get-app" className="hover:text-[#0040E7]">
+            Mobile app
+          </Link>
+          <Link href="/signup" className="hover:text-[#0040E7]">
+            Account access
+          </Link>
         </div>
         <p className="text-xs text-[#94a3b8]">
-          Figures from COA/PSA public findings — verify against the current GAA
-          before final pitch use.
+          © {2026} Republic of the Philippines
         </p>
       </div>
     </footer>

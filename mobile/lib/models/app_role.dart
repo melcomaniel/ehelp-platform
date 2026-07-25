@@ -1,9 +1,10 @@
 enum AppRole {
-  dswdAdmin('dswd_admin', 'DSWD Admin'),
-  satelliteAdmin('satellite_admin', 'Satellite Admin'),
+  platformAdmin('platform_admin', 'Platform Admin'),
+  dswdAdmin('dswd_admin', 'Organization Admin'),
+  satelliteAdmin('satellite_admin', 'Office Admin'),
   approver('approver', 'Approver'),
   evaluator('evaluator', 'Evaluator'),
-  customer('customer', 'Customer'),
+  customer('customer', 'Beneficiary'),
   dependent('dependent', 'Dependent / Guarantor');
 
   const AppRole(this.value, this.label);
@@ -18,28 +19,22 @@ enum AppRole {
   }
 
   bool get isStaff =>
+      this == AppRole.platformAdmin ||
       this == AppRole.dswdAdmin ||
       this == AppRole.satelliteAdmin ||
       this == AppRole.approver ||
       this == AppRole.evaluator;
 
-  bool get isMobileRole =>
-      this == AppRole.approver ||
-      this == AppRole.evaluator ||
-      this == AppRole.customer ||
-      this == AppRole.dependent;
+  /// Flutter is beneficiary-only (PRD persona platform split).
+  bool get isMobileRole => this == AppRole.customer;
 
   String get homeRoute {
     switch (this) {
-      case AppRole.approver:
-        return '/approver';
-      case AppRole.evaluator:
-        return '/evaluator';
-      case AppRole.dependent:
-        return '/dependent';
       case AppRole.customer:
-      default:
         return '/customer';
+      default:
+        // Staff/admin must use web — no mobile home.
+        return '/login';
     }
   }
 }

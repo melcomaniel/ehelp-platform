@@ -4,9 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { fetchProfile } from "@/lib/auth/profile";
-import { homeRouteForRole } from "@/lib/auth/types";
-import { createClient } from "@/lib/supabase/client";
+import { homeRouteForRole, parseAppRole } from "@/lib/auth/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,56 +17,49 @@ function safeNextPath(value: string | null): string | null {
 export function SignInForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [mode, setMode] = useState<"password" | "sso">("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [useOtp, setUseOtp] = useState(false);
+  const [exchangeCode, setExchangeCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  async function finish(user: { role?: string }) {
+    const next = safeNextPath(searchParams.get("next"));
+    router.replace(next ?? homeRouteForRole(parseAppRole(user.role)));
+    router.refresh();
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const trimmed = email.trim();
-    if (!trimmed) return;
-
     setError(null);
     setLoading(true);
-
     try {
-      const supabase = createClient();
-
-      if (useOtp) {
-        const { error: otpError } = await supabase.auth.signInWithOtp({
-          email: trimmed,
-          options: {
-            shouldCreateUser: false,
-          },
+      if (mode === "sso") {
+        const code = exchangeCode.trim();
+        if (!code) throw new Error("Paste an eGov SSO exchange code");
+        const res = await fetch("/api/auth/sso", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ exchange_code: code }),
         });
-        if (otpError) throw otpError;
-        const next = safeNextPath(searchParams.get("next"));
-        const otpUrl = next
-          ? `/otp?email=${encodeURIComponent(trimmed)}&next=${encodeURIComponent(next)}`
-          : `/otp?email=${encodeURIComponent(trimmed)}`;
-        router.push(otpUrl);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message || "SSO failed");
+        await finish(data.user ?? {});
         return;
       }
 
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: trimmed,
-        password,
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+        }),
       });
-      if (signInError) throw signInError;
-
-      const next = safeNextPath(searchParams.get("next"));
-      if (next) {
-        router.replace(next);
-      } else {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        const profile = user ? await fetchProfile(supabase, user.id) : null;
-        router.replace(homeRouteForRole(profile?.role ?? "customer"));
-      }
-      router.refresh();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Sign in failed");
+      await finish(data.user ?? {});
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -79,38 +70,56 @@ export function SignInForm() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1.5 text-center">
-        <h1 className="text-2xl font-semibold">Welcome back</h1>
+        <h1 className="text-2xl font-semibold">Staff &amp; admin sign in</h1>
         <p className="text-sm text-muted-foreground">
-          Sign in to check your applications and aid status
+          Nest-backed portal for evaluators, approvers, and admins. Beneficiaries
+          use the mobile app.
         </p>
       </div>
 
       <form onSubmit={onSubmit} className="flex flex-col gap-4">
-        <div className="grid gap-2">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            placeholder="you@example.com"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </div>
-
-        {!useOtp && (
+        {mode === "password" ? (
+          <>
+            <div className="grid gap-2">
+              <Label htmlFor="email">Work email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@agency.gov.ph"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="••••••••"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+          </>
+        ) : (
           <div className="grid gap-2">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="exchange">eGov SSO exchange code</Label>
             <Input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              id="exchange"
+              placeholder="Paste exchange_code"
+              value={exchangeCode}
+              onChange={(e) => setExchangeCode(e.target.value)}
               required
             />
+            <p className="text-xs text-muted-foreground">
+              Your account must already be provisioned by an admin. Partner
+              callback can use{" "}
+              <code className="text-[11px]">/auth/egovph/sso?client=web</code>.
+            </p>
           </div>
         )}
 
@@ -126,7 +135,11 @@ export function SignInForm() {
           disabled={loading}
           className="w-full bg-[#0040E7] text-white hover:bg-[#0035c2]"
         >
-          {loading ? "Please wait…" : useOtp ? "Send OTP" : "Sign in"}
+          {loading
+            ? "Please wait…"
+            : mode === "sso"
+              ? "Continue with SSO"
+              : "Sign in"}
         </Button>
       </form>
 
@@ -135,20 +148,21 @@ export function SignInForm() {
         variant="ghost"
         className="w-full"
         onClick={() => {
-          setUseOtp((v) => !v);
+          setMode((m) => (m === "password" ? "sso" : "password"));
           setError(null);
         }}
       >
-        {useOtp ? "Use password instead" : "Sign in with email OTP"}
+        {mode === "sso" ? "Use email & password (mock)" : "Sign in with eGov SSO"}
       </Button>
 
       <p className="text-center text-sm text-muted-foreground">
-        First time applying for aid?{" "}
-        <Link
-          href="/signup"
-          className="font-medium text-[#0040E7] hover:underline"
-        >
-          Create an account
+        Need an account?{" "}
+        <Link href="/signup" className="font-medium text-[#0040E7] hover:underline">
+          Ask your admin
+        </Link>
+        {" · "}
+        <Link href="/get-app" className="font-medium text-[#0040E7] hover:underline">
+          Get the mobile app
         </Link>
       </p>
     </div>

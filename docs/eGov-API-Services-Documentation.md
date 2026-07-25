@@ -92,6 +92,8 @@ A lightweight SSO widget for native web apps or React.
 
 **Flow:** (1) obtain an \`access_token\` from the Authentication endpoint → (2) secure a \`face_liveness_session_id\` via the Face Liveness Web SDK → (3) submit demographics + \`face_liveness_session_id\` to the Verify endpoint.
 
+**Base URL (staging):** \`https://hackathon-everify-api.e.gov.ph\`
+
 **Variables:** \`{{base_url}}\`, \`{{client_id}}\`, \`{{client_secret}}\` (omitted), \`{{access_token}}\`, \`{{public_api_key}}\`
 
 ### 2.1 POST \`/api/auth\` — Authenticate (Generate Access Token)

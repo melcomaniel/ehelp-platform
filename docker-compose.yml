@@ -1,0 +1,26 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ehelp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ehelp
+      POSTGRES_PASSWORD: ehelp
+      POSTGRES_DB: ehelp
+      EHELP_DB_ROOT: /ehelp-db
+    ports:
+      # Host 5433 → container 5432 (avoids clash with other local Postgres, e.g. kora-platform)
+      - "5433:5432"
+    volumes:
+      - ehelp_pg_data:/var/lib/postgresql/data
+      # Full domain ERD: init.sh runs migrations/*.sql then seed/ on first boot only
+      - ./backend/db:/ehelp-db:ro
+      - ./backend/db/init.sh:/docker-entrypoint-initdb.d/01-init.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ehelp -d ehelp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  ehelp_pg_data:

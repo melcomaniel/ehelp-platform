@@ -1,0 +1,3 @@
+export const EGOV_SSO_PROVIDER = Symbol('EGOV_SSO_PROVIDER');
+export const EVERIFY_PROVIDER = Symbol('EVERIFY_PROVIDER');
+export const LIVENESS_PROVIDER = Symbol('LIVENESS_PROVIDER');

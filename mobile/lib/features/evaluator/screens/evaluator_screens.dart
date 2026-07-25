@@ -13,9 +13,9 @@ import '../../shared/widgets/common_widgets.dart';
 final evaluatorQueueProvider =
     FutureProvider.autoDispose<List<Application>>((ref) async {
   final profile = await ref.watch(currentProfileProvider.future);
-  if (profile?.regionId == null) return [];
+  final regionId = profile?.regionId ?? '';
   return ref.watch(applicationServiceProvider).listRegionQueue(
-        regionId: profile!.regionId!,
+        regionId: regionId,
         statuses: ['submitted', 'under_review', 'draft', 'recommended'],
       );
 });
@@ -53,15 +53,6 @@ class EvaluatorHomeScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('$e')),
         data: (profile) {
-          if (profile?.regionId == null) {
-            return const EmptyState(
-              icon: Icons.map_outlined,
-              title: 'Region not assigned',
-              subtitle:
-                  'Ask Satellite Admin to assign your region before evaluating cases.',
-            );
-          }
-
           return RefreshIndicator(
             onRefresh: () async => ref.invalidate(evaluatorQueueProvider),
             child: ListView(
@@ -72,9 +63,11 @@ class EvaluatorHomeScreen extends ConsumerWidget {
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  'Register customers, submit applications, and set recommendation priority.',
-                  style: TextStyle(color: AppColors.muted),
+                Text(
+                  profile?.regionId == null
+                      ? 'Showing all org applications (no office assigned on your account).'
+                      : 'Register customers, submit applications, and set recommendation priority.',
+                  style: const TextStyle(color: AppColors.muted),
                 ),
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
@@ -176,61 +169,10 @@ class _RegisterCustomerScreenState
   Future<void> _register() async {
     setState(() => _loading = true);
     try {
-      final client = ref.read(supabaseClientProvider);
-      final response = await client.functions.invoke(
-        'register-customer',
-        body: {
-          'email': _email.text.trim(),
-          'password': _tempPassword.text,
-          'full_name': _name.text.trim(),
-          'phone': _phone.text.trim().isEmpty ? null : _phone.text.trim(),
-          'id_type': _idType.text.trim(),
-          'id_number': _idNumber.text.trim(),
-          'face_scan_verified': false,
-        },
+      throw UnsupportedError(
+        'Customer registration via NestJS is not wired yet. '
+        'Use eGov SSO on the citizen app for MVP auth.',
       );
-
-      final data = response.data;
-      if (data is Map && data['error'] != null) {
-        throw Exception(data['error']);
-      }
-
-      final userId = data is Map ? data['user_id'] as String? : null;
-      if (userId == null) throw Exception('Customer created without user id');
-
-      if (!mounted) return;
-      final outcome = await FaceLivenessScreen.open(
-        context,
-        purpose: LivenessPurpose.registration,
-        userId: userId,
-        title: 'Customer face registration',
-        subtitle:
-            'Capture live face for this customer. Must be SUCCEEDED with confidence ≥ 95.',
-      );
-
-      if (outcome?.passed != true) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Customer created ($userId) but face verification is still pending.',
-            ),
-          ),
-        );
-        context.pop();
-        return;
-      }
-
-      setState(() => _liveness = outcome);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Customer registered & face verified ($userId, ${outcome!.confidenceScore.toStringAsFixed(1)})',
-          ),
-        ),
-      );
-      context.pop();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));

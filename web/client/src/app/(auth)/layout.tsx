@@ -8,14 +8,11 @@ export default function AuthLayout({
 }) {
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
-      {/* Form side */}
       <div className="flex flex-col px-6 py-10 sm:px-12 lg:px-16">
-        <Link href="/" className="inline-flex items-center gap-2" aria-label="Aid Front Door home">
+        <Link href="/" className="inline-flex items-center gap-2" aria-label="EHelp home">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/egov/logo.png" alt="eGovPH" className="h-8 w-auto" />
-          <span className="text-sm font-semibold text-foreground">
-            Aid Front Door
-          </span>
+          <span className="text-sm font-semibold text-foreground">EHelp</span>
         </Link>
         <div className="flex flex-1 items-center justify-center py-10">
           <div className="w-full max-w-sm">{children}</div>
@@ -25,7 +22,6 @@ export default function AuthLayout({
         </p>
       </div>
 
-      {/* Brand side */}
       <div className="relative hidden lg:flex flex-col justify-between overflow-hidden bg-[#0040E7] p-12 text-white">
         <div
           aria-hidden
@@ -38,28 +34,28 @@ export default function AuthLayout({
         <div className="relative z-10 flex items-center gap-3">
           <Image src="/egov/seal.png" alt="" width={40} height={40} className="h-10 w-10 object-contain" />
           <span className="text-sm font-medium tracking-wide">
-            Aid Front Door · eGovHackathon 2026
+            EHelp · Staff &amp; Admin
           </span>
         </div>
         <div className="relative z-10 max-w-md">
           <h2 className="text-3xl font-semibold leading-tight">
-            One front door to government financial aid.
+            Same Nest SSO as mobile — web for staff only.
           </h2>
           <p className="mt-4 text-white/80">
-            Discover what you qualify for, apply once, and track every step —
-            across DSWD, DOLE, OWWA and more. Verified against PhilSys, paid
-            through eGovPay, auditable end to end.
+            Evaluators and approvers work the case queue. Admins provision
+            accounts, programs, and workflows. Beneficiaries stay on the mobile
+            app.
           </p>
           <ul className="mt-6 space-y-2 text-sm text-white/80">
-            <li>· See only programs you qualify for — that are actually funded</li>
-            <li>· Agencies keep the decision; you finally get the visibility</li>
-            <li>· SMS updates at every stage, even without a smartphone</li>
+            <li>· X-Client-Platform: web</li>
+            <li>· Admin-provisioned staff before SSO</li>
+            <li>· Role homes: /admin · /staff · /get-app</li>
           </ul>
         </div>
         <div className="relative z-10 flex gap-6 text-xs text-white/70">
-          <span>PhilSys-verified</span>
-          <span>eGovPay settlement</span>
-          <span>eGovChain audit trail</span>
+          <span>Nest JWT</span>
+          <span>eGov SSO</span>
+          <span>Office-scoped SOD</span>
         </div>
       </div>
     </div>

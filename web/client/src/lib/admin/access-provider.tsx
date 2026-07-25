@@ -7,13 +7,9 @@ import {
   type DbPermission,
   type UiPermission,
 } from "@/lib/auth/permissions";
+import { permissionsForRole } from "@/lib/auth/permissions";
 import type { Profile } from "@/lib/auth/types";
-import {
-  fetchStaffAccess,
-  type RegionRow,
-  type StaffAccess,
-} from "@/lib/admin/access";
-import { createClient } from "@/lib/supabase/client";
+import type { RegionRow, StaffAccess } from "@/lib/admin/access";
 
 type AdminAccessValue = {
   loading: boolean;
@@ -22,6 +18,7 @@ type AdminAccessValue = {
   region: RegionRow | null;
   permissions: DbPermission[];
   can: (permission: UiPermission | DbPermission) => boolean;
+  isPlatformAdmin: boolean;
   isDswdAdmin: boolean;
   isSatelliteAdmin: boolean;
   refresh: () => Promise<void>;
@@ -50,18 +47,31 @@ export function AdminAccessProvider({
     setLoading(true);
     setError(null);
     try {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
+      const res = await fetch("/api/auth/session", { cache: "no-store" });
+      if (!res.ok) {
         setAccess(null);
         setError("Not signed in");
         return;
       }
-      const next = await fetchStaffAccess(supabase, user.id);
-      setAccess(next);
-      if (!next) setError("Profile not found");
+      const data = (await res.json()) as { user: Profile | null };
+      if (!data.user) {
+        setAccess(null);
+        setError("Profile not found");
+        return;
+      }
+      const profile = data.user;
+      const region: RegionRow | null = profile.regionId
+        ? {
+            id: profile.regionId,
+            code: "office",
+            name: "Assigned office",
+          }
+        : null;
+      setAccess({
+        profile,
+        region,
+        permissions: permissionsForRole(profile.role),
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load access");
     } finally {
@@ -83,7 +93,10 @@ export function AdminAccessProvider({
     region: access?.region ?? null,
     permissions,
     can: (permission) => permSet.has(normalizePermission(permission)),
-    isDswdAdmin: access?.profile.role === "dswd_admin",
+    isPlatformAdmin: access?.profile.role === "platform_admin",
+    isDswdAdmin:
+      access?.profile.role === "dswd_admin" ||
+      access?.profile.role === "platform_admin",
     isSatelliteAdmin: access?.profile.role === "satellite_admin",
     refresh,
   };
