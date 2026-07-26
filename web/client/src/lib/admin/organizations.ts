@@ -76,12 +76,13 @@ export function listOrganizations(input: {
   search?: string
   status?: string
   page?: number
+  pageSize?: number
 }) {
   const query = new URLSearchParams()
   if (input.search) query.set("search", input.search)
   if (input.status) query.set("status", input.status)
   query.set("page", String(input.page ?? 1))
-  query.set("page_size", "20")
+  query.set("page_size", String(input.pageSize ?? 20))
   return nestFetch<OrganizationPage>(
     `/admin/organizations?${query.toString()}`,
   )
