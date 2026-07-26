@@ -1,0 +1,148 @@
+import {
+  decideRbac,
+  grantsForRole,
+  roleHasPermission,
+  type RbacActor,
+} from './rbac.policy';
+
+describe('PRD RBAC policy', () => {
+  const platform: RbacActor = {
+    userId: 'platform-user',
+    role: 'PLATFORM_ADMIN',
+    organizationId: null,
+    officeId: null,
+  };
+
+  const orgAdmin: RbacActor = {
+    userId: 'org-user',
+    role: 'ORG_ADMIN',
+    organizationId: 'org-1',
+    officeId: null,
+  };
+
+  const officeAdmin: RbacActor = {
+    userId: 'office-user',
+    role: 'OFFICE_ADMIN',
+    organizationId: 'org-1',
+    officeId: 'office-1',
+  };
+
+  const evaluator: RbacActor = {
+    userId: 'evaluator-user',
+    role: 'EVALUATOR',
+    organizationId: 'org-1',
+    officeId: 'office-1',
+  };
+
+  const approver: RbacActor = {
+    userId: 'approver-user',
+    role: 'APPROVER',
+    organizationId: 'org-1',
+    officeId: 'office-1',
+  };
+
+  it('exposes a grant catalog for every PRD role', () => {
+    expect(grantsForRole('PLATFORM_ADMIN')).toContainEqual({
+      permission: 'tenant.create',
+      scope: 'platform',
+    });
+    expect(roleHasPermission('BENEFICIARY', 'application.submit')).toBe(true);
+  });
+
+  it('keeps platform administrators out of beneficiary case decisions', () => {
+    expect(
+      decideRbac(platform, 'application.approve', {
+        organizationId: 'org-1',
+        officeId: 'office-1',
+        assignedUserId: 'platform-user',
+      }),
+    ).toEqual({
+      allowed: false,
+      reason: 'Platform admin has no case authority',
+    });
+  });
+
+  it('allows organization admins to manage own organization templates only', () => {
+    expect(
+      decideRbac(orgAdmin, 'program_template.create', {
+        organizationId: 'org-1',
+      }),
+    ).toEqual({ allowed: true, scope: 'organization' });
+
+    expect(
+      decideRbac(orgAdmin, 'program_template.create', {
+        organizationId: 'org-2',
+      }).allowed,
+    ).toBe(false);
+  });
+
+  it('allows office admins to customize only their own office envelope', () => {
+    expect(
+      decideRbac(officeAdmin, 'program_template.override_allowed_fields', {
+        organizationId: 'org-1',
+        officeId: 'office-1',
+      }),
+    ).toEqual({ allowed: true, scope: 'office' });
+
+    expect(
+      decideRbac(officeAdmin, 'program_template.override_allowed_fields', {
+        organizationId: 'org-1',
+        officeId: 'office-2',
+      }).allowed,
+    ).toBe(false);
+  });
+
+  it('requires assigned workflow tasks for evaluators and approvers', () => {
+    expect(
+      decideRbac(evaluator, 'application.evaluate', {
+        organizationId: 'org-1',
+        officeId: 'office-1',
+        assignedUserId: 'evaluator-user',
+      }),
+    ).toEqual({ allowed: true, scope: 'assigned_task' });
+
+    expect(
+      decideRbac(approver, 'application.approve', {
+        organizationId: 'org-1',
+        officeId: 'office-1',
+        assignedUserId: 'other-user',
+      }).allowed,
+    ).toBe(false);
+  });
+
+  it('enforces evaluator and approver separation of duties', () => {
+    expect(
+      decideRbac(approver, 'application.approve', {
+        organizationId: 'org-1',
+        officeId: 'office-1',
+        assignedUserId: 'approver-user',
+        evaluatedByUserId: 'approver-user',
+      }),
+    ).toEqual({
+      allowed: false,
+      reason: 'Evaluator and approver must be different users',
+    });
+  });
+
+  it('limits beneficiaries to their own account data', () => {
+    const beneficiary: RbacActor = {
+      userId: 'beneficiary-user',
+      role: 'BENEFICIARY',
+      organizationId: null,
+      officeId: null,
+      beneficiaryId: 'beneficiary-1',
+    };
+
+    expect(
+      decideRbac(beneficiary, 'application.view_own', {
+        beneficiaryId: 'beneficiary-1',
+      }),
+    ).toEqual({ allowed: true, scope: 'own_account' });
+
+    expect(
+      decideRbac(beneficiary, 'application.view_own', {
+        beneficiaryId: 'beneficiary-2',
+      }).allowed,
+    ).toBe(false);
+  });
+});

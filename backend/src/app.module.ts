@@ -19,6 +19,7 @@ import { LivenessSessionEntity } from './users/liveness-session.entity';
 import { StaffProfileEntity } from './users/staff-profile.entity';
 import { OrganizationModule } from './organizations/organization.module';
 import { OfficeModule } from './offices/office.module';
+import { RbacModule } from './rbac/rbac.module';
 import {
   AuditLogEntity,
   OrganizationEntity,
@@ -70,6 +71,7 @@ import {
     DomainModule,
     OrganizationModule,
     OfficeModule,
+    RbacModule,
   ],
 })
 export class AppModule {}
