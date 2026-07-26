@@ -21,10 +21,34 @@ export class OfficeEntity {
   name!: string;
 
   @Column({ type: 'text' })
+  code!: string;
+
+  @Column({ name: 'normalized_code', type: 'text' })
+  normalizedCode!: string;
+
+  @Column({ type: 'text' })
   level!: string;
 
   @Column({ type: 'text', default: 'active' })
   status!: string;
+
+  @Column({ name: 'archived_at', type: 'timestamptz', nullable: true })
+  archivedAt!: Date | null;
+
+  @Column({ name: 'lifecycle_reason', type: 'text', nullable: true })
+  lifecycleReason!: string | null;
+
+  @Column({ name: 'created_by_user_id', type: 'uuid', nullable: true })
+  createdByUserId!: string | null;
+
+  @Column({ name: 'updated_by_user_id', type: 'uuid', nullable: true })
+  updatedByUserId!: string | null;
+
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  createdAt!: Date;
+
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
+  updatedAt!: Date;
 }
 
 @Entity({ name: 'program_templates' })

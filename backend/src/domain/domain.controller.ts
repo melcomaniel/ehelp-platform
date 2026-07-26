@@ -28,30 +28,30 @@ export class DomainController {
   constructor(private readonly domain: DomainService) {}
 
   @Get('offices')
-  listOffices() {
-    return this.domain.listOffices();
+  listOffices(@Req() req: AuthedRequest) {
+    return this.domain.listOffices(req.user.sub);
   }
 
   /** Flutter legacy alias — offices mapped as regions. */
   @Get('regions')
-  listRegions() {
-    return this.domain.listOffices();
+  listRegions(@Req() req: AuthedRequest) {
+    return this.domain.listOffices(req.user.sub);
   }
 
   @Get('programs')
-  listPrograms() {
-    return this.domain.listPrograms();
+  listPrograms(@Req() req: AuthedRequest) {
+    return this.domain.listPrograms(req.user.sub);
   }
 
   /** Flutter legacy alias. */
   @Get('templates')
-  listTemplates() {
-    return this.domain.listPrograms();
+  listTemplates(@Req() req: AuthedRequest) {
+    return this.domain.listPrograms(req.user.sub);
   }
 
   @Get('programs/:id')
-  getProgram(@Param('id') id: string) {
-    return this.domain.getProgram(id);
+  getProgram(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.domain.getProgram(req.user.sub, id);
   }
 
   @Get('applications/me')
@@ -60,12 +60,12 @@ export class DomainController {
   }
 
   @Get('applications/queue')
-  listQueue(
-    @Req() req: AuthedRequest,
-    @Query('statuses') statuses?: string,
-  ) {
+  listQueue(@Req() req: AuthedRequest, @Query('statuses') statuses?: string) {
     const list = statuses
-      ? statuses.split(',').map((s) => s.trim()).filter(Boolean)
+      ? statuses
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
       : undefined;
     return this.domain.listQueue(req.user.sub, list);
   }

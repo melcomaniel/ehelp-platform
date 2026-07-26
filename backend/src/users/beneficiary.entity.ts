@@ -11,7 +11,12 @@ export class BeneficiaryEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ name: 'national_id_hash', type: 'text', nullable: true, unique: true })
+  @Column({
+    name: 'national_id_hash',
+    type: 'text',
+    nullable: true,
+    unique: true,
+  })
   nationalIdHash!: string | null;
 
   @Column({ name: 'full_name', type: 'text', default: '' })

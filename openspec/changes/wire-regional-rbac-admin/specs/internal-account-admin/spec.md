@@ -1,34 +1,41 @@
 ## ADDED Requirements
 
 ### Requirement: Register regional staff
-A `satellite_admin` with `register_accounts` SHALL be able to create an internal staff account for their own region with role `approver` or `evaluator`.
+A `satellite_admin` with `register_accounts` SHALL be able to create an internal staff account for their own office with role `approver` or `evaluator`.
 
-#### Scenario: Create approver in own region
+#### Scenario: Create approver in own office
 - **WHEN** a satellite admin submits name, email, password, and role `approver` on `/admin/accounts`
-- **THEN** the system creates a Supabase Auth user and a `profiles` row with that role, `region_id` equal to the admin's region, and `validation_status = pending`
+- **THEN** the system creates an active Nest `user_accounts` row, `staff_profiles` row, and role assignment with `office_id` equal to the admin's office
 
-#### Scenario: Cannot create outside own region
-- **WHEN** a satellite admin attempts to create a staff profile with a different `region_id`
+#### Scenario: Cannot create outside own office
+- **WHEN** a satellite admin attempts to create a staff account with a different `office_id`
 - **THEN** the system rejects the request
 
 #### Scenario: Role limited to regional staff
 - **WHEN** a satellite admin attempts to register a user as `dswd_admin` or `satellite_admin`
 - **THEN** the system rejects the request
 
-### Requirement: Approve internal accounts
-A `dswd_admin` with `approve_accounts` SHALL be able to activate pending internal staff accounts.
+### Requirement: Register office administrators
+A `dswd_admin` with `register_accounts` SHALL be able to create internal staff accounts in their organization with role `satellite_admin`, `approver`, or `evaluator`.
 
-#### Scenario: Approve pending staff
-- **WHEN** a DSWD admin approves a pending staff profile
-- **THEN** `validation_status` becomes `validated` and the account may use staff surfaces
+#### Scenario: Create office admin in organization
+- **WHEN** a DSWD admin submits name, email, password, role `satellite_admin`, and an office in their organization
+- **THEN** the system creates an active Nest staff account scoped to the DSWD admin's organization and selected office
+
+### Requirement: Staff accounts are active on create
+Internal staff accounts created through the current Nest implementation SHALL be active immediately after creation.
+
+#### Scenario: Created staff can sign in
+- **WHEN** an authorized admin creates a staff account
+- **THEN** the account is active and may use the appropriate web staff surfaces without a separate approval step
 
 ### Requirement: List accounts by scope
 The accounts page SHALL list internal staff profiles scoped to the caller's authority.
 
-#### Scenario: Satellite admin sees own region
+#### Scenario: Satellite admin sees own office
 - **WHEN** a satellite admin opens `/admin/accounts`
-- **THEN** only staff profiles for their `region_id` with roles `approver` or `evaluator` (and optionally themselves) are listed
+- **THEN** staff profiles for their `office_id` are listed according to server-side scope
 
-#### Scenario: DSWD admin sees all pending and staff
+#### Scenario: DSWD admin sees organization staff
 - **WHEN** a DSWD admin opens `/admin/accounts`
-- **THEN** they can view staff across regions and act on pending approvals
+- **THEN** they can view staff across offices in their organization

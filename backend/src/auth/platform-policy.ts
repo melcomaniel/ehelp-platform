@@ -45,7 +45,9 @@ export function platformForErdRole(erdCode: string): ClientPlatform | 'none' {
 export function assertPlatformAllowed(
   erdCode: string,
   client: ClientPlatform,
-): { ok: true } | { ok: false; required: ClientPlatform | 'none'; message: string } {
+):
+  | { ok: true }
+  | { ok: false; required: ClientPlatform | 'none'; message: string } {
   const required = platformForErdRole(erdCode);
   if (required === 'none') {
     return {

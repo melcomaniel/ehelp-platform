@@ -18,7 +18,10 @@ for f in \
   "${DB_ROOT}/migrations/006_disbursement.sql" \
   "${DB_ROOT}/migrations/007_platform_services.sql" \
   "${DB_ROOT}/migrations/008_application_compat.sql" \
-  "${DB_ROOT}/migrations/009_staff_profiles.sql"
+  "${DB_ROOT}/migrations/009_staff_profiles.sql" \
+  "${DB_ROOT}/migrations/010_platform_admin_organization_management.sql" \
+  "${DB_ROOT}/migrations/011_organization_admin_office_management.sql" \
+  "${DB_ROOT}/migrations/012_backend_rbac_configuration.sql"
 do
   echo "[ehelp-db]   $(basename "$f")"
   "${PSQL[@]}" -f "$f"

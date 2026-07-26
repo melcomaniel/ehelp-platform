@@ -95,15 +95,26 @@ function PermissionMatrix({
 type RbacTab = "region" | "template"
 
 export default function RbacPage() {
-  const { can, isDswdAdmin, isSatelliteAdmin, region, loading: accessLoading } =
-    useAdminAccess()
+  const {
+    can,
+    isPlatformAdmin,
+    isDswdAdmin,
+    isSatelliteAdmin,
+    region,
+    loading: accessLoading,
+  } = useAdminAccess()
 
-  // Superadmin may view any region's matrix but cannot toggle it;
-  // only satellite admins edit their own region's approver/evaluator grants.
+  // Platform Admin owns global defaults. Organization Admin customizes
+  // community/region grants. Office Admin can only adjust approver/evaluator
+  // grants inside their assigned region when granted.
   const canEditRegion =
-    !isDswdAdmin && (can("manage-region-rbac") || can("manage-rbac"))
+    !isPlatformAdmin && (can("manage-region-rbac") || can("manage-rbac"))
+  const canEditTemplate = isPlatformAdmin && can("manage-rbac")
+  const canApplyTemplate = isDswdAdmin && can("manage-rbac")
 
-  const [tab, setTab] = React.useState<RbacTab>("region")
+  const [tab, setTab] = React.useState<RbacTab>(
+    isPlatformAdmin ? "template" : "region",
+  )
   const [regions, setRegions] = React.useState<
     { id: string; code: string; name: string }[]
   >([])
@@ -118,38 +129,38 @@ export default function RbacPage() {
     : ["approver", "evaluator"]
 
   const reload = React.useCallback(async (rid: string) => {
-    if (!rid) return
+    if (!rid && !isPlatformAdmin) return
     const [g, t] = await Promise.all([
-      loadRegionalRbac(rid),
-      isDswdAdmin ? loadRbacTemplate() : Promise.resolve([]),
+      rid ? loadRegionalRbac(rid) : Promise.resolve([]),
+      isPlatformAdmin || isDswdAdmin ? loadRbacTemplate() : Promise.resolve([]),
     ])
     setGrants(g)
-    if (isDswdAdmin) setTemplate(t)
-  }, [isDswdAdmin])
+    if (isPlatformAdmin || isDswdAdmin) setTemplate(t)
+  }, [isPlatformAdmin, isDswdAdmin])
 
   React.useEffect(() => {
     if (accessLoading) return
     void (async () => {
-      if (isDswdAdmin) {
+      if (isPlatformAdmin || isDswdAdmin) {
         const list = await listRegions()
         setRegions(list)
         const initial = list[0]?.id ?? ""
         setRegionId(initial)
-        if (initial) await reload(initial)
+        await reload(initial)
       } else if (region?.id) {
         setRegionId(region.id)
         setRegions([{ id: region.id, code: region.code, name: region.name }])
         await reload(region.id)
       }
     })()
-  }, [accessLoading, isDswdAdmin, region, reload])
+  }, [accessLoading, isPlatformAdmin, isDswdAdmin, region, reload])
 
   const toggleRegional = async (
     role: RbacMatrixRole,
     permission: DbPermission,
     granted: boolean,
   ) => {
-    if (!regionId || !canEditRegion) return
+    if (!regionId || !canEditRegion || isPlatformAdmin) return
     setBusy(true)
     setMessage(null)
     const prev = grants
@@ -177,6 +188,7 @@ export default function RbacPage() {
     permission: DbPermission,
     granted: boolean,
   ) => {
+    if (!canEditTemplate) return
     setBusy(true)
     setMessage(null)
     const prev = template
@@ -195,7 +207,7 @@ export default function RbacPage() {
   }
 
   const applyOne = async () => {
-    if (!regionId) return
+    if (!regionId || !canApplyTemplate) return
     setBusy(true)
     setMessage(null)
     const result = await applyTemplateToRegion(regionId)
@@ -205,6 +217,7 @@ export default function RbacPage() {
   }
 
   const applyAll = async () => {
+    if (!canApplyTemplate) return
     if (
       !window.confirm(
         "Replace RBAC for every region with the global template?",
@@ -227,8 +240,10 @@ export default function RbacPage() {
       <PageHeader
         title="RBAC Permissions"
         description={
-          isDswdAdmin
-            ? "View regional grants (read-only) and edit the global template used to seed regions"
+          isPlatformAdmin
+            ? "Manage global default grants reused by organization and office administrators"
+            : isDswdAdmin
+              ? "Customize region/community grants from the global platform defaults"
             : isSatelliteAdmin
               ? `Adjust approver and evaluator permissions for ${region?.name ?? "your region"}`
               : "Read-only — your role cannot edit permissions"
@@ -241,27 +256,29 @@ export default function RbacPage() {
         </p>
       )}
 
-      {isDswdAdmin && (
+      {(isPlatformAdmin || isDswdAdmin) && (
         <div
           role="tablist"
           aria-label="RBAC views"
           className="inline-flex h-9 items-center rounded-lg border bg-muted/40 p-0.5"
         >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "region"}
-            id="rbac-tab-region"
-            aria-controls="rbac-panel-region"
-            onClick={() => setTab("region")}
-            className={
-              tab === "region"
-                ? "h-8 rounded-md bg-background px-3 text-sm font-medium shadow-sm"
-                : "h-8 rounded-md px-3 text-sm font-medium text-muted-foreground hover:text-foreground"
-            }
-          >
-            Region matrix
-          </button>
+          {!isPlatformAdmin && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "region"}
+              id="rbac-tab-region"
+              aria-controls="rbac-panel-region"
+              onClick={() => setTab("region")}
+              className={
+                tab === "region"
+                  ? "h-8 rounded-md bg-background px-3 text-sm font-medium shadow-sm"
+                  : "h-8 rounded-md px-3 text-sm font-medium text-muted-foreground hover:text-foreground"
+              }
+            >
+              Region matrix
+            </button>
+          )}
           <button
             type="button"
             role="tab"
@@ -275,12 +292,12 @@ export default function RbacPage() {
                 : "h-8 rounded-md px-3 text-sm font-medium text-muted-foreground hover:text-foreground"
             }
           >
-            Global RBAC template
+            Global defaults
           </button>
         </div>
       )}
 
-      {(!isDswdAdmin || tab === "region") && (
+      {(!isPlatformAdmin && (!isDswdAdmin || tab === "region")) && (
         <Card
           id="rbac-panel-region"
           role="tabpanel"
@@ -291,7 +308,7 @@ export default function RbacPage() {
               <CardTitle>Region matrix</CardTitle>
               <CardDescription>
                 {selected
-                  ? `${selected.code} · ${selected.name}${isDswdAdmin ? " · view only" : ""}`
+                  ? `${selected.code} · ${selected.name}${isDswdAdmin ? " · organization customization" : ""}`
                   : "Select a region"}
               </CardDescription>
             </div>
@@ -332,7 +349,7 @@ export default function RbacPage() {
         </Card>
       )}
 
-      {isDswdAdmin && tab === "template" && (
+      {(isPlatformAdmin || isDswdAdmin) && tab === "template" && (
         <Card
           id="rbac-panel-template"
           role="tabpanel"
@@ -342,10 +359,13 @@ export default function RbacPage() {
             <div>
               <CardTitle>Global RBAC template</CardTitle>
               <CardDescription>
-                Defaults for new regions; apply to overwrite existing grants
+                {isPlatformAdmin
+                  ? "Platform-wide defaults for new region/community grants"
+                  : "Read-only platform defaults; apply them before customizing a region"}
               </CardDescription>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            {isDswdAdmin && (
+              <div className="flex flex-wrap items-center gap-2">
               <select
                 className="h-9 rounded-md border bg-background px-3 text-sm"
                 value={regionId}
@@ -374,13 +394,14 @@ export default function RbacPage() {
               >
                 Apply to all regions
               </Button>
-            </div>
+              </div>
+            )}
           </CardHeader>
           <CardContent>
             <PermissionMatrix
               roles={RBAC_MATRIX_ROLES}
               grants={template}
-              locked={() => busy}
+              locked={() => busy || !canEditTemplate}
               onToggle={toggleTemplate}
             />
           </CardContent>

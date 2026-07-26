@@ -54,7 +54,11 @@ export class UserAccountEntity {
   @Column({ name: 'office_id', type: 'uuid', nullable: true })
   officeId!: string | null;
 
-  @OneToOne(() => BeneficiaryEntity, { cascade: true, eager: true, nullable: true })
+  @OneToOne(() => BeneficiaryEntity, {
+    cascade: true,
+    eager: true,
+    nullable: true,
+  })
   @JoinColumn({ name: 'beneficiary_id' })
   beneficiary!: BeneficiaryEntity | null;
 

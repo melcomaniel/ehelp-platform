@@ -1,29 +1,29 @@
 ## 1. Database
 
-- [x] 1.1 Widen `regional_rbac` role CHECK to include `satellite_admin`
-- [x] 1.2 Create `rbac_templates` with RLS (DSWD write, authenticated read)
-- [x] 1.3 Seed `rbac_templates` from DEMO grants + satellite_admin defaults
-- [x] 1.4 Add `apply_rbac_template(region_id)` and region INSERT trigger
-- [x] 1.5 Seed `satellite_admin` grants into every region's `regional_rbac`
-- [x] 1.6 Add trigger blocking satellite_admin from mutating satellite_admin grants
+- [x] 1.1 Create `rbac_global_grants` for platform-owned defaults
+- [x] 1.2 Create `office_rbac_grants` for office-scoped effective grants
+- [x] 1.3 Seed `rbac_global_grants` with satellite_admin, approver, and evaluator defaults
+- [x] 1.4 Seed `office_rbac_grants` for active offices from global defaults
+- [x] 1.5 Enforce Office Admin write restrictions in the Nest RBAC service
 
 ## 2. Shared auth / permission lib
 
 - [x] 2.1 Add permission enum mapping helpers (snake ↔ kebab) and DSWD fixed set
-- [x] 2.2 Add admin client (service role) helper for privileged server actions
-- [x] 2.3 Add `fetchStaffPermissions` + React `AdminAccessProvider` for admin shell
+- [x] 2.2 Add Nest client/server helpers for authenticated admin API calls
+- [x] 2.3 Add `fetchStaffAccess` + React `AdminAccessProvider` for admin shell
 - [x] 2.4 Wire admin layout/sidebar to live permissions
 
 ## 3. RBAC admin UI
 
-- [x] 3.1 Rewrite `/admin/rbac` to load/toggle live `regional_rbac`
-- [x] 3.2 Region selector + satellite_admin column for DSWD admin
-- [x] 3.3 Template editor + apply-to-region / apply-to-all for DSWD admin
+- [x] 3.1 Rewrite `/admin/rbac` to load/toggle Nest-backed `office_rbac_grants`
+- [x] 3.2 Office selector + satellite_admin column for Organization Admin
+- [x] 3.3 Global defaults editor for Platform Admin
+- [x] 3.4 Apply-to-office / apply-to-all for Organization Admin
 
 ## 4. Accounts admin UI
 
-- [x] 4.1 Server actions: register staff (Auth + profile) and approve account
-- [x] 4.2 Rewrite `/admin/accounts` to list live profiles and create/approve flows
+- [x] 4.1 Server actions: register staff through Nest `/auth/staff`
+- [x] 4.2 Rewrite `/admin/accounts` to list live Nest staff accounts and create flows
 
 ## 5. Templates admin UI
 
@@ -32,4 +32,4 @@
 
 ## 6. Verify
 
-- [x] 6.1 Smoke-check with demo satellite admin and DSWD paths (permissions, create user, templates)
+- [x] 6.1 Smoke-check with demo Platform, Organization, and Office admin paths (permissions, create user, templates)

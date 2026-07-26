@@ -1,21 +1,21 @@
 ## Why
 
-Admin RBAC, accounts, and templates UIs still run on an in-memory demo store while Supabase already has `regional_rbac`, `profiles`, `program_templates`, and `region_templates`. Regional admins and DSWD admins need live, region-scoped control so staff creation and permission changes actually take effect.
+Admin RBAC, accounts, and templates UIs have been moved away from the in-memory demo store. The current implementation uses the Nest-backed organization/office model for web staff accounts and RBAC, while template management continues to use the existing Supabase `program_templates` and `region_templates` tables. Platform, Organization, and Office administrators need live, scoped control so staff creation, permission changes, and template edits actually take effect.
 
 ## What Changes
 
-- Wire `/admin/rbac` to live `regional_rbac` (satellite admin: own region, approver/evaluator only; DSWD admin: any region view-only + global template).
-- Wire `/admin/accounts` so satellite admins create Auth users + `profiles` (approver/evaluator, `region_id` from session) and DSWD admins approve activation.
+- Wire `/admin/rbac` to Nest-backed `office_rbac_grants` and `rbac_global_grants` (Office Admin: own office, approver/evaluator only; Organization Admin: organization offices + apply global defaults; Platform Admin: global defaults).
+- Wire `/admin/accounts` so Organization Admins create Office Admin, Approver, and Evaluator Nest staff accounts, while Office Admins create Approver and Evaluator accounts for their own office.
 - Wire `/admin/templates` to `program_templates` / `region_templates` (master vs regional customize).
-- Add a global **RBAC template** that DSWD admin edits and can push to one or all regions (seeded into new regions on create).
-- Extend regional grants so DSWD admin can configure **satellite_admin** permissions per region (not only approver/evaluator).
-- Resolve admin UI capabilities from live grants instead of the mock ehelp RBAC matrix for these flows.
+- Add a global **RBAC defaults** matrix that Platform Admin edits and Organization Admins can apply to one or all offices in their organization.
+- Extend office grants so Organization Admins can configure **Office Admin** permissions per office (not only approver/evaluator).
+- Resolve admin UI capabilities from the live Nest/Supabase session model instead of the mock ehelp RBAC matrix for these flows.
 
 ## Capabilities
 
 ### New Capabilities
-- `regional-rbac-admin`: Region-scoped permission matrix for approver, evaluator, and satellite_admin; global template + apply-to-region.
-- `internal-account-admin`: Regional staff registration (Auth + profile) and DSWD approval of internal accounts.
+- `regional-rbac-admin`: Office-scoped permission matrix for approver, evaluator, and office admin; global defaults + apply-to-office.
+- `internal-account-admin`: Scoped Nest staff registration for office and organization administrators.
 - `program-template-admin`: Master program templates and per-region customizations via live tables.
 
 ### Modified Capabilities
@@ -23,7 +23,8 @@ Admin RBAC, accounts, and templates UIs still run on an in-memory demo store whi
 
 ## Impact
 
-- Supabase schema: `rbac_templates` table; widen `regional_rbac` role check; seed/apply helpers; RLS for new table.
-- Web client: `/admin/rbac`, `/admin/accounts`, `/admin/templates`, admin sidebar permission checks, new lib helpers/actions against Supabase.
-- Auth: service-role (or privileged) path to create staff users from admin UI.
+- Backend schema: `rbac_global_grants` and `office_rbac_grants`, seeded from platform defaults into active offices.
+- Backend API: Nest `/admin/rbac/*` endpoints and `/auth/staff` for scoped staff directory/provisioning.
+- Web client: `/admin/rbac`, `/admin/accounts`, `/admin/templates`, admin sidebar permission checks, new lib helpers/actions against Nest and Supabase as appropriate.
+- Auth: authenticated Nest path to create staff users from admin UI.
 - Demo ehelp store remains for other mock admin pages until migrated separately.

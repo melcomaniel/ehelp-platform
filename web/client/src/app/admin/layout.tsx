@@ -1,11 +1,11 @@
-"use client"
+"use client";
 
-import { usePathname } from "next/navigation"
+import { usePathname } from "next/navigation";
 
-import { AdminAccessProvider } from "@/lib/admin/access-provider"
-import { EhelpProvider } from "@/lib/ehelp/store"
-import { AdminSidebar } from "@/components/ehelp/admin-sidebar"
-import { PromptsProvider } from "@/components/workflow/prompts"
+import { AdminAccessProvider } from "@/lib/admin/access-provider";
+import { EhelpProvider } from "@/lib/ehelp/store";
+import { AdminSidebar } from "@/components/ehelp/admin-sidebar";
+import { PromptsProvider } from "@/components/workflow/prompts";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -13,16 +13,20 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
-import { Separator } from "@/components/ui/separator"
+} from "@/components/ui/breadcrumb";
+import { Separator } from "@/components/ui/separator";
 import {
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
-} from "@/components/ui/sidebar"
-import { WorkflowProvider } from "@/lib/workflow/store"
+} from "@/components/ui/sidebar";
+import { WorkflowProvider } from "@/lib/workflow/store";
 
 const SECTION_TITLE: { prefix: string; label: string }[] = [
+  { prefix: "/admin/organizations/new", label: "Create Organization" },
+  { prefix: "/admin/organizations", label: "Organizations" },
+  { prefix: "/admin/offices/new", label: "Create Office" },
+  { prefix: "/admin/offices", label: "Offices" },
   { prefix: "/admin/workflows/new", label: "Create Workflow" },
   { prefix: "/admin/workflows", label: "Workflows" },
   { prefix: "/admin/programs/new", label: "Create Program" },
@@ -35,22 +39,22 @@ const SECTION_TITLE: { prefix: string; label: string }[] = [
   { prefix: "/admin/rbac", label: "RBAC" },
   { prefix: "/admin/audit", label: "Audit Log" },
   { prefix: "/admin", label: "Overview" },
-]
+];
 
 function sectionTitle(pathname: string) {
   return (
     SECTION_TITLE.find(
       (s) => pathname === s.prefix || pathname.startsWith(`${s.prefix}/`),
     )?.label ?? "Overview"
-  )
+  );
 }
 
 export default function AdminLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
-  const pathname = usePathname()
+  const pathname = usePathname();
 
   return (
     <AdminAccessProvider>
@@ -93,5 +97,5 @@ export default function AdminLayout({
         </WorkflowProvider>
       </EhelpProvider>
     </AdminAccessProvider>
-  )
+  );
 }

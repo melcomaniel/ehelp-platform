@@ -1,18 +1,18 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
+import * as React from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
-import { SignOutButton } from "@/components/auth/sign-out-button"
-import { useAdminAccess } from "@/lib/admin/access-provider"
-import type { UiPermission } from "@/lib/auth/permissions"
-import { APP_ROLE_LABEL } from "@/lib/auth/types"
+import { SignOutButton } from "@/components/auth/sign-out-button";
+import { useAdminAccess } from "@/lib/admin/access-provider";
+import type { UiPermission } from "@/lib/auth/permissions";
+import { APP_ROLE_LABEL } from "@/lib/auth/types";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible"
+} from "@/components/ui/collapsible";
 import {
   Sidebar,
   SidebarContent,
@@ -21,14 +21,13 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-} from "@/components/ui/sidebar"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+} from "@/components/ui/sidebar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   LayoutDashboardIcon,
   FolderOpenIcon,
@@ -42,37 +41,51 @@ import {
   ChevronRightIcon,
   WorkflowIcon,
   FolderKanbanIcon,
-} from "lucide-react"
+  Building2Icon,
+  LandmarkIcon,
+} from "lucide-react";
 
 interface NavLeaf {
-  title: string
-  url: string
-  icon: React.ReactNode
+  title: string;
+  url: string;
+  icon: React.ReactNode;
   /** If set, visible when user has any of these permissions. */
-  needsAny?: UiPermission[]
+  needsAny?: UiPermission[];
   /** Platform / Org / Office admin visibility (PRD §§4.1–4.3). */
-  adminRoles?: Array<"platform_admin" | "dswd_admin" | "satellite_admin">
+  adminRoles?: Array<"platform_admin" | "dswd_admin" | "satellite_admin">;
 }
 
 interface NavGroup {
-  title: string
-  icon: React.ReactNode
-  items: NavLeaf[]
+  title: string;
+  icon: React.ReactNode;
+  items: NavLeaf[];
 }
 
-type NavEntry = NavLeaf | NavGroup
+type NavEntry = NavLeaf | NavGroup;
 
 function isNavGroup(entry: NavEntry): entry is NavGroup {
-  return "items" in entry
+  return "items" in entry;
 }
 
 /** Admin console nav — Platform / Org / Office Admin only (not Evaluator/Approver). */
 const NAV: NavEntry[] = [
   {
+    title: "Organizations",
+    url: "/admin/organizations",
+    icon: <Building2Icon />,
+    adminRoles: ["platform_admin"],
+  },
+  {
     title: "Overview",
     url: "/admin",
     icon: <LayoutDashboardIcon />,
     adminRoles: ["platform_admin", "dswd_admin", "satellite_admin"],
+  },
+  {
+    title: "Offices",
+    url: "/admin/offices",
+    icon: <LandmarkIcon />,
+    adminRoles: ["dswd_admin"],
   },
   {
     title: "Applications",
@@ -127,6 +140,12 @@ const NAV: NavEntry[] = [
     icon: <UsersIcon />,
     items: [
       {
+        title: "Organization Admins",
+        url: "/admin/organization-admins",
+        icon: <UsersIcon />,
+        adminRoles: ["platform_admin"],
+      },
+      {
         title: "RBAC",
         url: "/admin/rbac",
         icon: <ShieldCheckIcon />,
@@ -137,7 +156,7 @@ const NAV: NavEntry[] = [
         title: "Accounts",
         url: "/admin/accounts",
         icon: <UsersIcon />,
-        adminRoles: ["platform_admin", "dswd_admin", "satellite_admin"],
+        adminRoles: ["dswd_admin", "satellite_admin"],
         needsAny: ["approve-accounts", "register-accounts"],
       },
     ],
@@ -146,10 +165,10 @@ const NAV: NavEntry[] = [
     title: "Audit Log",
     url: "/admin/audit",
     icon: <ScrollTextIcon />,
-    adminRoles: ["platform_admin", "dswd_admin"],
+    adminRoles: ["dswd_admin"],
     needsAny: ["view-audit"],
   },
-]
+];
 
 function isVisible(
   item: NavLeaf,
@@ -157,14 +176,14 @@ function isVisible(
   role: string | undefined,
 ) {
   if (item.adminRoles && role && !item.adminRoles.includes(role as never)) {
-    return false
+    return false;
   }
-  return !item.needsAny || item.needsAny.some((p) => can(p))
+  return !item.needsAny || item.needsAny.some((p) => can(p));
 }
 
 function pathActive(pathname: string, url: string) {
-  if (url === "/admin") return pathname === "/admin"
-  return pathname === url || pathname.startsWith(`${url}/`)
+  if (url === "/admin") return pathname === "/admin";
+  return pathname === url || pathname.startsWith(`${url}/`);
 }
 
 /** Controlled collapsible — avoids Base UI warning when route changes `defaultOpen`. */
@@ -174,17 +193,20 @@ function AdminNavGroup({
   items,
   pathname,
 }: {
-  title: string
-  icon: React.ReactNode
-  items: NavLeaf[]
-  pathname: string
+  title: string;
+  icon: React.ReactNode;
+  items: NavLeaf[];
+  pathname: string;
 }) {
-  const groupActive = items.some((item) => pathActive(pathname, item.url))
-  const [open, setOpen] = React.useState(groupActive)
+  const groupActive = items.some((item) => pathActive(pathname, item.url));
+  const [open, setOpen] = React.useState(groupActive);
 
   React.useEffect(() => {
-    if (groupActive) setOpen(true)
-  }, [groupActive])
+    if (groupActive) {
+      const timer = window.setTimeout(() => setOpen(true), 0);
+      return () => window.clearTimeout(timer);
+    }
+  }, [groupActive]);
 
   return (
     <Collapsible
@@ -192,14 +214,17 @@ function AdminNavGroup({
       onOpenChange={setOpen}
       render={<SidebarMenuItem />}
     >
-      <SidebarMenuButton isActive={groupActive}>
+      <CollapsibleTrigger
+        render={
+          <SidebarMenuButton
+            isActive={groupActive}
+            className="[&[aria-expanded=true]_.nav-group-chevron]:rotate-90"
+          />
+        }
+      >
         {icon}
         <span>{title}</span>
-      </SidebarMenuButton>
-      <CollapsibleTrigger
-        render={<SidebarMenuAction className="aria-expanded:rotate-90" />}
-      >
-        <ChevronRightIcon />
+        <ChevronRightIcon className="nav-group-chevron ml-auto transition-transform" />
         <span className="sr-only">Toggle</span>
       </CollapsibleTrigger>
       <CollapsibleContent>
@@ -217,28 +242,31 @@ function AdminNavGroup({
         </SidebarMenuSub>
       </CollapsibleContent>
     </Collapsible>
-  )
+  );
 }
 
-export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const pathname = usePathname()
-  const { can, profile, region, loading } = useAdminAccess()
-  const role = profile?.role
+export function AdminSidebar({
+  ...props
+}: React.ComponentProps<typeof Sidebar>) {
+  const pathname = usePathname();
+  const { can, profile, region, loading } = useAdminAccess();
+  const role = profile?.isActive ? profile.role : undefined;
 
   const visible: NavEntry[] = NAV.flatMap((entry): NavEntry[] => {
     if (!isNavGroup(entry)) {
-      return isVisible(entry, can, role) ? [entry] : []
+      return isVisible(entry, can, role) ? [entry] : [];
     }
-    const items = entry.items.filter((item) => isVisible(item, can, role))
-    return items.length > 0 ? [{ ...entry, items }] : []
-  })
+    const items = entry.items.filter((item) => isVisible(item, can, role));
+    return items.length > 0 ? [{ ...entry, items }] : [];
+  });
 
-  const roleLabel = profile ? APP_ROLE_LABEL[profile.role] : "Staff"
-  const initials = roleLabel
+  const roleLabel = profile ? APP_ROLE_LABEL[profile.role] : "No active session";
+  const displayName = profile?.fullName || profile?.email || "Signed out";
+  const initials = displayName
     .split(" ")
     .map((w) => w[0])
     .join("")
-    .slice(0, 2)
+    .slice(0, 2);
 
   return (
     <Sidebar variant="inset" {...props}>
@@ -280,7 +308,7 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
                         <span>{entry.title}</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
-                  )
+                  );
                 }
 
                 return (
@@ -291,7 +319,7 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
                     items={entry.items}
                     pathname={pathname}
                   />
-                )
+                );
               })
             )}
           </SidebarMenu>
@@ -311,10 +339,10 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
               </Avatar>
               <div className="grid text-left text-sm leading-tight">
                 <span className="truncate font-medium">
-                  {profile?.fullName || roleLabel}
+                  {displayName}
                 </span>
                 <span className="truncate text-xs text-muted-foreground">
-                  {roleLabel}
+                  {profile?.isActive === false ? `${roleLabel} · Suspended` : roleLabel}
                   {region ? ` · ${region.code}` : ""}
                 </span>
               </div>
@@ -323,5 +351,5 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
         </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
-  )
+  );
 }

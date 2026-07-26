@@ -19,7 +19,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const res = ctx.getResponse<Response>();
-    const req = ctx.getRequest<Request & { user?: { sub?: string; role?: string } }>();
+    const req = ctx.getRequest<
+      Request & { user?: { sub?: string; role?: string } }
+    >();
 
     const status =
       exception instanceof HttpException
@@ -49,7 +51,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const user = req.user?.sub
       ? `${req.user.sub.slice(0, 8)}…(${req.user.role ?? '?'})`
       : '-';
-    const msgText = Array.isArray(message) ? message.join('; ') : String(message);
+    const msgText = Array.isArray(message)
+      ? message.join('; ')
+      : String(message);
     const line = `${req.method} ${req.originalUrl || req.url} → ${status} | platform=${platform} user=${user} | ${msgText}`;
 
     if (status >= 500) {
@@ -73,11 +77,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     // Avoid double-send if headers already flushed
     if (!res.headersSent) {
-      res.status(status).json(
-        typeof payload === 'string'
-          ? { statusCode: status, message: payload }
-          : payload,
-      );
+      res
+        .status(status)
+        .json(
+          typeof payload === 'string'
+            ? { statusCode: status, message: payload }
+            : payload,
+        );
     }
   }
 }

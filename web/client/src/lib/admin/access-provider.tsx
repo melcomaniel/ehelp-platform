@@ -70,7 +70,7 @@ export function AdminAccessProvider({
       setAccess({
         profile,
         region,
-        permissions: permissionsForRole(profile.role),
+        permissions: profile.isActive ? permissionsForRole(profile.role) : [],
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load access");
@@ -80,10 +80,17 @@ export function AdminAccessProvider({
   }, []);
 
   React.useEffect(() => {
-    if (!initial) void refresh();
+    if (initial) return;
+    const timer = window.setTimeout(() => {
+      void refresh();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [initial, refresh]);
 
-  const permissions = access?.permissions ?? [];
+  const permissions = React.useMemo(
+    () => access?.permissions ?? [],
+    [access?.permissions],
+  );
   const permSet = React.useMemo(() => new Set(permissions), [permissions]);
 
   const value: AdminAccessValue = {
@@ -93,11 +100,14 @@ export function AdminAccessProvider({
     region: access?.region ?? null,
     permissions,
     can: (permission) => permSet.has(normalizePermission(permission)),
-    isPlatformAdmin: access?.profile.role === "platform_admin",
-    isDswdAdmin:
-      access?.profile.role === "dswd_admin" ||
+    isPlatformAdmin:
+      access?.profile.isActive === true &&
       access?.profile.role === "platform_admin",
-    isSatelliteAdmin: access?.profile.role === "satellite_admin",
+    isDswdAdmin:
+      access?.profile.isActive === true && access?.profile.role === "dswd_admin",
+    isSatelliteAdmin:
+      access?.profile.isActive === true &&
+      access?.profile.role === "satellite_admin",
     refresh,
   };
 

@@ -21,7 +21,6 @@ import {
   SsoExchangeDto,
 } from './dto/auth.dto';
 import type { JwtPayload } from './jwt.strategy';
-import type { AppRole } from '../users/user.entity';
 
 @Controller('auth')
 export class AuthController {
@@ -63,10 +62,7 @@ export class AuthController {
   }
 
   @Post('sso/exchange')
-  ssoExchange(
-    @Body() body: SsoExchangeDto,
-    @Req() req: Request,
-  ) {
+  ssoExchange(@Body() body: SsoExchangeDto, @Req() req: Request) {
     const platform = this.clientPlatform(req, body.client_platform);
     return this.auth.ssoExchange(body.exchange_code, platform);
   }
@@ -80,7 +76,7 @@ export class AuthController {
     return this.auth.createStaffAccount(req.user.sub, {
       email: body.email,
       full_name: body.full_name,
-      role: body.role as AppRole,
+      role: body.role,
       office_id: body.office_id,
       organization_id: body.organization_id,
       password: body.password,
@@ -102,7 +98,8 @@ export class AuthController {
       .trim()
       .toLowerCase();
     if (header === 'web' || header === 'mobile') return header;
-    if (bodyPlatform === 'web' || bodyPlatform === 'mobile') return bodyPlatform;
+    if (bodyPlatform === 'web' || bodyPlatform === 'mobile')
+      return bodyPlatform;
     return 'mobile';
   }
 
@@ -133,10 +130,7 @@ export class AuthController {
 
   /** Allow unauthenticated session create during first-time onboarding after SSO */
   @Post('liveness/session/public')
-  createLivenessPublic(
-    @Body() body: LivenessCreateDto,
-    @Req() req: Request,
-  ) {
+  createLivenessPublic(@Body() body: LivenessCreateDto, @Req() req: Request) {
     return this.auth.createLivenessSession({
       purpose: body.purpose,
       userId: body.user_id,
@@ -182,8 +176,7 @@ export class AuthController {
   @Get('provider-mode')
   providerMode() {
     const mode =
-      (process.env.AUTH_PROVIDER_MODE ?? 'mock').trim().toLowerCase() ===
-      'live'
+      (process.env.AUTH_PROVIDER_MODE ?? 'mock').trim().toLowerCase() === 'live'
         ? 'live'
         : 'mock';
     return {

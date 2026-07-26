@@ -51,7 +51,12 @@ export class MockEverifyProvider implements EverifyProvider {
       last_name: input.lastName,
       suffix: input.suffix,
       birth_date: input.birthDate,
-      full_name: [input.firstName, input.middleName, input.lastName, input.suffix]
+      full_name: [
+        input.firstName,
+        input.middleName,
+        input.lastName,
+        input.suffix,
+      ]
         .filter(Boolean)
         .join(' '),
       // Unique per session so concurrent mock registrations do not collide on users.email
@@ -103,9 +108,7 @@ export class MockLivenessProvider implements LivenessProvider {
   }
 
   async getResult(sessionToken: string): Promise<LivenessVerifyResult> {
-    const min = Number(
-      this.config.get('FACE_LIVENESS_MIN_CONFIDENCE') ?? 95,
-    );
+    const min = Number(this.config.get('FACE_LIVENESS_MIN_CONFIDENCE') ?? 95);
     return {
       status: 'SUCCEEDED',
       confidenceScore: Math.max(min, 98.5),
