@@ -121,6 +121,40 @@ Auth maps to `user_accounts` + `beneficiaries` / `staff_profiles` (+ `roles` / `
 | `GET` | `/auth/me` | JWT — current profile |
 | `POST` | `/auth/dev/login` | Email/password for provisioned accounts (`X-Client-Platform`) |
 
+## Platform organization management
+
+An active, unscoped `PLATFORM_ADMIN` (`organization_id = NULL`,
+`office_id = NULL`) can manage tenant lifecycle through:
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET`, `POST` | `/admin/organizations` | List/search tenants; atomically create a tenant and initial `ORG_ADMIN` |
+| `GET`, `PATCH` | `/admin/organizations/:id` | View or edit approved organization metadata |
+| `POST` | `/admin/organizations/:id/suspend` | Preserve data and block tenant access; reason required |
+| `POST` | `/admin/organizations/:id/reactivate` | Restore the tenant without reactivating suspended accounts |
+| `POST` | `/admin/organizations/:id/archive` | Archive a suspended tenant; reason required |
+| `PATCH` | `/admin/organizations/:id/admins/:adminId` | Edit approved Organization Administrator metadata |
+| `POST` | `/admin/organizations/:id/admins/:adminId/suspend` | Suspend an Organization Administrator account |
+
+Migration `010_platform_admin_organization_management.sql` adds archived
+lifecycle state, SSO-compatible invitation records, normalized code/idempotency
+constraints, administrative audit actions, append-only audit triggers, and admin
+scope constraints. Apply it after migrations 001–009. The migration header
+contains rollback DDL; roll application code back first and retain/export new
+history before dropping lifecycle or audit structures.
+
+Organization creation does not issue a password or duplicate SSO. It provisions
+the government email, staff profile, `ORG_ADMIN` assignment, and a pending
+invitation in one PostgreSQL transaction. Signing in through the existing eGov
+SSO flow with that email accepts the invitation. Suspended accounts and staff in
+suspended/archived organizations are rejected at token issuance, `/auth/me`, and
+protected tenant operations, including requests using an existing JWT.
+
+`PLATFORM_ADMIN` is explicitly denied from tenant business APIs such as
+applications, beneficiary relationships, evaluation, approval, programs, and
+workflows. The generic `/auth/staff` endpoint cannot be used by a Platform
+Administrator to bypass atomic tenant onboarding or grant tenant business roles.
+
 ### Platform gates
 
 Send `X-Client-Platform: mobile` or `web` (or `client_platform` on the body). Beneficiaries are mobile-only; staff/admin are web-only.

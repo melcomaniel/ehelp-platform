@@ -62,6 +62,18 @@ export async function updateNestSession(request: NextRequest) {
     }
   }
 
+  if (
+    isLoggedIn &&
+    (pathname === "/admin/organizations" ||
+      pathname.startsWith("/admin/organizations/")) &&
+    role !== "platform_admin"
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = homeRouteForRole(role);
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
   if (isLoggedIn && (pathname === "/staff" || pathname.startsWith("/staff/"))) {
     if (!isWebStaffRole(role) && !isWebAdminRole(role)) {
       const url = request.nextUrl.clone();

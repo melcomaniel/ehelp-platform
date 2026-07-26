@@ -11,6 +11,8 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
+import { DataSource } from 'typeorm';
+import { OrganizationInvitationEntity } from '../organizations/organization.entities';
 import { BeneficiaryEntity } from '../users/beneficiary.entity';
 import { LivenessSessionEntity } from '../users/liveness-session.entity';
 import { StaffProfileEntity } from '../users/staff-profile.entity';
@@ -41,13 +43,9 @@ import {
 } from './providers/tokens';
 
 const STAFF_CREATABLE_BY: Record<string, AppRole[]> = {
-  PLATFORM_ADMIN: [
-    'platform_admin',
-    'dswd_admin',
-    'satellite_admin',
-    'evaluator',
-    'approver',
-  ],
+  // Tenant onboarding is atomic through OrganizationService. The generic
+  // staff endpoint must not let the platform operator grant tenant business roles.
+  PLATFORM_ADMIN: [],
   ORG_ADMIN: ['satellite_admin', 'evaluator', 'approver'],
   OFFICE_ADMIN: ['evaluator', 'approver'],
 };
@@ -69,6 +67,7 @@ export class AuthService {
     private readonly roleAssignments: Repository<UserRoleAssignmentEntity>,
     @InjectRepository(LivenessSessionEntity)
     private readonly livenessSessions: Repository<LivenessSessionEntity>,
+    private readonly dataSource: DataSource,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     @Inject(EGOV_SSO_PROVIDER) private readonly sso: EgovSsoProvider,
@@ -99,7 +98,9 @@ export class AuthService {
     };
   }
 
-  private async attachRole(user: UserAccountEntity): Promise<UserAccountEntity> {
+  private async attachRole(
+    user: UserAccountEntity,
+  ): Promise<UserAccountEntity> {
     const { appRole, erdCode } = await this.resolveAppRole(user.id);
     user.appRole = appRole;
     user.erdRoleCode = erdCode;
@@ -181,8 +182,7 @@ export class AuthService {
       role: user.appRole,
       erd_role: user.erdRoleCode,
       account_type: user.accountType,
-      allowed_platform:
-        user.erdRoleCode === 'BENEFICIARY' ? 'mobile' : 'web',
+      allowed_platform: user.erdRoleCode === 'BENEFICIARY' ? 'mobile' : 'web',
       region_id: user.officeId,
       office_id: user.officeId,
       organization_id: user.organizationId,
@@ -208,11 +208,13 @@ export class AuthService {
   }
 
   private async issueTokens(user: UserAccountEntity) {
-    const staff = WEB_ADMIN_ERD_ROLES.has(user.erdRoleCode) ||
+    await this.assertActiveContext(user);
+    const staff =
+      WEB_ADMIN_ERD_ROLES.has(user.erdRoleCode) ||
       user.erdRoleCode === ERD_ROLES.EVALUATOR ||
       user.erdRoleCode === ERD_ROLES.APPROVER
-      ? await this.loadStaffProfile(user.id)
-      : null;
+        ? await this.loadStaffProfile(user.id)
+        : null;
     const accessToken = await this.jwt.signAsync({
       sub: user.id,
       role: user.appRole,
@@ -301,7 +303,11 @@ export class AuthService {
       user = await this.users.save(user);
       const staff = await this.loadStaffProfile(user.id);
       if (staff) {
-        const name = [profile.first_name, profile.middle_name, profile.last_name]
+        const name = [
+          profile.first_name,
+          profile.middle_name,
+          profile.last_name,
+        ]
           .filter(Boolean)
           .join(' ')
           .trim();
@@ -313,6 +319,8 @@ export class AuthService {
 
     user = await this.attachRole(user);
     this.assertClientPlatform(user, clientPlatform);
+    await this.assertActiveContext(user);
+    await this.acceptPendingOrganizationInvitation(user);
 
     const tokens = await this.issueTokens(user);
     return {
@@ -398,14 +406,12 @@ export class AuthService {
 
     if (!row) {
       row =
-        (
-          await this.livenessSessions
-            .createQueryBuilder('s')
-            .where(`s.provider_payload->>'everify_session_id' = :sid`, {
-              sid: sessionToken,
-            })
-            .getOne()
-        ) ?? null;
+        (await this.livenessSessions
+          .createQueryBuilder('s')
+          .where(`s.provider_payload->>'everify_session_id' = :sid`, {
+            sid: sessionToken,
+          })
+          .getOne()) ?? null;
     }
 
     const payload = row?.providerPayload ?? {};
@@ -477,9 +483,7 @@ export class AuthService {
       confidence_score: result.confidenceScore,
       reference_image_url: result.referenceImageUrl ?? null,
       face_liveness_session_id: sessionToken,
-      threshold: Number(
-        this.config.get('FACE_LIVENESS_MIN_CONFIDENCE') ?? 95,
-      ),
+      threshold: Number(this.config.get('FACE_LIVENESS_MIN_CONFIDENCE') ?? 95),
       message: result.passed
         ? 'Liveness passed'
         : 'Liveness failed — retry required',
@@ -508,7 +512,9 @@ export class AuthService {
       userId,
     );
     if (!liveness.passed) {
-      throw new BadRequestException('Face liveness must succeed before eVerify');
+      throw new BadRequestException(
+        'Face liveness must succeed before eVerify',
+      );
     }
 
     const everifySessionId =
@@ -589,6 +595,7 @@ export class AuthService {
   async me(userId: string, clientPlatform?: ClientPlatform) {
     const user = await this.findById(userId);
     if (!user) throw new UnauthorizedException();
+    await this.assertActiveContext(user);
     if (clientPlatform) this.assertClientPlatform(user, clientPlatform);
     const staff = await this.loadStaffProfile(user.id);
     return this.toProfile(user, staff);
@@ -609,6 +616,7 @@ export class AuthService {
   ) {
     const actor = await this.findById(actorUserId);
     if (!actor) throw new UnauthorizedException();
+    await this.assertActiveContext(actor);
     if (!WEB_ADMIN_ERD_ROLES.has(actor.erdRoleCode)) {
       throw new ForbiddenException('Only admins can provision staff accounts');
     }
@@ -626,14 +634,9 @@ export class AuthService {
       throw new BadRequestException('Email already registered');
     }
 
-    const officeId =
-      input.office_id ??
-      actor.officeId ??
-      null;
+    const officeId = input.office_id ?? actor.officeId ?? null;
     const organizationId =
-      input.organization_id ??
-      actor.organizationId ??
-      null;
+      input.organization_id ?? actor.organizationId ?? null;
 
     const accountType =
       input.role === 'platform_admin' ? 'platform_admin' : 'staff';
@@ -670,6 +673,7 @@ export class AuthService {
   async listStaffAccounts(actorUserId: string) {
     const actor = await this.findById(actorUserId);
     if (!actor) throw new UnauthorizedException();
+    await this.assertActiveContext(actor);
     if (!WEB_ADMIN_ERD_ROLES.has(actor.erdRoleCode)) {
       throw new ForbiddenException('Only admins can list staff accounts');
     }
@@ -681,7 +685,21 @@ export class AuthService {
       })
       .orderBy('u.created_at', 'DESC');
 
-    if (actor.erdRoleCode === ERD_ROLES.OFFICE_ADMIN && actor.officeId) {
+    if (actor.erdRoleCode === ERD_ROLES.PLATFORM_ADMIN) {
+      qb.innerJoin(
+        'user_role_assignments',
+        'platform_visible_assignment',
+        'platform_visible_assignment.user_account_id = u.id',
+      )
+        .innerJoin(
+          'roles',
+          'platform_visible_role',
+          'platform_visible_role.id = platform_visible_assignment.role_id',
+        )
+        .andWhere('platform_visible_role.code = :platformVisibleRole', {
+          platformVisibleRole: ERD_ROLES.ORG_ADMIN,
+        });
+    } else if (actor.erdRoleCode === ERD_ROLES.OFFICE_ADMIN && actor.officeId) {
       qb.andWhere('u.office_id = :officeId', { officeId: actor.officeId });
     } else if (
       actor.erdRoleCode === ERD_ROLES.ORG_ADMIN &&
@@ -756,5 +774,79 @@ export class AuthService {
     user = await this.attachRole(user);
     this.assertClientPlatform(user, clientPlatform);
     return this.issueTokens(user);
+  }
+
+  private async assertActiveContext(user: UserAccountEntity) {
+    if (!user.isActive || user.status !== 'active') {
+      throw new UnauthorizedException('Account is not active');
+    }
+    if (user.erdRoleCode === ERD_ROLES.PLATFORM_ADMIN) {
+      if (
+        user.accountType !== 'platform_admin' ||
+        user.organizationId ||
+        user.officeId
+      ) {
+        throw new ForbiddenException('Invalid Platform Administrator scope');
+      }
+      return;
+    }
+    if (user.accountType === 'staff') {
+      if (!user.organizationId) {
+        throw new ForbiddenException('Staff account has no organization');
+      }
+      const rows = await this.dataSource.query<Array<{ status: string }>>(
+        `SELECT status FROM organizations WHERE id = $1 LIMIT 1`,
+        [user.organizationId],
+      );
+      if (!rows[0] || rows[0].status !== 'active') {
+        throw new ForbiddenException('Organization is suspended or archived');
+      }
+      if (
+        user.erdRoleCode === ERD_ROLES.ORG_ADMIN &&
+        (user.officeId || user.accountType !== 'staff')
+      ) {
+        throw new ForbiddenException(
+          'Invalid Organization Administrator scope',
+        );
+      }
+    }
+  }
+
+  private async acceptPendingOrganizationInvitation(user: UserAccountEntity) {
+    if (
+      user.erdRoleCode !== ERD_ROLES.ORG_ADMIN ||
+      !user.organizationId ||
+      !user.email
+    ) {
+      return;
+    }
+    await this.dataSource.transaction(async (manager) => {
+      const invitations = manager.getRepository(OrganizationInvitationEntity);
+      const invitation = await invitations.findOne({
+        where: {
+          userAccountId: user.id,
+          organizationId: user.organizationId!,
+          status: 'pending',
+        },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!invitation) return;
+      invitation.status = 'accepted';
+      invitation.acceptedAt = new Date();
+      await invitations.save(invitation);
+      await manager.query(
+        `INSERT INTO audit_logs (
+           organization_id, actor_user_id, action, entity_type, entity_id,
+           after_state, outcome
+         ) VALUES ($1, $2, 'invitation_accepted', 'organization_invitation', $3,
+                   $4::jsonb, 'success')`,
+        [
+          user.organizationId,
+          user.id,
+          invitation.id,
+          JSON.stringify({ status: 'accepted', email: user.email }),
+        ],
+      );
+    });
   }
 }

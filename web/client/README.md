@@ -144,6 +144,9 @@ Web SSO **does not** auto-create staff. Missing account → “not provisioned�
 | `/staff` | Evaluator / Approver | Nest case queue via cookie |
 | `/admin` | Admins | Console (role-gated) |
 | `/admin/accounts` | Admins with `register_accounts` | Create Nest staff |
+| `/admin/organizations` | Platform Admin only | Search and manage government tenants |
+| `/admin/organizations/new` | Platform Admin only | Atomically create tenant + initial Organization Administrator |
+| `/admin/organizations/:id` | Platform Admin only | Tenant details, lifecycle, admins, and management audit history |
 | `/get-app` | Beneficiaries | Mobile app CTA |
 
 Browser → Nest goes through Next:
@@ -157,6 +160,13 @@ Browser → Nest goes through Next:
 | `/api/nest/*` | Proxies to Nest with `Authorization` from cookie |
 
 Middleware guards `/admin`, `/staff`, `/dashboard` and redirects by role.
+
+Organization Management is also authorized by Nest on every request; sidebar
+visibility and Next middleware are not the security boundary. New Organization
+Administrators activate through the same eGov SSO exchange as existing staff,
+using the government email provisioned with the tenant. Suspend/archive actions
+preserve data and require confirmation; archive is available only after
+suspension and is terminal in the UI.
 
 ---
 

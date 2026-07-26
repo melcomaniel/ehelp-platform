@@ -138,10 +138,8 @@ export class LiveEverifyProvider implements EverifyProvider {
       suffix: (d.suffix as string) ?? null,
       birth_date: (d.birth_date as string) || (d.birthDate as string),
       email: d.email as string,
-      mobile_number:
-        (d.mobile_number as string) || (d.mobile as string),
-      full_address:
-        (d.full_address as string) || (d.address as string),
+      mobile_number: (d.mobile_number as string) || (d.mobile as string),
+      full_address: (d.full_address as string) || (d.address as string),
       face_url: (d.face_url as string) || (d.photo_url as string),
       raw: d,
     };
@@ -155,7 +153,11 @@ export class LiveEverifyProvider implements EverifyProvider {
     birthDate: string;
     faceLivenessSessionId: string;
   }): Promise<EverifyResult> {
-    if (!input.firstName?.trim() || !input.lastName?.trim() || !input.birthDate?.trim()) {
+    if (
+      !input.firstName?.trim() ||
+      !input.lastName?.trim() ||
+      !input.birthDate?.trim()
+    ) {
       throw new UnprocessableEntityException(
         'eVerify needs first_name, last_name, and birth_date from SSO (or enter them). Mock SSO names will not match your real face.',
       );
@@ -194,9 +196,7 @@ export class LiveEverifyProvider implements EverifyProvider {
       );
     }
 
-    const mapped = this.mapPerson(
-      res.data.data as Record<string, unknown>,
-    );
+    const mapped = this.mapPerson(res.data.data as Record<string, unknown>);
     const meta = res.data.meta as Record<string, unknown> | undefined;
     if (!mapped.first_name && !mapped.full_name) {
       throw new UnprocessableEntityException(
@@ -291,8 +291,7 @@ export class LiveLivenessProvider implements LivenessProvider {
     if (pubKey) {
       const correlation = randomUUID();
       // Match official SDK query shape (awst = public API key).
-      const url =
-        `${host}/?t=basic&liveness=0&awst=${encodeURIComponent(pubKey)}`;
+      const url = `${host}/?t=basic&liveness=0&awst=${encodeURIComponent(pubKey)}`;
       return { token: correlation, url, source: 'everify_sdk' };
     }
 
@@ -316,7 +315,9 @@ export class LiveLivenessProvider implements LivenessProvider {
     const token = res.data.token ?? res.data.data?.token;
     const url = res.data.url ?? res.data.data?.url;
     if (!token || !url) {
-      throw new UnprocessableEntityException('Invalid liveness session response');
+      throw new UnprocessableEntityException(
+        'Invalid liveness session response',
+      );
     }
     return { token, url, source: 'face_liveness_api' };
   }
@@ -324,9 +325,7 @@ export class LiveLivenessProvider implements LivenessProvider {
   async getResult(sessionToken: string): Promise<LivenessVerifyResult> {
     const base = this.config.getOrThrow<string>('FACE_LIVENESS_BASE_URL');
     const apiKey = this.config.getOrThrow<string>('FACE_LIVENESS_API_KEY');
-    const min = Number(
-      this.config.get('FACE_LIVENESS_MIN_CONFIDENCE') ?? 95,
-    );
+    const min = Number(this.config.get('FACE_LIVENESS_MIN_CONFIDENCE') ?? 95);
     const res = await axios.get(
       `${base.replace(/\/$/, '')}/v1/liveness/result/${sessionToken}`,
       {

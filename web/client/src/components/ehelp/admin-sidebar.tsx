@@ -42,6 +42,7 @@ import {
   ChevronRightIcon,
   WorkflowIcon,
   FolderKanbanIcon,
+  Building2Icon,
 } from "lucide-react"
 
 interface NavLeaf {
@@ -68,6 +69,12 @@ function isNavGroup(entry: NavEntry): entry is NavGroup {
 
 /** Admin console nav — Platform / Org / Office Admin only (not Evaluator/Approver). */
 const NAV: NavEntry[] = [
+  {
+    title: "Organizations",
+    url: "/admin/organizations",
+    icon: <Building2Icon />,
+    adminRoles: ["platform_admin"],
+  },
   {
     title: "Overview",
     url: "/admin",
@@ -137,7 +144,7 @@ const NAV: NavEntry[] = [
         title: "Accounts",
         url: "/admin/accounts",
         icon: <UsersIcon />,
-        adminRoles: ["platform_admin", "dswd_admin", "satellite_admin"],
+        adminRoles: ["dswd_admin", "satellite_admin"],
         needsAny: ["approve-accounts", "register-accounts"],
       },
     ],
@@ -146,7 +153,7 @@ const NAV: NavEntry[] = [
     title: "Audit Log",
     url: "/admin/audit",
     icon: <ScrollTextIcon />,
-    adminRoles: ["platform_admin", "dswd_admin"],
+    adminRoles: ["dswd_admin"],
     needsAny: ["view-audit"],
   },
 ]
@@ -183,7 +190,10 @@ function AdminNavGroup({
   const [open, setOpen] = React.useState(groupActive)
 
   React.useEffect(() => {
-    if (groupActive) setOpen(true)
+    if (groupActive) {
+      const timer = window.setTimeout(() => setOpen(true), 0)
+      return () => window.clearTimeout(timer)
+    }
   }, [groupActive])
 
   return (

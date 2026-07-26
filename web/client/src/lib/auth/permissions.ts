@@ -103,7 +103,7 @@ export const DSWD_ADMIN_PERMISSIONS: DbPermission[] = [
 
 /** Fixed capabilities for Platform Admin. */
 export const PLATFORM_ADMIN_PERMISSIONS: DbPermission[] = [
-  ...DSWD_ADMIN_PERMISSIONS,
+  "manage_rbac",
 ];
 
 /** Fixed capabilities for Office (satellite) Admin. */

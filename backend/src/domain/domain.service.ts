@@ -80,9 +80,15 @@ export class DomainService {
     private readonly roleAssignments: Repository<UserRoleAssignmentEntity>,
   ) {}
 
-  async listOffices() {
+  async listOffices(actorUserId: string) {
+    const actor = await this.requireUser(actorUserId);
     const rows = await this.offices.find({
-      where: { status: 'active' },
+      where: {
+        status: 'active',
+        ...(actor.organizationId
+          ? { organizationId: actor.organizationId }
+          : {}),
+      },
       order: { name: 'ASC' },
     });
     return rows.map((o) => ({
@@ -94,9 +100,15 @@ export class DomainService {
     }));
   }
 
-  async listPrograms() {
+  async listPrograms(actorUserId: string) {
+    const actor = await this.requireUser(actorUserId);
     const templates = await this.templates.find({
-      where: { status: 'published' },
+      where: {
+        status: 'published',
+        ...(actor.organizationId
+          ? { organizationId: actor.organizationId }
+          : {}),
+      },
       order: { name: 'ASC' },
     });
     const result = [];
@@ -119,9 +131,16 @@ export class DomainService {
     return result;
   }
 
-  async getProgram(id: string) {
+  async getProgram(actorUserId: string, id: string) {
+    const actor = await this.requireUser(actorUserId);
     const template = await this.templates.findOne({ where: { id } });
     if (!template) throw new NotFoundException('Program not found');
+    if (
+      actor.organizationId &&
+      template.organizationId !== actor.organizationId
+    ) {
+      throw new ForbiddenException('Not allowed to access this program');
+    }
     const version = await this.versions.findOne({
       where: { programTemplateId: id },
       order: { versionNumber: 'DESC' },
@@ -188,7 +207,7 @@ export class DomainService {
       customer_user_id?: string;
     },
   ) {
-    const actor = await this.requireUser(actorUserId);
+    await this.requireUser(actorUserId);
     const beneficiaryAccountId = input.customer_user_id ?? actorUserId;
     const beneficiaryUser = await this.requireUser(beneficiaryAccountId);
     if (!beneficiaryUser.beneficiaryId || !beneficiaryUser.beneficiary) {
@@ -196,15 +215,19 @@ export class DomainService {
     }
 
     const version = await this.resolveVersion(input.template_id);
-    const office = await this.offices.findOne({ where: { id: input.office_id } });
+    const office = await this.offices.findOne({
+      where: { id: input.office_id },
+    });
     if (!office) throw new BadRequestException('Invalid office_id');
 
     const orgId =
       beneficiaryUser.organizationId ??
       office.organizationId ??
-      (await this.dataSource.query(
-        `SELECT id FROM organizations WHERE code = 'DSWD' LIMIT 1`,
-      ))[0]?.id;
+      (
+        await this.dataSource.query(
+          `SELECT id FROM organizations WHERE code = 'DSWD' LIMIT 1`,
+        )
+      )[0]?.id;
     if (!orgId) throw new BadRequestException('Organization missing');
 
     const ref = `APP-${Date.now().toString(36).toUpperCase()}`;
@@ -261,8 +284,7 @@ export class DomainService {
       app.amountRequested = String(updates.amount_requested);
     }
     if (updates.status) {
-      app.status =
-        FROM_CLIENT_STATUS[updates.status] ?? updates.status;
+      app.status = FROM_CLIENT_STATUS[updates.status] ?? updates.status;
     }
     await this.applications.save(app);
     return this.serializeApplication(app.id);
@@ -294,9 +316,7 @@ export class DomainService {
 
   async listQueue(actorUserId: string, statuses?: string[]) {
     const actor = await this.requireUser(actorUserId);
-    const erdStatuses = (statuses ?? []).map(
-      (s) => FROM_CLIENT_STATUS[s] ?? s,
-    );
+    const erdStatuses = (statuses ?? []).map((s) => FROM_CLIENT_STATUS[s] ?? s);
     const qb = this.applications.createQueryBuilder('a');
     if (actor.officeId) {
       qb.andWhere('a.office_id = :officeId', { officeId: actor.officeId });
@@ -330,6 +350,7 @@ export class DomainService {
     });
     if (!app) throw new NotFoundException('Application not found');
     await this.assertEvaluator(actorUserId);
+    await this.assertCanAccess(actorUserId, app);
     app.evaluatorNotes = input.notes ?? app.evaluatorNotes;
     app.status = 'in_approval';
     await this.applications.save(app);
@@ -338,7 +359,9 @@ export class DomainService {
       where: { applicationId: app.id, status: 'pending' },
     });
     for (const t of pending) {
-      const step = await this.steps.findOne({ where: { id: t.workflowStepId } });
+      const step = await this.steps.findOne({
+        where: { id: t.workflowStepId },
+      });
       if (step?.stepType === 'evaluation') {
         t.status = 'completed';
         t.decision = 'endorse';
@@ -363,7 +386,10 @@ export class DomainService {
   }
 
   async listPendingRecommendations(actorUserId: string) {
-    const apps = await this.listQueue(actorUserId, ['recommended', 'in_approval']);
+    const apps = await this.listQueue(actorUserId, [
+      'recommended',
+      'in_approval',
+    ]);
     return apps.map((a) => ({
       id: `rec-${a.id}`,
       application_id: a.id,
@@ -390,6 +416,7 @@ export class DomainService {
     });
     if (!app) throw new NotFoundException('Application not found');
     await this.assertApprover(actorUserId);
+    await this.assertCanAccess(actorUserId, app);
 
     app.approverNotes = input.notes ?? null;
     app.decidedAt = new Date();
@@ -481,14 +508,38 @@ export class DomainService {
   private async requireUser(id: string) {
     const user = await this.users.findOne({ where: { id } });
     if (!user) throw new UnauthorizedException();
+    if (!user.isActive || user.status !== 'active') {
+      throw new UnauthorizedException('Account is not active');
+    }
+    const roles = await this.roleAssignments.find({
+      where: { userAccountId: id },
+      relations: ['role'],
+    });
+    if (
+      roles.some((assignment) => assignment.role?.code === 'PLATFORM_ADMIN')
+    ) {
+      throw new ForbiddenException(
+        'Platform Administrators cannot access tenant business operations',
+      );
+    }
+    if (user.accountType === 'staff') {
+      if (!user.organizationId) {
+        throw new ForbiddenException('Staff account has no organization');
+      }
+      const organization = await this.dataSource.query<
+        Array<{ status: string }>
+      >(`SELECT status FROM organizations WHERE id = $1 LIMIT 1`, [
+        user.organizationId,
+      ]);
+      if (!organization[0] || organization[0].status !== 'active') {
+        throw new ForbiddenException('Organization is suspended or archived');
+      }
+    }
     return user;
   }
 
-  private async assertRole(
-    userId: string,
-    allowed: string[],
-    message: string,
-  ) {
+  private async assertRole(userId: string, allowed: string[], message: string) {
+    await this.requireUser(userId);
     const assignments = await this.roleAssignments.find({
       where: { userAccountId: userId },
       relations: ['role'],
@@ -501,7 +552,7 @@ export class DomainService {
   private async assertStaff(userId: string) {
     await this.assertRole(
       userId,
-      ['EVALUATOR', 'APPROVER', 'OFFICE_ADMIN', 'ORG_ADMIN', 'PLATFORM_ADMIN'],
+      ['EVALUATOR', 'APPROVER', 'OFFICE_ADMIN', 'ORG_ADMIN'],
       'Staff role required',
     );
   }
@@ -528,6 +579,9 @@ export class DomainService {
     try {
       await this.assertStaff(userId);
     } catch {
+      throw new ForbiddenException('Not allowed to access this application');
+    }
+    if (user.organizationId !== app.organizationId) {
       throw new ForbiddenException('Not allowed to access this application');
     }
   }
@@ -672,9 +726,7 @@ export class DomainService {
       amount_requested: app.amountRequested
         ? Number(app.amountRequested)
         : null,
-      amount_approved: app.amountApproved
-        ? Number(app.amountApproved)
-        : null,
+      amount_approved: app.amountApproved ? Number(app.amountApproved) : null,
       priority: 'medium',
       evaluator_notes: app.evaluatorNotes,
       approver_notes: app.approverNotes,

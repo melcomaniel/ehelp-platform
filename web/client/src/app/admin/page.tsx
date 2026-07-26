@@ -1,5 +1,8 @@
 "use client"
 
+import Link from "next/link"
+
+import { useAdminAccess } from "@/lib/admin/access-provider"
 import { useEhelp } from "@/lib/ehelp/store"
 import type { ApplicationStatus } from "@/lib/ehelp/types"
 import { REGIONS } from "@/lib/ehelp/types"
@@ -16,7 +19,9 @@ import {
   HourglassIcon,
   UsersIcon,
   WalletIcon,
+  Building2Icon,
 } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 const PIPELINE: ApplicationStatus[] = [
   "Submitted",
@@ -28,8 +33,37 @@ const PIPELINE: ApplicationStatus[] = [
 ]
 
 export default function OverviewPage() {
+  const { isPlatformAdmin } = useAdminAccess()
   const { state, can, actorLabel } = useEhelp()
   const apps = state.applications
+
+  if (isPlatformAdmin) {
+    return (
+      <>
+        <PageHeader
+          title="Platform Administration"
+          description="Manage government organizations and tenant lifecycle without accessing beneficiary or application-level operations."
+        />
+        <Card className="max-w-2xl">
+          <CardHeader>
+            <div className="mb-2 flex size-10 items-center justify-center rounded-lg bg-[#0040E7]/10 text-[#0040E7]">
+              <Building2Icon className="size-5" />
+            </div>
+            <CardTitle>Organization Management</CardTitle>
+            <CardDescription>
+              Create tenants, onboard initial Organization Administrators, and
+              manage active, suspended, and archived organizations.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button render={<Link href="/admin/organizations" />}>
+              Open organizations
+            </Button>
+          </CardContent>
+        </Card>
+      </>
+    )
+  }
 
   const kpis = [
     {

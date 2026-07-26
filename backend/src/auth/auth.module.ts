@@ -11,6 +11,7 @@ import {
   UserAccountEntity,
   UserRoleAssignmentEntity,
 } from '../users/user.entity';
+import { OrganizationInvitationEntity } from '../organizations/organization.entities';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
@@ -42,7 +43,8 @@ const useLive = process.env.AUTH_PROVIDER_MODE === 'live';
       useFactory: (config: ConfigService) => ({
         secret: config.get<string>('JWT_SECRET') ?? 'ehelp-dev-jwt-secret',
         signOptions: {
-          expiresIn: (config.get<string>('JWT_EXPIRES_IN') ?? '7d') as `${number}d`,
+          expiresIn: (config.get<string>('JWT_EXPIRES_IN') ??
+            '7d') as `${number}d`,
         },
       }),
     }),
@@ -53,6 +55,7 @@ const useLive = process.env.AUTH_PROVIDER_MODE === 'live';
       RoleEntity,
       UserRoleAssignmentEntity,
       LivenessSessionEntity,
+      OrganizationInvitationEntity,
     ]),
   ],
   controllers: [AuthController],

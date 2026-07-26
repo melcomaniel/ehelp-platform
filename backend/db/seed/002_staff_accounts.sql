@@ -26,12 +26,12 @@ BEGIN
   -- platform@ehelp.local / PlatformAdmin123!
   IF NOT EXISTS (SELECT 1 FROM user_accounts WHERE email = 'platform@ehelp.local') THEN
     INSERT INTO user_accounts (organization_id, office_id, account_type, email, password_hash, status, is_active, verified_at)
-    VALUES (org_id, office_id, 'platform_admin', 'platform@ehelp.local',
+    VALUES (NULL, NULL, 'platform_admin', 'platform@ehelp.local',
       '$2b$10$8jMHpuqTRv9buyrzmB0T2e1slHS/cBsNtCY8edGEEYethAkSWOOI2',
       'active', true, now())
     RETURNING id INTO uid;
     INSERT INTO staff_profiles (user_account_id, full_name) VALUES (uid, 'Platform Admin');
-    INSERT INTO user_role_assignments (user_account_id, role_id, office_id) VALUES (uid, platform_role, office_id);
+    INSERT INTO user_role_assignments (user_account_id, role_id, office_id) VALUES (uid, platform_role, NULL);
   END IF;
 
   -- orgadmin@ehelp.local / OrgAdmin123!

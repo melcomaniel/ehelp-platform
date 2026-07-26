@@ -23,6 +23,8 @@ import {
 import { WorkflowProvider } from "@/lib/workflow/store"
 
 const SECTION_TITLE: { prefix: string; label: string }[] = [
+  { prefix: "/admin/organizations/new", label: "Create Organization" },
+  { prefix: "/admin/organizations", label: "Organizations" },
   { prefix: "/admin/workflows/new", label: "Create Workflow" },
   { prefix: "/admin/workflows", label: "Workflows" },
   { prefix: "/admin/programs/new", label: "Create Program" },
