@@ -10,6 +10,8 @@
 - `docs/design/workflow-engine-step-palette.md` — step palette  
 - Interactive companion: Cursor canvas `ehelp-infra-architecture.canvas.tsx`
 
+> Current repo note: web and mobile sessions are issued by the Nest Core API as JWTs backed by the application Postgres schema. Supabase Auth is not used for current sessions; Supabase/Postgres tables may still be used by selected legacy/admin data flows until fully migrated.
+
 ---
 
 ## 1. Purpose & scope
@@ -137,8 +139,8 @@ Security, database, and payment gateway are **first-class planes** — not side 
                ┌───────────────────┘        │        └──────────┐
                ▼                            ▼                   ▼
 ┌── AUTH ──────────────┐   ╔══ DATABASE PLANE ═══╗   ┌─ FILES ─┐
-│ Supabase Auth (JWT)  │   ║ PostgreSQL multi-AZ ║   │ S3      │
-│ OTP / password       │   ║ + connection pooler ║   │ signed  │
+│ Core-issued JWT      │   ║ PostgreSQL multi-AZ ║   │ S3      │
+│ eGov SSO/password    │   ║ + connection pooler ║   │ signed  │
 └──────────────────────┘   ║ apps · RBAC · audit ║   │ URLs    │
                            ║ payout unique keys  ║   └─────────┘
                            ╚═════════▲═══════════╝
@@ -160,7 +162,7 @@ Security, database, and payment gateway are **first-class planes** — not side 
 | PostgreSQL | Multi-AZ managed + storage/backups | System of record |
 | Pooler | PgBouncer or Supavisor | **Mandatory** without Redis |
 | Edge / security | CloudFront + AWS WAF + ALB + NAT | TLS, rate limits, routing |
-| Auth | Supabase Auth → JWT | No sticky sessions |
+| Auth | Nest Core-issued JWT | No sticky sessions |
 | Objects | S3 + signed URLs | IDs / evidence |
 | Async payout | SQS + worker (+ optional dedicated tasks) | Idempotent via DB unique keys |
 | Observability | CloudWatch | 5xx, saturation, pool wait, SQS depth |
@@ -189,7 +191,7 @@ Security, database, and payment gateway are **first-class planes** — not side 
 
 | Phase | Deliverables | Scale posture |
 |-------|--------------|---------------|
-| **1 — Foundation** | Auth (Supabase) · Postgres schema · FE+Core single-task deploy · WAF baseline | Dev/staging; prove JWT, RBAC, audit events |
+| **1 — Foundation** | Nest Auth · Postgres schema · FE+Core single-task deploy · WAF baseline | Dev/staging; prove JWT, RBAC, audit events |
 | **2 — Product** | Workflow templates · regional reshape · locked Approval→Payout · admin console | Mid replicas (FE×3, Core×8); pooler on |
 | **3 — Payout** | SQS worker · eGovPay sandbox→prod · idempotent disbursement keys · webhooks | Async path load-tested |
 | **4 — Scale** | Autoscale policies · load test 5–10k concurrent · alarms/runbooks | High replicas (FE×4, Core×16); Postgres sized |
@@ -202,12 +204,12 @@ Security, database, and payment gateway are **first-class planes** — not side 
 
 | Plane | Technology | Notes |
 |-------|------------|--------|
-| **Clients** | Next.js 16, React 19, Tailwind; Flutter, Riverpod, go_router, `supabase_flutter` | Both channels → one Core |
+| **Clients** | Next.js 16, React 19, Tailwind; Flutter, Riverpod, go_router, `http`, WebView | Both channels → one Core |
 | **Security** | CloudFront, AWS WAF, ALB (TLS), Secrets Manager / SSM, IAM | First-class plane; in edge cost band |
 | **Compute — FE** | ECS on Fargate, Next.js | Replica count scales independently |
 | **Compute — Core** | ECS on Fargate, stateless HTTP/JSON API | Shared by web + mobile |
-| **Auth** | Supabase Auth (email OTP / password), JWT | Core validates JWT; roles in Postgres |
-| **Database** | PostgreSQL (RDS or Supabase), migrations, RLS where applicable | Explicit ~$1.4k High line |
+| **Auth** | NestJS auth, eGov SSO exchange, email/password for provisioned staff, Core-issued JWT | Core issues and validates JWT; roles in Postgres |
+| **Database** | PostgreSQL (RDS or managed Postgres), SQL migrations, RLS where applicable | Explicit ~$1.4k High line |
 | **Pooler** | PgBouncer / Supavisor | Required at concurrent scale |
 | **Files** | Amazon S3, signed URLs | Evidence / IDs |
 | **Payment plumbing** | Amazon SQS, payout worker | Our infra |
@@ -228,10 +230,10 @@ Aligned with existing design docs:
 
 | Area | Today in repo | Target runtime |
 |------|---------------|----------------|
-| Web | `web/client` — Next.js + Supabase | Same stack on FE service + Core API split as backend hardens |
-| Mobile | `mobile` — Flutter + Supabase | Calls shared Core |
-| Admin | `/admin` — live RBAC/templates + workflow UI under `/admin/workflows` | Stays on admin console |
-| Data | Supabase Postgres | Same engine; size up / pool for concurrent |
+| Web | `web/client` — Next.js using Nest JWT sessions | Same stack on FE service; calls shared Core API |
+| Mobile | `mobile` — Flutter using Nest Core API | Calls shared Core |
+| Admin | `/admin` — live Nest RBAC/accounts, Supabase-backed templates, workflow UI under `/admin/workflows` | Stays on admin console |
+| Data | Docker/local Postgres for Nest domain; selected Supabase tables for template admin until migration | Managed Postgres target; size up / pool for concurrent |
 
 ---
 
@@ -240,7 +242,7 @@ Aligned with existing design docs:
 | Decision | Choice |
 |----------|--------|
 | Client backends | **One shared Core** for web + mobile |
-| Auth sessions | **JWT (Supabase)** — no sticky server sessions |
+| Auth sessions | **Core-issued JWT** — no sticky server sessions |
 | Security | **CloudFront + WAF + ALB** as explicit plane |
 | Database | **Postgres multi-AZ + pooler** — explicit cost line |
 | Redis | **Skip** in baseline |

@@ -1,14 +1,14 @@
 ## ADDED Requirements
 
 ### Requirement: Master program templates
-A `dswd_admin` with `manage_templates` SHALL be able to create and update master rows in `program_templates`.
+A staff admin with `manage_templates` SHALL be able to create and update master rows in `program_templates`.
 
 #### Scenario: Create master template
-- **WHEN** a DSWD admin saves a new template name, program metadata, cooldown, and requirements
+- **WHEN** an authorized admin saves a new template name, program metadata, cooldown, and requirements
 - **THEN** a `program_templates` row is inserted and visible to staff
 
 ### Requirement: Regional template customization
-A `satellite_admin` with `customize_templates` SHALL be able to create or update `region_templates` for their own region without modifying master templates.
+A `satellite_admin` with `customize_templates` SHALL be able to create or update `region_templates` for their mapped region without modifying master templates.
 
 #### Scenario: Customize eligibility for own region
 - **WHEN** a satellite admin saves local eligibility rules / cooldown override for a master template
