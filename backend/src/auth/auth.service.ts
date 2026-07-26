@@ -773,6 +773,8 @@ export class AuthService {
     }
     user = await this.attachRole(user);
     this.assertClientPlatform(user, clientPlatform);
+    await this.assertActiveContext(user);
+    await this.acceptPendingOrganizationInvitation(user);
     return this.issueTokens(user);
   }
 

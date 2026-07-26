@@ -136,6 +136,17 @@ An active, unscoped `PLATFORM_ADMIN` (`organization_id = NULL`,
 | `PATCH` | `/admin/organizations/:id/admins/:adminId` | Edit approved Organization Administrator metadata |
 | `POST` | `/admin/organizations/:id/admins/:adminId/suspend` | Suspend an Organization Administrator account |
 
+An active tenant-scoped `ORG_ADMIN` (`organization_id` set, `office_id = NULL`)
+can manage offices in their own organization through:
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET`, `POST` | `/admin/offices` | List/search/page tenant offices; create an active office |
+| `GET` | `/admin/offices/parent-options` | Active same-tenant offices for parent selection |
+| `GET`, `PATCH` | `/admin/offices/:id` | View or edit allowed office metadata |
+| `POST` | `/admin/offices/:id/archive` | Soft-archive an active office; reason required; active children block archive |
+| `POST` | `/admin/offices/:id/reactivate` | Restore an archived office when the organization is active |
+
 Migration `010_platform_admin_organization_management.sql` adds archived
 lifecycle state, SSO-compatible invitation records, normalized code/idempotency
 constraints, administrative audit actions, append-only audit triggers, and admin
@@ -154,6 +165,15 @@ protected tenant operations, including requests using an existing JWT.
 applications, beneficiary relationships, evaluation, approval, programs, and
 workflows. The generic `/auth/staff` endpoint cannot be used by a Platform
 Administrator to bypass atomic tenant onboarding or grant tenant business roles.
+
+Office Management reuses the existing `offices` table. Migration
+`011_organization_admin_office_management.sql` adds required office codes,
+organization-scoped normalized code uniqueness, archived lifecycle metadata,
+hierarchy checks, and office audit actions. Office operations derive
+`organization_id` from the authenticated `ORG_ADMIN`; client-supplied tenant
+scope is ignored. Parent offices must be active and in the same organization,
+cycles are rejected, and ordinary delete is implemented only as archive so
+historical records remain readable.
 
 ### Platform gates
 

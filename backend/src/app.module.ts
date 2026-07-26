@@ -18,6 +18,7 @@ import { BeneficiaryEntity } from './users/beneficiary.entity';
 import { LivenessSessionEntity } from './users/liveness-session.entity';
 import { StaffProfileEntity } from './users/staff-profile.entity';
 import { OrganizationModule } from './organizations/organization.module';
+import { OfficeModule } from './offices/office.module';
 import {
   AuditLogEntity,
   OrganizationEntity,
@@ -68,6 +69,7 @@ import {
     AuthModule,
     DomainModule,
     OrganizationModule,
+    OfficeModule,
   ],
 })
 export class AppModule {}
