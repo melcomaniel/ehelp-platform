@@ -21,6 +21,7 @@ import {
 import {
   CreateOrganizationDto,
   OrganizationListQueryDto,
+  OrganizationOfficeListQueryDto,
   UpdateOrganizationAdminDto,
   UpdateOrganizationDto,
 } from './organization.dto';
@@ -85,6 +86,24 @@ type AuditRow = {
   reason: string | null;
   outcome: string;
   occurred_at: Date;
+};
+
+type OfficeRow = {
+  id: string;
+  organization_id: string;
+  organization_name: string;
+  parent_office_id: string | null;
+  parent_office_name: string | null;
+  name: string;
+  code: string;
+  normalized_code: string;
+  level: string;
+  status: string;
+  direct_child_count: number;
+  archived_at: Date | null;
+  lifecycle_reason: string | null;
+  created_at: Date;
+  updated_at: Date;
 };
 
 @Injectable()
@@ -186,6 +205,80 @@ export class OrganizationService {
       office_count: Number(officeCount[0]?.count ?? 0),
       admins,
       audit_history: audits,
+    };
+  }
+
+  async listOffices(
+    actorId: string,
+    organizationId: string,
+    query: OrganizationOfficeListQueryDto,
+  ) {
+    await this.requirePlatformAdmin(actorId);
+    const organization = await this.organizations.findOne({
+      where: { id: organizationId },
+    });
+    if (!organization) throw new NotFoundException('Organization not found');
+
+    const page = query.page || 1;
+    const pageSize = query.page_size || 10;
+    const params: unknown[] = [organizationId];
+    const clauses = ['o.organization_id = $1'];
+
+    if (query.search) {
+      params.push(`%${query.search}%`);
+      clauses.push(
+        `(o.name ILIKE $${params.length} OR o.code ILIKE $${params.length})`,
+      );
+    }
+    if (query.level) {
+      params.push(query.level);
+      clauses.push(`o.level = $${params.length}`);
+    }
+    if (query.status) {
+      params.push(query.status);
+      clauses.push(`o.status = $${params.length}`);
+    }
+
+    const where = `WHERE ${clauses.join(' AND ')}`;
+    const count = await this.dataSource.query<Array<{ total: number }>>(
+      `SELECT count(*)::int AS total FROM offices o ${where}`,
+      params,
+    );
+
+    params.push(pageSize, (page - 1) * pageSize);
+    const rows = await this.dataSource.query<OfficeRow[]>(
+      `SELECT o.id, o.organization_id, org.name AS organization_name,
+              o.parent_office_id, parent.name AS parent_office_name,
+              o.name, o.code, o.normalized_code, o.level, o.status,
+              COALESCE(children.direct_child_count, 0)::int AS direct_child_count,
+              o.archived_at, o.lifecycle_reason, o.created_at, o.updated_at
+       FROM offices o
+       JOIN organizations org ON org.id = o.organization_id
+       LEFT JOIN offices parent ON parent.id = o.parent_office_id
+       LEFT JOIN LATERAL (
+         SELECT count(*)::int AS direct_child_count
+         FROM offices child
+         WHERE child.parent_office_id = o.id
+       ) children ON true
+       ${where}
+       ORDER BY o.created_at DESC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
+    );
+
+    const total = Number(count[0]?.total ?? 0);
+    return {
+      data: rows.map((row) => this.officeState(row)),
+      organization: {
+        id: organization.id,
+        name: organization.name,
+      },
+      pagination: {
+        page,
+        page_size: pageSize,
+        total,
+        total_pages: Math.max(1, Math.ceil(total / pageSize)),
+      },
     };
   }
 
@@ -635,6 +728,26 @@ export class OrganizationService {
       lifecycle_reason: organization.lifecycleReason,
       created_at: organization.createdAt,
       updated_at: organization.updatedAt,
+    };
+  }
+
+  private officeState(row: OfficeRow) {
+    return {
+      id: row.id,
+      organization_id: row.organization_id,
+      organization_name: row.organization_name,
+      parent_office_id: row.parent_office_id,
+      parent_office_name: row.parent_office_name,
+      name: row.name,
+      code: row.code,
+      normalized_code: row.normalized_code,
+      level: row.level,
+      status: row.status,
+      direct_child_count: Number(row.direct_child_count ?? 0),
+      archived_at: row.archived_at,
+      lifecycle_reason: row.lifecycle_reason,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
     };
   }
 

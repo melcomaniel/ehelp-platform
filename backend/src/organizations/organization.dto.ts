@@ -12,6 +12,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import { OFFICE_LEVELS, type OfficeLevel } from '../offices/office.policy';
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -95,6 +96,33 @@ export class OrganizationListQueryDto {
   @Min(1)
   @Max(100)
   page_size = 20;
+}
+
+export class OrganizationOfficeListQueryDto {
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @IsOptional()
+  @IsIn(OFFICE_LEVELS)
+  level?: OfficeLevel;
+
+  @IsOptional()
+  @IsIn(['active', 'archived'])
+  status?: 'active' | 'archived';
+
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  page = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  @Max(100)
+  page_size = 10;
 }
 
 export class LifecycleReasonDto {

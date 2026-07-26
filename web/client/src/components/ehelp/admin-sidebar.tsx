@@ -21,7 +21,6 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
@@ -209,14 +208,17 @@ function AdminNavGroup({
       onOpenChange={setOpen}
       render={<SidebarMenuItem />}
     >
-      <SidebarMenuButton isActive={groupActive}>
+      <CollapsibleTrigger
+        render={
+          <SidebarMenuButton
+            isActive={groupActive}
+            className="[&[aria-expanded=true]_.nav-group-chevron]:rotate-90"
+          />
+        }
+      >
         {icon}
         <span>{title}</span>
-      </SidebarMenuButton>
-      <CollapsibleTrigger
-        render={<SidebarMenuAction className="aria-expanded:rotate-90" />}
-      >
-        <ChevronRightIcon />
+        <ChevronRightIcon className="nav-group-chevron ml-auto transition-transform" />
         <span className="sr-only">Toggle</span>
       </CollapsibleTrigger>
       <CollapsibleContent>

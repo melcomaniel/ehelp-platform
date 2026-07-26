@@ -17,6 +17,7 @@ import {
   CreateOrganizationDto,
   LifecycleReasonDto,
   OrganizationListQueryDto,
+  OrganizationOfficeListQueryDto,
   ReactivateOrganizationDto,
   UpdateOrganizationAdminDto,
   UpdateOrganizationDto,
@@ -54,6 +55,15 @@ export class OrganizationController {
     @Param('organizationId') organizationId: string,
   ) {
     return this.organizations.detail(req.user.sub, organizationId);
+  }
+
+  @Get(':organizationId/offices')
+  offices(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+    @Query() query: OrganizationOfficeListQueryDto,
+  ) {
+    return this.organizations.listOffices(req.user.sub, organizationId, query);
   }
 
   @Patch(':organizationId')

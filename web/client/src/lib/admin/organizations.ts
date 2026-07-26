@@ -1,4 +1,5 @@
 import { nestFetch } from "../api/nest"
+import type { OfficePage } from "./offices"
 
 export type OrganizationStatus = "active" | "suspended" | "archived"
 
@@ -90,6 +91,27 @@ export function listOrganizations(input: {
 
 export function getOrganization(id: string) {
   return nestFetch<OrganizationDetail>(`/admin/organizations/${id}`)
+}
+
+export function listOrganizationOffices(
+  organizationId: string,
+  input: {
+    search?: string
+    status?: string
+    level?: string
+    page?: number
+    pageSize?: number
+  },
+) {
+  const query = new URLSearchParams()
+  if (input.search) query.set("search", input.search)
+  if (input.status) query.set("status", input.status)
+  if (input.level) query.set("level", input.level)
+  query.set("page", String(input.page ?? 1))
+  query.set("page_size", String(input.pageSize ?? 10))
+  return nestFetch<OfficePage>(
+    `/admin/organizations/${organizationId}/offices?${query.toString()}`,
+  )
 }
 
 export function createOrganization(input: {
