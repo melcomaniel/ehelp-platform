@@ -16,6 +16,7 @@ import type { JwtPayload } from '../auth/jwt.strategy';
 import {
   CreateOrganizationDto,
   LifecycleReasonDto,
+  OrganizationAdminListQueryDto,
   OrganizationListQueryDto,
   OrganizationOfficeListQueryDto,
   ReactivateOrganizationDto,
@@ -47,6 +48,14 @@ export class OrganizationController {
       body,
       this.meta(req, requestId),
     );
+  }
+
+  @Get('admins')
+  admins(
+    @Req() req: AuthedRequest,
+    @Query() query: OrganizationAdminListQueryDto,
+  ) {
+    return this.organizations.listOrganizationAdmins(req.user.sub, query);
   }
 
   @Get(':organizationId')

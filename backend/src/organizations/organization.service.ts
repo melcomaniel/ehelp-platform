@@ -20,6 +20,7 @@ import {
 } from '../users/user.entity';
 import {
   CreateOrganizationDto,
+  OrganizationAdminListQueryDto,
   OrganizationListQueryDto,
   OrganizationOfficeListQueryDto,
   UpdateOrganizationAdminDto,
@@ -52,6 +53,13 @@ type AdminRow = {
   invitation_status: string | null;
   created_at: Date;
   updated_at: Date;
+};
+
+type OrganizationAdminListRow = AdminRow & {
+  organization_id: string;
+  organization_code: string;
+  organization_name: string;
+  organization_status: OrganizationStatus;
 };
 
 type OrganizationListRow = {
@@ -205,6 +213,88 @@ export class OrganizationService {
       office_count: Number(officeCount[0]?.count ?? 0),
       admins,
       audit_history: audits,
+    };
+  }
+
+  async listOrganizationAdmins(
+    actorId: string,
+    query: OrganizationAdminListQueryDto,
+  ) {
+    await this.requirePlatformAdmin(actorId);
+    const page = query.page || 1;
+    const pageSize = query.page_size || 20;
+    const params: unknown[] = [];
+    const clauses = [`r.code = 'ORG_ADMIN'`];
+
+    if (query.search) {
+      params.push(`%${query.search}%`);
+      clauses.push(
+        `(u.email ILIKE $${params.length}
+          OR sp.full_name ILIKE $${params.length}
+          OR org.name ILIKE $${params.length}
+          OR org.code ILIKE $${params.length})`,
+      );
+    }
+    if (query.status) {
+      params.push(query.status);
+      clauses.push(`u.status = $${params.length}`);
+    }
+    if (query.invitation_status) {
+      params.push(query.invitation_status);
+      clauses.push(`COALESCE(invitation.status, '') = $${params.length}`);
+    }
+
+    const where = `WHERE ${clauses.join(' AND ')}`;
+    const count = await this.dataSource.query<Array<{ total: number }>>(
+      `SELECT count(*)::int AS total
+       FROM user_accounts u
+       JOIN organizations org ON org.id = u.organization_id
+       JOIN user_role_assignments ura ON ura.user_account_id = u.id
+       JOIN roles r ON r.id = ura.role_id
+       JOIN staff_profiles sp ON sp.user_account_id = u.id
+       LEFT JOIN LATERAL (
+         SELECT oi.status FROM organization_invitations oi
+         WHERE oi.user_account_id = u.id AND oi.organization_id = u.organization_id
+         ORDER BY oi.created_at DESC LIMIT 1
+       ) invitation ON true
+       ${where}`,
+      params,
+    );
+
+    params.push(pageSize, (page - 1) * pageSize);
+    const rows = await this.dataSource.query<OrganizationAdminListRow[]>(
+      `SELECT u.id, u.email, u.status, u.is_active, u.created_at, u.updated_at,
+              sp.full_name, sp.phone,
+              invitation.status AS invitation_status,
+              org.id AS organization_id,
+              org.code AS organization_code,
+              org.name AS organization_name,
+              org.status AS organization_status
+       FROM user_accounts u
+       JOIN organizations org ON org.id = u.organization_id
+       JOIN user_role_assignments ura ON ura.user_account_id = u.id
+       JOIN roles r ON r.id = ura.role_id
+       JOIN staff_profiles sp ON sp.user_account_id = u.id
+       LEFT JOIN LATERAL (
+         SELECT oi.status FROM organization_invitations oi
+         WHERE oi.user_account_id = u.id AND oi.organization_id = u.organization_id
+         ORDER BY oi.created_at DESC LIMIT 1
+       ) invitation ON true
+       ${where}
+       ORDER BY u.created_at DESC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
+    );
+
+    const total = Number(count[0]?.total ?? 0);
+    return {
+      data: rows,
+      pagination: {
+        page,
+        page_size: pageSize,
+        total,
+        total_pages: Math.max(1, Math.ceil(total / pageSize)),
+      },
     };
   }
 
@@ -615,7 +705,7 @@ export class OrganizationService {
     const actor = rows[0];
     if (!actor) throw new ForbiddenException('Platform Administrator required');
     if (!actor.is_active || actor.status !== 'active') {
-      throw new UnauthorizedException('Account is not active');
+      throw new UnauthorizedException('Account is suspended');
     }
     if (
       actor.organization_id ||

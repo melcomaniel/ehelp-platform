@@ -6,6 +6,7 @@ export type NestJwtClaims = {
   role?: string;
   erd_role?: string;
   email?: string;
+  full_name?: string;
   exp?: number;
 };
 

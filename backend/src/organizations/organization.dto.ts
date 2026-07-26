@@ -125,6 +125,33 @@ export class OrganizationOfficeListQueryDto {
   page_size = 10;
 }
 
+export class OrganizationAdminListQueryDto {
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @IsOptional()
+  @IsIn(['active', 'suspended'])
+  status?: 'active' | 'suspended';
+
+  @IsOptional()
+  @IsIn(['pending', 'accepted', 'revoked'])
+  invitation_status?: 'pending' | 'accepted' | 'revoked';
+
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  page = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  @Max(100)
+  page_size = 20;
+}
+
 export class LifecycleReasonDto {
   @Transform(trim)
   @IsString()

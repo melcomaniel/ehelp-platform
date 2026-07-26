@@ -43,8 +43,10 @@ Conceptual operations:
 | Method | Route | Behavior |
 |---|---|---|
 | GET | `/admin/organizations` | search/status/page list |
+| GET | `/admin/organizations/admins` | search/status/invitation/page Organization Admin directory |
 | POST | `/admin/organizations` | atomic tenant + initial admin onboarding |
 | GET | `/admin/organizations/:id` | metadata, counts, Organization Administrators, audits |
+| GET | `/admin/organizations/:id/offices` | search/status/type/page office list for one organization |
 | PATCH | `/admin/organizations/:id` | allowed metadata only |
 | POST | `/admin/organizations/:id/suspend` | active to suspended, reason required |
 | POST | `/admin/organizations/:id/reactivate` | suspended to active |
@@ -101,6 +103,8 @@ Before issuing tokens and in `/auth/me`, auth reloads:
 
 The same active-context check is invoked by protected organization and domain operations, invalidating existing tenant sessions on their next request after tenant suspension/archive. Successful staff SSO marks a matching pending invitation accepted. Reactivation never changes independently suspended users.
 
+Suspended or inactive accounts return the safe error message `Account is suspended`. The web session endpoint clears the httpOnly Nest JWT cookie when `/auth/me` rejects the token, so an account suspended after login is treated as signed out instead of retaining a stale client session.
+
 ### 5. Enforce least privilege at the server
 
 Every organization-management operation derives actor ID from JWT `sub`; client role and tenant IDs are ignored. The actor must be active, assigned `PLATFORM_ADMIN`, and unscoped.
@@ -133,11 +137,13 @@ Database triggers reject `UPDATE` and `DELETE` on audit rows. The Platform Admin
 Add:
 
 - `/admin/organizations` list with debounced/search submission, status filter, pagination, loading/empty/error states, actions, and responsive table/cards;
+- `/admin/organization-admins` Platform Administrator directory with name/email/organization search, account status filter, invitation status filter, pagination, table rows, and detail links;
 - `/admin/organizations/new` combined organization/initial-admin form with a client-generated idempotency key;
-- `/admin/organizations/[organizationId]` detail, administrators, lifecycle actions, and relevant audit history;
+- `/admin/organizations/[organizationId]` detail with local tabs for Offices, Administrators, and Audit history; Offices is the initial tab and contains a searchable/filterable/paginated office table;
+- organization audit history is displayed as a table; sensitive lifecycle controls are hidden inside a collapsed section under the audit tab;
 - edit forms and confirmation dialogs implemented with existing buttons/cards/inputs/labels and accessible native dialog/form patterns where no dialog component exists.
 
-The sidebar gets a Platform Administration/Organizations entry visible only to `platform_admin`. The route pages also verify session role through the server API and render forbidden/error states. No beneficiary or application links/data appear.
+The sidebar gets Platform Administrator Organizations and Users > Organization Admins entries visible only to active `platform_admin` sessions. Suspended accounts receive no admin navigation and direct protected URLs render forbidden or redirect after the stale session is cleared. No beneficiary or application links/data appear.
 
 ### 9. Validation and errors are layered
 
@@ -198,7 +204,7 @@ sequenceDiagram
 - **Legacy data violates platform scope** → migration repairs the known seed and rejects future scoped Platform Administrators.
 - **Database triggers can complicate fixtures/rollback** → keep triggers small, documented, and covered by migration smoke tests.
 - **No outbound mail provider exists** → store a pending SSO activation/invitation only; UI clearly says the admin signs in with the provisioned government email.
-- **JWT retains stale claims** → all sensitive operations reload account, role, and organization; JWT claims are identity hints only.
+- **JWT retains stale claims** → all sensitive operations reload account, role, and organization; JWT claims are identity hints only, and the web session route clears stale cookies after rejection.
 - **Current domain services have incomplete tenant filtering** → explicitly remove Platform Administrator business access now and add focused tenant checks touched by this slice; a full domain isolation audit remains separate.
 - **Case-insensitive code index can fail on legacy duplicates** → preflight migration query detects duplicates; normalize existing codes before applying uniqueness.
 - **Archive is irreversible in UI** → require suspended state, typed confirmation/reason, preserve history, and expose no unarchive endpoint.

@@ -220,6 +220,7 @@ export class AuthService {
       role: user.appRole,
       erd_role: user.erdRoleCode,
       email: user.email,
+      full_name: this.toProfile(user, staff).full_name,
     });
     return {
       access_token: accessToken,
@@ -780,7 +781,7 @@ export class AuthService {
 
   private async assertActiveContext(user: UserAccountEntity) {
     if (!user.isActive || user.status !== 'active') {
-      throw new UnauthorizedException('Account is not active');
+      throw new UnauthorizedException('Account is suspended');
     }
     if (user.erdRoleCode === ERD_ROLES.PLATFORM_ADMIN) {
       if (

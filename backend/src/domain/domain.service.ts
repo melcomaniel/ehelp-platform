@@ -509,7 +509,7 @@ export class DomainService {
     const user = await this.users.findOne({ where: { id } });
     if (!user) throw new UnauthorizedException();
     if (!user.isActive || user.status !== 'active') {
-      throw new UnauthorizedException('Account is not active');
+      throw new UnauthorizedException('Account is suspended');
     }
     const roles = await this.roleAssignments.find({
       where: { userAccountId: id },

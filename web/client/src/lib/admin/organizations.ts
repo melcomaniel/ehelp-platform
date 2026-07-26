@@ -28,6 +28,13 @@ export type OrganizationAdmin = {
   updated_at: string
 }
 
+export type OrganizationAdminListRow = OrganizationAdmin & {
+  organization_id: string
+  organization_code: string
+  organization_name: string
+  organization_status: OrganizationStatus
+}
+
 export type OrganizationAudit = {
   id: string
   action: string
@@ -65,6 +72,16 @@ export type OrganizationPage = {
   }
 }
 
+export type OrganizationAdminPage = {
+  data: OrganizationAdminListRow[]
+  pagination: {
+    page: number
+    page_size: number
+    total: number
+    total_pages: number
+  }
+}
+
 export function organizationStatusLabel(status: OrganizationStatus) {
   return status[0].toUpperCase() + status.slice(1)
 }
@@ -91,6 +108,26 @@ export function listOrganizations(input: {
 
 export function getOrganization(id: string) {
   return nestFetch<OrganizationDetail>(`/admin/organizations/${id}`)
+}
+
+export function listOrganizationAdmins(input: {
+  search?: string
+  status?: string
+  invitationStatus?: string
+  page?: number
+  pageSize?: number
+}) {
+  const query = new URLSearchParams()
+  if (input.search) query.set("search", input.search)
+  if (input.status) query.set("status", input.status)
+  if (input.invitationStatus) {
+    query.set("invitation_status", input.invitationStatus)
+  }
+  query.set("page", String(input.page ?? 1))
+  query.set("page_size", String(input.pageSize ?? 20))
+  return nestFetch<OrganizationAdminPage>(
+    `/admin/organizations/admins?${query.toString()}`,
+  )
 }
 
 export function listOrganizationOffices(

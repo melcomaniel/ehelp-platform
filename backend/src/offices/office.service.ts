@@ -405,7 +405,7 @@ export class OfficeService {
     if (!actor)
       throw new ForbiddenException('Organization Administrator required');
     if (!actor.is_active || actor.status !== 'active') {
-      throw new UnauthorizedException('Account is not active');
+      throw new UnauthorizedException('Account is suspended');
     }
     if (
       actor.account_type !== 'staff' ||

@@ -140,6 +140,12 @@ const NAV: NavEntry[] = [
     icon: <UsersIcon />,
     items: [
       {
+        title: "Organization Admins",
+        url: "/admin/organization-admins",
+        icon: <UsersIcon />,
+        adminRoles: ["platform_admin"],
+      },
+      {
         title: "RBAC",
         url: "/admin/rbac",
         icon: <ShieldCheckIcon />,
@@ -244,7 +250,7 @@ export function AdminSidebar({
 }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
   const { can, profile, region, loading } = useAdminAccess();
-  const role = profile?.role;
+  const role = profile?.isActive ? profile.role : undefined;
 
   const visible: NavEntry[] = NAV.flatMap((entry): NavEntry[] => {
     if (!isNavGroup(entry)) {
@@ -254,8 +260,9 @@ export function AdminSidebar({
     return items.length > 0 ? [{ ...entry, items }] : [];
   });
 
-  const roleLabel = profile ? APP_ROLE_LABEL[profile.role] : "Staff";
-  const initials = roleLabel
+  const roleLabel = profile ? APP_ROLE_LABEL[profile.role] : "No active session";
+  const displayName = profile?.fullName || profile?.email || "Signed out";
+  const initials = displayName
     .split(" ")
     .map((w) => w[0])
     .join("")
@@ -332,10 +339,10 @@ export function AdminSidebar({
               </Avatar>
               <div className="grid text-left text-sm leading-tight">
                 <span className="truncate font-medium">
-                  {profile?.fullName || roleLabel}
+                  {displayName}
                 </span>
                 <span className="truncate text-xs text-muted-foreground">
-                  {roleLabel}
+                  {profile?.isActive === false ? `${roleLabel} · Suspended` : roleLabel}
                   {region ? ` · ${region.code}` : ""}
                 </span>
               </div>

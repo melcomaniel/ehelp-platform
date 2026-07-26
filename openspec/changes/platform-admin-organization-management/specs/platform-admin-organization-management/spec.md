@@ -13,7 +13,11 @@ The system SHALL authenticate Platform Administrators through the existing eGov 
 
 #### Scenario: Inactive Platform Administrator
 - **WHEN** an inactive, suspended, or archived Platform Administrator attempts authentication or a protected operation
-- **THEN** the system denies access
+- **THEN** the system denies access with the safe message `Account is suspended`
+
+#### Scenario: Existing suspended session is cleared
+- **WHEN** a Platform Administrator account is suspended after a web JWT was issued
+- **THEN** the next web session lookup clears the stale session cookie and the account cannot remain logged in
 
 ### Requirement: Platform Administrator authorization
 The system SHALL enforce active, unscoped `PLATFORM_ADMIN` authorization server-side for every organization-management operation and MUST NOT trust client-supplied actor roles or scopes.
@@ -107,6 +111,28 @@ The system SHALL show authorized Platform Administrators organization metadata, 
 - **WHEN** a Platform Administrator requests an unknown organization ID
 - **THEN** the system returns not found without leaking unrelated records
 
+### Requirement: Organization detail tabbed UI
+The organization detail page SHALL show only one primary detail section at a time, defaulting to Offices.
+
+#### Scenario: Initial offices tab
+- **WHEN** a Platform Administrator opens an organization detail page
+- **THEN** the Offices tab is selected and administrators, audit history, and lifecycle controls are not shown until their tabs are selected
+
+#### Scenario: Switch detail tabs
+- **WHEN** a Platform Administrator selects Administrators or Audit history
+- **THEN** the page replaces the visible detail section without navigating away from the organization detail page
+
+### Requirement: Organization office listing
+The system SHALL provide a Platform Administrator organization-scoped offices table with search, office-type filter, status filter, pagination, and links to office details.
+
+#### Scenario: Filter organization offices
+- **WHEN** a Platform Administrator supplies search, office type, status, page, and page-size parameters for an organization's offices
+- **THEN** the system returns only offices for that organization with pagination metadata
+
+#### Scenario: Open office from organization detail
+- **WHEN** a Platform Administrator clicks an office row action from organization detail
+- **THEN** the user is routed to that office's detail page
+
 ### Requirement: Organization editing
 The system SHALL allow Platform Administrators to edit only organization name and approved metadata, SHALL prevent mass assignment of lifecycle/protected fields, and SHALL audit sanitized before and after state.
 
@@ -162,13 +188,21 @@ The system SHALL allow Platform Administrators to list Organization Administrato
 - **WHEN** a Platform Administrator views an organization
 - **THEN** only `ORG_ADMIN` accounts assigned to that organization are returned
 
+#### Scenario: Directory lists all Organization Administrators
+- **WHEN** a Platform Administrator opens `/admin/organization-admins`
+- **THEN** the system shows a paginated table of `ORG_ADMIN` accounts across organizations with organization, account, invitation, and creation metadata
+
+#### Scenario: Directory filters Organization Administrators
+- **WHEN** a Platform Administrator supplies search text, account status, invitation status, page, and page-size parameters
+- **THEN** the system returns the matching Organization Administrators and pagination metadata
+
 #### Scenario: Edit administrator metadata
 - **WHEN** a Platform Administrator changes an Organization Administrator's approved name, email, or phone fields
 - **THEN** the system preserves its organization, office, account type, and role and audits sanitized before/after metadata
 
 #### Scenario: Suspend administrator
 - **WHEN** a Platform Administrator confirms suspension of an active Organization Administrator
-- **THEN** the account becomes suspended, protected access is denied, the organization remains unchanged, and the action is audited
+- **THEN** the account becomes suspended, login/session access is denied with `Account is suspended`, the organization remains unchanged, and the action is audited
 
 #### Scenario: Cross-organization administrator ID
 - **WHEN** an administrator ID does not belong to the organization in the request path
@@ -194,7 +228,7 @@ The system SHALL derive the current actor from the authenticated session, revali
 
 #### Scenario: Revoked existing session
 - **WHEN** an account is suspended after a JWT was issued
-- **THEN** the next protected operation is denied despite the JWT's unexpired role claim
+- **THEN** the next protected operation is denied despite the JWT's unexpired role claim and the web session cookie is cleared on session lookup
 
 ### Requirement: Append-only audit logging
 The system SHALL append immutable, sanitized audit entries for organization creation/update/suspend/reactivate/archive, initial administrator creation, administrator update/suspend, role assignment, and invitation creation.
@@ -210,6 +244,17 @@ The system SHALL append immutable, sanitized audit entries for organization crea
 #### Scenario: Sensitive audit payload
 - **WHEN** an audit payload is built
 - **THEN** passwords, hashes, raw tokens, secrets, biometrics, beneficiary data, and private documents are excluded
+
+### Requirement: Audit history table
+The organization detail UI SHALL display organization-management audit history in a table.
+
+#### Scenario: View audit history
+- **WHEN** a Platform Administrator selects the Audit history tab
+- **THEN** audit events are shown in table columns for action, entity, outcome, reason, and occurred time
+
+#### Scenario: Sensitive lifecycle controls
+- **WHEN** the Audit history tab is shown
+- **THEN** organization lifecycle controls are collapsed by default and require explicit expansion before suspend, reactivate, or archive controls are visible
 
 ### Requirement: Prevention of unauthorized beneficiary and application access
 The system MUST NOT authorize `PLATFORM_ADMIN` for beneficiary, biometric, application, document, evaluation, approval/rejection, program/rule/workflow authoring, recommendation, or disbursement operations.

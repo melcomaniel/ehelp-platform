@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import {
+  clearNestSessionCookie,
   getNestAccessToken,
   nestServerFetch,
   profileFromNestUser,
@@ -19,6 +20,7 @@ export async function GET() {
       nestUser: user,
     });
   } catch {
+    await clearNestSessionCookie();
     return NextResponse.json({ user: null }, { status: 401 });
   }
 }

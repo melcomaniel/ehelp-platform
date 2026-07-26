@@ -56,6 +56,6 @@ export async function fetchStaffAccess(
   return {
     profile,
     region,
-    permissions: permissionsForRole(profile.role, regional),
+    permissions: profile.isActive ? permissionsForRole(profile.role, regional) : [],
   };
 }

@@ -30,6 +30,8 @@
 - [x] 4.6 Implement Organization Administrator list, allowed metadata editing, and independent account suspension with path tenant checks
 - [x] 4.7 Expose authenticated Nest organization-management endpoints with server-derived actor identity and safe standard errors
 - [x] 4.8 Add service/controller unit and integration tests for access, transaction rollback, duplicates, lifecycle, cross-tenant denial, invitation, and audit behavior
+- [x] 4.9 Add Platform Administrator paginated Organization Admin directory endpoint
+- [x] 4.10 Add Platform Administrator organization-scoped offices endpoint with filters and pagination
 
 ## 5. Platform Administration Web UI
 
@@ -42,7 +44,11 @@
 - [x] 5.7 Build allowed organization editing UI and understandable duplicate/validation errors
 - [x] 5.8 Build accessible confirmation flows for suspend, reactivate, and suspended-only archive with invalid actions disabled
 - [x] 5.9 Build Organization Administrator metadata editing and account-suspension UI
-- [x] 5.10 Add supported UI/unit tests for API error mapping, state helpers, forbidden navigation, and validation
+- [x] 5.10 Add Organization Admins directory page with table, search, filters, pagination, and organization detail links
+- [x] 5.11 Convert organization detail sections to local tabs, defaulting to Offices
+- [x] 5.12 Render organization offices and audit history as tables and keep lifecycle controls collapsed by default
+- [x] 5.13 Hide admin sidebar navigation for suspended sessions and clear stale web sessions
+- [x] 5.14 Add supported UI/unit tests for API error mapping, state helpers, forbidden navigation, and validation
 
 ## 6. Documentation and Verification
 
