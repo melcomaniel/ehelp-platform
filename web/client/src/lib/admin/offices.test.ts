@@ -4,6 +4,7 @@ import {
   archiveRegionalOffice,
   canArchiveOffice,
   officeStatusLabel,
+  reactivateRegionalOffice,
 } from "./offices";
 
 describe("office UI policy", () => {
@@ -55,6 +56,33 @@ describe("office UI policy", () => {
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({ reason: "Regional consolidation" }),
+      }),
+    );
+  });
+
+  it("reactivates Regional Offices through the canonical PATCH endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "office-1",
+          organization_id: "org-1",
+          status: "active",
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await reactivateRegionalOffice("org-1", "office-1");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/nest/organizations/org-1/offices/office-1/reactivate",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({}),
       }),
     );
   });

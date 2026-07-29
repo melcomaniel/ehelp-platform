@@ -424,3 +424,121 @@ describe('OfficeService regional office archive', () => {
     );
   });
 });
+
+describe('OfficeService regional office reactivation', () => {
+  it('reactivates an owned archived Regional Office and writes one audit record', async () => {
+    const { service, office, officeSaves, auditSaves } = makeArchiveService({
+      status: 'archived',
+    });
+
+    const result = await service.reactivateRegionalOffice(
+      'user-1',
+      'org-1',
+      'office-1',
+      { requestId: 'req-reactivate', ipAddress: '127.0.0.1' },
+    );
+
+    expect(result).toMatchObject({ id: 'office-1', status: 'active' });
+    expect(office.status).toBe('active');
+    expect(office.archivedAt).toBeNull();
+    expect(office.lifecycleReason).toBeNull();
+    expect(officeSaves).toHaveLength(1);
+    expect(auditSaves).toHaveLength(1);
+    expect(auditSaves[0]).toMatchObject({
+      organizationId: 'org-1',
+      actorUserId: 'user-1',
+      action: 'office_reactivated',
+      entityType: 'office',
+      entityId: 'office-1',
+      outcome: 'success',
+      requestId: 'req-reactivate',
+    });
+  });
+
+  it('rejects a mismatched organization before starting a transaction', async () => {
+    const { service, dataSource } = makeArchiveService({
+      status: 'archived',
+    });
+
+    await expect(
+      service.reactivateRegionalOffice('user-1', 'org-2', 'office-1'),
+    ).rejects.toThrow(ForbiddenException);
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects actors without the active Organization Administrator context', async () => {
+    const missingRole = makeArchiveService({
+      status: 'archived',
+      includeActor: false,
+    });
+    const inactive = makeArchiveService({
+      status: 'archived',
+      actorActive: false,
+    });
+    const suspendedOrganization = makeArchiveService({
+      status: 'archived',
+      organizationStatus: 'suspended',
+    });
+
+    await expect(
+      missingRole.service.reactivateRegionalOffice('user-1', 'org-1', 'office-1'),
+    ).rejects.toThrow(ForbiddenException);
+    await expect(
+      inactive.service.reactivateRegionalOffice('user-1', 'org-1', 'office-1'),
+    ).rejects.toThrow(UnauthorizedException);
+    await expect(
+      suspendedOrganization.service.reactivateRegionalOffice(
+        'user-1',
+        'org-1',
+        'office-1',
+      ),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('does not reveal an office outside the scoped organization', async () => {
+    const { service } = makeArchiveService({
+      status: 'archived',
+      officeFound: false,
+    });
+
+    await expect(
+      service.reactivateRegionalOffice(
+        'user-1',
+        'org-1',
+        'office-from-another-org',
+      ),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('rejects non-regional offices on the canonical endpoint', async () => {
+    const { service, auditSaves } = makeArchiveService({
+      status: 'archived',
+      level: 'provincial',
+    });
+
+    await expect(
+      service.reactivateRegionalOffice('user-1', 'org-1', 'office-1'),
+    ).rejects.toThrow(ConflictException);
+    expect(auditSaves).toHaveLength(0);
+  });
+
+  it('rejects reactivating an office that is already active', async () => {
+    const { service, auditSaves } = makeArchiveService({ status: 'active' });
+
+    await expect(
+      service.reactivateRegionalOffice('user-1', 'org-1', 'office-1'),
+    ).rejects.toThrow(ConflictException);
+    expect(auditSaves).toHaveLength(0);
+  });
+
+  it('keeps the legacy route behavior through the shared reactivate operation', async () => {
+    const { service, office, auditSaves } = makeArchiveService({
+      status: 'archived',
+    });
+
+    await service.reactivate('user-1', 'office-1');
+
+    expect(office.status).toBe('active');
+    expect(auditSaves).toHaveLength(1);
+  });
+});

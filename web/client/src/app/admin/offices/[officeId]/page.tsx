@@ -14,6 +14,7 @@ import {
   listParentOfficeOptions,
   officeStatusLabel,
   reactivateOffice,
+  reactivateRegionalOffice,
   updateOffice,
   type OfficeDetail,
   type OfficeLevel,
@@ -116,7 +117,12 @@ export default function OfficeDetailPage() {
                 reason,
               )
             : await archiveOffice(params.officeId, reason)
-          : await reactivateOffice(params.officeId),
+          : office.level === "regional"
+            ? await reactivateRegionalOffice(
+                office.organization_id,
+                params.officeId,
+              )
+            : await reactivateOffice(params.officeId),
       );
       setAction(null);
     } catch (caught) {

@@ -144,6 +144,21 @@ export class OrganizationOfficeController {
     );
   }
 
+  @Patch(':officeId/reactivate')
+  reactivateRegionalOffice(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+    @Param('officeId') officeId: string,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.offices.reactivateRegionalOffice(
+      req.user.sub,
+      organizationId,
+      officeId,
+      this.meta(req, requestId),
+    );
+  }
+
   private meta(req: Request, requestId?: string) {
     return {
       ipAddress: req.ip || null,

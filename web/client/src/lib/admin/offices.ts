@@ -170,3 +170,16 @@ export function reactivateOffice(id: string) {
     body: {},
   });
 }
+
+export function reactivateRegionalOffice(
+  organizationId: string,
+  officeId: string,
+) {
+  return nestFetch<OfficeDetail>(
+    `/organizations/${organizationId}/offices/${officeId}/reactivate`,
+    {
+      method: "PATCH",
+      body: {},
+    },
+  );
+}

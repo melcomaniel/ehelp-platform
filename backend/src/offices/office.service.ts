@@ -436,12 +436,42 @@ export class OfficeService {
 
   async reactivate(actorId: string, officeId: string, meta: RequestMeta = {}) {
     const actor = await this.requireOrgAdmin(actorId);
+    return this.reactivateForActor(actorId, actor, officeId, meta, false);
+  }
+
+  async reactivateRegionalOffice(
+    actorId: string,
+    organizationId: string,
+    officeId: string,
+    meta: RequestMeta = {},
+  ) {
+    const actor = await this.requireOrgAdmin(actorId);
+    if (organizationId !== actor.organization_id) {
+      throw new ForbiddenException(
+        'Cannot reactivate an office outside your organization',
+      );
+    }
+    return this.reactivateForActor(actorId, actor, officeId, meta, true);
+  }
+
+  private async reactivateForActor(
+    actorId: string,
+    actor: OrgAdminActor,
+    officeId: string,
+    meta: RequestMeta,
+    requireRegional: boolean,
+  ) {
     await this.dataSource.transaction(async (manager) => {
       const office = await this.lockOffice(
         manager,
         actor.organization_id,
         officeId,
       );
+      if (requireRegional && office.level !== 'regional') {
+        throw new ConflictException(
+          'Only Regional Offices can use this reactivate endpoint',
+        );
+      }
       assertOfficeTransition(office.status as OfficeStatus, 'active');
       if (office.parentOfficeId) {
         await this.validateParent(
