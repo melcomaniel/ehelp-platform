@@ -127,6 +127,23 @@ export class OrganizationOfficeController {
     );
   }
 
+  @Patch(':officeId/archive')
+  archiveRegionalOffice(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+    @Param('officeId') officeId: string,
+    @Body() body: OfficeLifecycleReasonDto,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.offices.archiveRegionalOffice(
+      req.user.sub,
+      organizationId,
+      officeId,
+      body.reason,
+      this.meta(req, requestId),
+    );
+  }
+
   private meta(req: Request, requestId?: string) {
     return {
       ipAddress: req.ip || null,

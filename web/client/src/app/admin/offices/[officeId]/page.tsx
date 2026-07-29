@@ -8,6 +8,7 @@ import { useAdminAccess } from "@/lib/admin/access-provider";
 import {
   OFFICE_LEVEL_LABEL,
   archiveOffice,
+  archiveRegionalOffice,
   canArchiveOffice,
   getOffice,
   listParentOfficeOptions,
@@ -99,7 +100,7 @@ export default function OfficeDetailPage() {
 
   async function applyLifecycle(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!action) return;
+    if (!action || !office) return;
     setBusy(true);
     setError(null);
     const reason = String(
@@ -108,7 +109,13 @@ export default function OfficeDetailPage() {
     try {
       setOffice(
         action === "archive"
-          ? await archiveOffice(params.officeId, reason)
+          ? office.level === "regional"
+            ? await archiveRegionalOffice(
+                office.organization_id,
+                params.officeId,
+                reason,
+              )
+            : await archiveOffice(params.officeId, reason)
           : await reactivateOffice(params.officeId),
       );
       setAction(null);
@@ -309,7 +316,9 @@ export default function OfficeDetailPage() {
               disabled={!canArchiveOffice(office)}
               onClick={() => setAction("archive")}
             >
-              Archive
+              {office.level === "regional"
+                ? "Archive Regional Office"
+                : "Archive Office"}
             </Button>
             <Button
               variant="outline"
@@ -332,7 +341,9 @@ export default function OfficeDetailPage() {
               aria-labelledby="office-lifecycle-title"
             >
               <p id="office-lifecycle-title" className="font-medium">
-                Confirm {action} for {office.name}
+                {action === "archive" && office.level === "regional"
+                  ? `Confirm Archive Regional Office for ${office.name}`
+                  : `Confirm ${action} for ${office.name}`}
               </p>
               {action === "archive" && (
                 <div className="space-y-2">
@@ -359,7 +370,9 @@ export default function OfficeDetailPage() {
                   variant={action === "archive" ? "destructive" : "default"}
                   disabled={busy}
                 >
-                  Confirm {action}
+                  {action === "archive" && office.level === "regional"
+                    ? "Archive Regional Office"
+                    : `Confirm ${action}`}
                 </Button>
               </div>
             </form>

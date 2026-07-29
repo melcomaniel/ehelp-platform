@@ -147,6 +147,7 @@ can manage offices in their own organization through:
 | `GET`, `PATCH` | `/admin/offices/:id` | View or edit allowed office metadata |
 | `POST` | `/admin/offices/:id/archive` | Soft-archive an active office; reason required; active children block archive |
 | `POST` | `/admin/offices/:id/reactivate` | Restore an archived office when the organization is active |
+| `PATCH` | `/organizations/:organizationId/offices/:id/archive` | Canonical Regional Office archive route; tenant ownership and regional level required |
 
 Migration `010_platform_admin_organization_management.sql` adds archived
 lifecycle state, SSO-compatible invitation records, normalized code/idempotency

@@ -150,6 +150,20 @@ export function archiveOffice(id: string, reason: string) {
   });
 }
 
+export function archiveRegionalOffice(
+  organizationId: string,
+  officeId: string,
+  reason: string,
+) {
+  return nestFetch<OfficeDetail>(
+    `/organizations/${organizationId}/offices/${officeId}/archive`,
+    {
+      method: "PATCH",
+      body: { reason },
+    },
+  );
+}
+
 export function reactivateOffice(id: string) {
   return nestFetch<OfficeDetail>(`/admin/offices/${id}/reactivate`, {
     method: "POST",

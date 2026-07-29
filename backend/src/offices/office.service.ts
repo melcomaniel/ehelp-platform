@@ -366,12 +366,44 @@ export class OfficeService {
     meta: RequestMeta = {},
   ) {
     const actor = await this.requireOrgAdmin(actorId);
+    return this.archiveForActor(actorId, actor, officeId, reason, meta, false);
+  }
+
+  async archiveRegionalOffice(
+    actorId: string,
+    organizationId: string,
+    officeId: string,
+    reason: string,
+    meta: RequestMeta = {},
+  ) {
+    const actor = await this.requireOrgAdmin(actorId);
+    if (organizationId !== actor.organization_id) {
+      throw new ForbiddenException(
+        'Cannot archive an office outside your organization',
+      );
+    }
+    return this.archiveForActor(actorId, actor, officeId, reason, meta, true);
+  }
+
+  private async archiveForActor(
+    actorId: string,
+    actor: OrgAdminActor,
+    officeId: string,
+    reason: string,
+    meta: RequestMeta,
+    requireRegional: boolean,
+  ) {
     await this.dataSource.transaction(async (manager) => {
       const office = await this.lockOffice(
         manager,
         actor.organization_id,
         officeId,
       );
+      if (requireRegional && office.level !== 'regional') {
+        throw new ConflictException(
+          'Only Regional Offices can use this archive endpoint',
+        );
+      }
       assertOfficeTransition(office.status as OfficeStatus, 'archived');
       const activeChildren = await manager.query<Array<{ count: number }>>(
         `SELECT count(*)::int AS count
@@ -432,8 +464,45 @@ export class OfficeService {
         after: this.entityState(office),
         ...meta,
       });
+      await this.resumeDeferredWorkflowTasks(manager, office.id);
     });
     return this.detail(actorId, officeId);
+  }
+
+  private async resumeDeferredWorkflowTasks(
+    manager: EntityManager,
+    officeId: string,
+  ) {
+    await manager.query(
+      `INSERT INTO workflow_tasks (
+         application_id, workflow_step_id, status
+       )
+       SELECT a.id, step.id, 'pending'
+       FROM applications a
+       JOIN workflow_definitions wd
+         ON wd.program_template_version_id = a.program_template_version_id
+       JOIN LATERAL (
+         SELECT ws.id
+         FROM workflow_steps ws
+         WHERE ws.workflow_definition_id = wd.id
+           AND ws.step_type = CASE
+             WHEN a.status = 'in_evaluation' THEN 'evaluation'
+             WHEN a.status = 'in_approval' THEN 'approval'
+           END
+         ORDER BY ws.sort_order ASC
+         LIMIT 1
+       ) step ON true
+       WHERE a.office_id = $1
+         AND a.status IN ('in_evaluation', 'in_approval')
+         AND NOT EXISTS (
+           SELECT 1
+           FROM workflow_tasks task
+           WHERE task.application_id = a.id
+             AND task.workflow_step_id = step.id
+             AND task.status = 'pending'
+         )`,
+      [officeId],
+    );
   }
 
   private async requireOrgAdmin(actorId: string): Promise<OrgAdminActor> {

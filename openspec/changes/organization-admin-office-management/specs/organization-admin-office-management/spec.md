@@ -60,8 +60,8 @@ The system SHALL allow Organization Administrators to edit approved office metad
 - **WHEN** allowed metadata is updated
 - **THEN** changes are persisted and before/after state is written to the audit log
 
-### Requirement: Office archive or deactivation
-The system SHALL implement ordinary delete as archive/deactivation, MUST NOT physically delete offices through Office Management, SHALL require confirmation and a reason, SHALL preserve historical data, and SHALL reject archive when active child offices exist.
+### Requirement: Office archive
+The system SHALL implement ordinary delete as archive, MUST NOT physically delete offices through Office Management, SHALL require confirmation and a reason, SHALL preserve historical data, and SHALL reject archive when active child offices exist. Office suspension SHALL mean archive and SHALL NOT introduce a third office state.
 
 #### Scenario: Archive office
 - **GIVEN** an active office with no active child offices
@@ -75,7 +75,29 @@ The system SHALL implement ordinary delete as archive/deactivation, MUST NOT phy
 
 #### Scenario: Physical deletion prevention
 - **WHEN** the user-facing action is labelled delete
-- **THEN** the system archives or deactivates the office and deletes no historical records
+- **THEN** the system archives the office and deletes no historical records
+
+#### Scenario: Canonical Regional Office archive
+- **GIVEN** an active Regional Office owned by the Organization Administrator's organization
+- **WHEN** the administrator calls the organization-scoped archive endpoint with a reason
+- **THEN** the office is archived through the shared lifecycle operation
+
+#### Scenario: Cross-organization or non-regional archive
+- **WHEN** the administrator uses the Regional Office archive endpoint for another organization or a non-regional office
+- **THEN** the request is rejected and no office or audit data is changed
+
+### Requirement: Archived office work assignment
+The system SHALL exclude archived offices from new-work selectors, MUST reject new applications and draft submissions for archived offices, and MUST NOT create new workflow tasks for them.
+
+#### Scenario: Complete pre-archive work
+- **GIVEN** a pending workflow task created before its office was archived
+- **WHEN** its assigned evaluator or approver completes the task
+- **THEN** the completion is retained and no successor task is created while the office remains archived
+
+#### Scenario: Resume deferred workflow
+- **GIVEN** an in-flight application whose next task was deferred by office archival
+- **WHEN** the office is reactivated
+- **THEN** the system idempotently creates the missing task for the application's current stage
 
 ### Requirement: Office reactivation
 The system SHALL allow eligible archived or inactive offices to be reactivated when the organization is active and SHALL append an audit entry without reactivating separately suspended users or dependent records.

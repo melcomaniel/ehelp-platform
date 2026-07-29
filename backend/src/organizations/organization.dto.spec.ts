@@ -23,16 +23,18 @@ function validInput() {
 }
 
 describe('CreateOrganizationDto', () => {
-  it('accepts a government admin email and baseline-compliant policy', async () => {
+  it('accepts a Gmail admin email and baseline-compliant policy', async () => {
+    const input = validInput();
+    input.initial_admin.email = 'admin@gmail.com';
     const errors = await validate(
-      plainToInstance(CreateOrganizationDto, validInput()),
+      plainToInstance(CreateOrganizationDto, input),
     );
     expect(errors).toHaveLength(0);
   });
 
-  it('rejects a non-government initial administrator email', async () => {
+  it('rejects an invalid initial administrator email', async () => {
     const input = validInput();
-    input.initial_admin.email = 'admin@example.com';
+    input.initial_admin.email = 'not-an-email';
     const errors = await validate(
       plainToInstance(CreateOrganizationDto, input),
     );

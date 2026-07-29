@@ -218,7 +218,17 @@ export class DomainService {
     const office = await this.offices.findOne({
       where: { id: input.office_id },
     });
-    if (!office) throw new BadRequestException('Invalid office_id');
+    if (!office || office.status !== 'active') {
+      throw new BadRequestException('Office is not available for new work');
+    }
+    if (
+      beneficiaryUser.organizationId &&
+      beneficiaryUser.organizationId !== office.organizationId
+    ) {
+      throw new ForbiddenException(
+        'Office does not belong to the beneficiary organization',
+      );
+    }
 
     const orgId =
       beneficiaryUser.organizationId ??
@@ -294,6 +304,7 @@ export class DomainService {
     const app = await this.applications.findOne({ where: { id } });
     if (!app) throw new NotFoundException('Application not found');
     await this.assertCanAccess(actorUserId, app);
+    await this.assertOfficeAcceptsNewWork(app.officeId);
     if (app.status !== 'draft' && app.status !== 'submitted') {
       throw new BadRequestException('Only draft applications can be submitted');
     }
@@ -351,26 +362,21 @@ export class DomainService {
     if (!app) throw new NotFoundException('Application not found');
     await this.assertEvaluator(actorUserId);
     await this.assertCanAccess(actorUserId, app);
+    const evaluationTask = await this.requireActionableTask(
+      actorUserId,
+      app,
+      'evaluation',
+    );
     app.evaluatorNotes = input.notes ?? app.evaluatorNotes;
     app.status = 'in_approval';
     await this.applications.save(app);
 
-    const pending = await this.tasks.find({
-      where: { applicationId: app.id, status: 'pending' },
-    });
-    for (const t of pending) {
-      const step = await this.steps.findOne({
-        where: { id: t.workflowStepId },
-      });
-      if (step?.stepType === 'evaluation') {
-        t.status = 'completed';
-        t.decision = 'endorse';
-        t.notes = input.notes ?? null;
-        t.assigneeUserId = actorUserId;
-        t.completedAt = new Date();
-        await this.tasks.save(t);
-      }
-    }
+    evaluationTask.status = 'completed';
+    evaluationTask.decision = 'endorse';
+    evaluationTask.notes = input.notes ?? null;
+    evaluationTask.assigneeUserId = actorUserId;
+    evaluationTask.completedAt = new Date();
+    await this.tasks.save(evaluationTask);
     await this.spawnApprovalTask(app);
 
     return {
@@ -417,6 +423,11 @@ export class DomainService {
     if (!app) throw new NotFoundException('Application not found');
     await this.assertApprover(actorUserId);
     await this.assertCanAccess(actorUserId, app);
+    const approvalTask = await this.requireActionableTask(
+      actorUserId,
+      app,
+      'approval',
+    );
 
     app.approverNotes = input.notes ?? null;
     app.decidedAt = new Date();
@@ -426,17 +437,12 @@ export class DomainService {
     app.status = input.approve ? 'approved' : 'rejected';
     await this.applications.save(app);
 
-    const pending = await this.tasks.find({
-      where: { applicationId: app.id, status: 'pending' },
-    });
-    for (const t of pending) {
-      t.status = 'completed';
-      t.decision = input.approve ? 'approve' : 'reject';
-      t.notes = input.notes ?? null;
-      t.assigneeUserId = actorUserId;
-      t.completedAt = new Date();
-      await this.tasks.save(t);
-    }
+    approvalTask.status = 'completed';
+    approvalTask.decision = input.approve ? 'approve' : 'reject';
+    approvalTask.notes = input.notes ?? null;
+    approvalTask.assigneeUserId = actorUserId;
+    approvalTask.completedAt = new Date();
+    await this.tasks.save(approvalTask);
 
     return this.serializeApplication(app.id);
   }
@@ -586,6 +592,54 @@ export class DomainService {
     }
   }
 
+  private async assertOfficeAcceptsNewWork(officeId: string) {
+    const office = await this.offices.findOne({ where: { id: officeId } });
+    if (!office || office.status !== 'active') {
+      throw new BadRequestException('Office is not available for new work');
+    }
+  }
+
+  private async requireActionableTask(
+    actorUserId: string,
+    app: ApplicationEntity,
+    stepType: 'evaluation' | 'approval',
+  ) {
+    const actor = await this.requireUser(actorUserId);
+    if (actor.officeId && actor.officeId !== app.officeId) {
+      throw new ForbiddenException(
+        'Application is assigned to a different office',
+      );
+    }
+
+    const office = await this.offices.findOne({ where: { id: app.officeId } });
+    if (!office) {
+      throw new ForbiddenException('Application office is unavailable');
+    }
+
+    const pending = await this.tasks.find({
+      where: { applicationId: app.id, status: 'pending' },
+    });
+    for (const task of pending) {
+      const step = await this.steps.findOne({
+        where: { id: task.workflowStepId },
+      });
+      if (step?.stepType !== stepType) continue;
+      if (
+        office.status === 'archived' &&
+        (!office.archivedAt || task.createdAt > office.archivedAt)
+      ) {
+        throw new ForbiddenException(
+          'Archived offices cannot receive new work',
+        );
+      }
+      return task;
+    }
+
+    throw new ForbiddenException(
+      `No pending ${stepType} task is assigned to this application`,
+    );
+  }
+
   private async resolveVersion(templateId: string) {
     let version = await this.versions.findOne({
       where: { id: templateId },
@@ -637,6 +691,8 @@ export class DomainService {
   }
 
   private async spawnEvaluationTask(app: ApplicationEntity) {
+    const office = await this.offices.findOne({ where: { id: app.officeId } });
+    if (!office || office.status !== 'active') return;
     const wf = await this.dataSource.query(
       `SELECT id FROM workflow_definitions WHERE program_template_version_id = $1 LIMIT 1`,
       [app.programTemplateVersionId],
@@ -664,6 +720,8 @@ export class DomainService {
   }
 
   private async spawnApprovalTask(app: ApplicationEntity) {
+    const office = await this.offices.findOne({ where: { id: app.officeId } });
+    if (!office || office.status !== 'active') return;
     const wf = await this.dataSource.query(
       `SELECT id FROM workflow_definitions WHERE program_template_version_id = $1 LIMIT 1`,
       [app.programTemplateVersionId],

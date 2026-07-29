@@ -17,9 +17,9 @@ Offices belong to exactly one Organization because programs, applications, staff
 
 ### Scope
 
-In scope are happy-path Organization Administrator office lifecycle management, search/filter/pagination, parent-office selection, tenant isolation, validation, audit logging, SQL migration, backend APIs, web UI, tests, and docs.
+In scope are happy-path Organization Administrator office lifecycle management, search/filter/pagination, parent-office selection, tenant isolation, validation, audit logging, SQL migration, backend APIs, web UI, tests, docs, and the narrow application/workflow guards required to prevent archived offices from receiving new work.
 
-Explicitly excluded are Platform Administrator Organization CRUD, Office Administrator account creation/assignment, Evaluator/Approver management, staff reassignment, program-office customization, analytics dashboards, beneficiary registration, applications, workflow/rule configuration, evaluation, approval, disbursement, permanent office deletion, cross-organization office management, automatic central-office creation, and new authentication providers.
+Explicitly excluded are Platform Administrator Organization CRUD, Office Administrator account creation/assignment, Evaluator/Approver management, staff reassignment, program-office customization, analytics dashboards, beneficiary registration, broader application or workflow redesign, rule configuration, disbursement, permanent office deletion, cross-organization office management, automatic central-office creation, and new authentication providers.
 
 ## Capabilities
 

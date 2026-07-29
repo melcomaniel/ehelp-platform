@@ -1,4 +1,9 @@
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { OfficeEntity } from '../domain/domain.entities';
 import { AuditLogEntity } from '../organizations/organization.entities';
@@ -170,5 +175,252 @@ describe('OfficeService regional office creation', () => {
         code: 'R3',
       }),
     ).rejects.toThrow(ConflictException);
+  });
+});
+
+function makeArchiveService(options?: {
+  actorOrganizationId?: string;
+  actorStatus?: string;
+  actorActive?: boolean;
+  organizationStatus?: string;
+  includeActor?: boolean;
+  level?: string;
+  status?: string;
+  activeChildren?: number;
+  officeFound?: boolean;
+}) {
+  const office = {
+    id: 'office-1',
+    organizationId: 'org-1',
+    parentOfficeId: null,
+    name: 'Region III',
+    code: 'REGION_III',
+    normalizedCode: 'REGION_III',
+    level: options?.level ?? 'regional',
+    status: options?.status ?? 'active',
+    archivedAt: null as Date | null,
+    lifecycleReason: null as string | null,
+    createdByUserId: 'user-1',
+    updatedByUserId: 'user-1',
+  };
+  const auditSaves: Array<Record<string, unknown>> = [];
+  const officeSaves: Array<Record<string, unknown>> = [];
+  const manager = {
+    query: jest.fn(async (sql: string) => {
+      if (sql.includes('count(*)::int AS count')) {
+        return [{ count: options?.activeChildren ?? 0 }];
+      }
+      return [];
+    }),
+    getRepository: jest.fn((entity: unknown) => {
+      if (entity === OfficeEntity) {
+        return {
+          findOne: jest.fn(async () =>
+            options?.officeFound === false ? null : office,
+          ),
+          save: jest.fn(async (value: Record<string, unknown>) => {
+            officeSaves.push({ ...value });
+            return value;
+          }),
+        };
+      }
+      if (entity === AuditLogEntity) {
+        return {
+          save: jest.fn(async (value: Record<string, unknown>) => {
+            auditSaves.push(value);
+            return value;
+          }),
+        };
+      }
+      throw new Error('Unexpected repository');
+    }),
+  };
+  const detailRow = () => ({
+    ...officeRow,
+    level: office.level,
+    status: office.status,
+    archived_at: office.archivedAt,
+    lifecycle_reason: office.lifecycleReason,
+  });
+  const dataSource = {
+    query: jest.fn(async (sql: string) => {
+      if (sql.includes('FROM user_accounts u')) {
+        if (options?.includeActor === false) return [];
+        return [
+          {
+            ...actor,
+            organization_id: options?.actorOrganizationId ?? 'org-1',
+            status: options?.actorStatus ?? 'active',
+            is_active: options?.actorActive ?? true,
+            organization_status: options?.organizationStatus ?? 'active',
+          },
+        ];
+      }
+      if (sql.includes('WHERE o.id = $1')) return [detailRow()];
+      return [];
+    }),
+    transaction: jest.fn(async (callback) => callback(manager)),
+  } as unknown as DataSource;
+
+  return {
+    service: new OfficeService(dataSource),
+    dataSource,
+    office,
+    officeSaves,
+    auditSaves,
+    manager,
+  };
+}
+
+describe('OfficeService regional office archive', () => {
+  it('archives an owned Regional Office and writes one audit record', async () => {
+    const { service, office, officeSaves, auditSaves } = makeArchiveService();
+
+    const result = await service.archiveRegionalOffice(
+      'user-1',
+      'org-1',
+      'office-1',
+      'Regional consolidation',
+      { requestId: 'req-archive', ipAddress: '127.0.0.1' },
+    );
+
+    expect(result).toMatchObject({
+      id: 'office-1',
+      status: 'archived',
+      lifecycle_reason: 'Regional consolidation',
+    });
+    expect(office.status).toBe('archived');
+    expect(office.archivedAt).toBeInstanceOf(Date);
+    expect(officeSaves).toHaveLength(1);
+    expect(auditSaves).toHaveLength(1);
+    expect(auditSaves[0]).toMatchObject({
+      organizationId: 'org-1',
+      actorUserId: 'user-1',
+      action: 'office_archived',
+      entityType: 'office',
+      entityId: 'office-1',
+      reason: 'Regional consolidation',
+      outcome: 'success',
+      requestId: 'req-archive',
+    });
+  });
+
+  it('rejects a mismatched organization before starting a transaction', async () => {
+    const { service, dataSource } = makeArchiveService();
+
+    await expect(
+      service.archiveRegionalOffice(
+        'user-1',
+        'org-2',
+        'office-1',
+        'Invalid scope',
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects actors without the active Organization Administrator context', async () => {
+    const missingRole = makeArchiveService({ includeActor: false });
+    const inactive = makeArchiveService({ actorActive: false });
+    const suspendedOrganization = makeArchiveService({
+      organizationStatus: 'suspended',
+    });
+
+    await expect(
+      missingRole.service.archiveRegionalOffice(
+        'user-1',
+        'org-1',
+        'office-1',
+        'Missing role',
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    await expect(
+      inactive.service.archiveRegionalOffice(
+        'user-1',
+        'org-1',
+        'office-1',
+        'Inactive account',
+      ),
+    ).rejects.toThrow(UnauthorizedException);
+    await expect(
+      suspendedOrganization.service.archiveRegionalOffice(
+        'user-1',
+        'org-1',
+        'office-1',
+        'Suspended organization',
+      ),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('does not reveal an office outside the scoped organization', async () => {
+    const { service } = makeArchiveService({ officeFound: false });
+
+    await expect(
+      service.archiveRegionalOffice(
+        'user-1',
+        'org-1',
+        'office-from-another-org',
+        'Cross-tenant request',
+      ),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('rejects non-regional offices on the canonical endpoint', async () => {
+    const { service, auditSaves } = makeArchiveService({
+      level: 'provincial',
+    });
+
+    await expect(
+      service.archiveRegionalOffice(
+        'user-1',
+        'org-1',
+        'office-1',
+        'Wrong endpoint',
+      ),
+    ).rejects.toThrow(ConflictException);
+    expect(auditSaves).toHaveLength(0);
+  });
+
+  it('retains the active-child restriction', async () => {
+    const { service, officeSaves, auditSaves } = makeArchiveService({
+      activeChildren: 1,
+    });
+
+    await expect(
+      service.archiveRegionalOffice(
+        'user-1',
+        'org-1',
+        'office-1',
+        'Parent closure',
+      ),
+    ).rejects.toThrow(ConflictException);
+    expect(officeSaves).toHaveLength(0);
+    expect(auditSaves).toHaveLength(0);
+  });
+
+  it('keeps the legacy route behavior through the shared archive operation', async () => {
+    const { service, office, auditSaves } = makeArchiveService();
+
+    await service.archive('user-1', 'office-1', 'Legacy client request');
+
+    expect(office.status).toBe('archived');
+    expect(auditSaves).toHaveLength(1);
+  });
+
+  it('idempotently backfills deferred workflow tasks on reactivation', async () => {
+    const { service, manager } = makeArchiveService({
+      status: 'archived',
+    });
+
+    await service.reactivate('user-1', 'office-1');
+
+    expect(manager.query).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO workflow_tasks'),
+      ['office-1'],
+    );
+    expect(manager.query).toHaveBeenCalledWith(
+      expect.stringContaining('NOT EXISTS'),
+      ['office-1'],
+    );
   });
 });
