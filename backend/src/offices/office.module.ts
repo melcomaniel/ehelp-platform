@@ -6,7 +6,10 @@ import {
   OrganizationEntity,
 } from '../organizations/organization.entities';
 import { UserAccountEntity } from '../users/user.entity';
-import { OfficeController } from './office.controller';
+import {
+  OfficeController,
+  OrganizationOfficeController,
+} from './office.controller';
 import { OfficeService } from './office.service';
 
 @Module({
@@ -18,7 +21,7 @@ import { OfficeService } from './office.service';
       UserAccountEntity,
     ]),
   ],
-  controllers: [OfficeController],
+  controllers: [OfficeController, OrganizationOfficeController],
   providers: [OfficeService],
 })
 export class OfficeModule {}

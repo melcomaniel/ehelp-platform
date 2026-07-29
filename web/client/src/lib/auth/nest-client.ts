@@ -42,6 +42,7 @@ export function profileFromNestUser(user: NestAuthUser): Profile {
     phone: user.phone,
     fullName: user.full_name ?? "",
     role: parseAppRole(user.role) as AppRole,
+    organizationId: user.organization_id ?? null,
     regionId: user.region_id ?? user.office_id ?? null,
     validationStatus:
       (user.validation_status as Profile["validationStatus"]) ?? "validated",

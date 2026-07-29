@@ -15,6 +15,7 @@ import type { Request } from 'express';
 import type { JwtPayload } from '../auth/jwt.strategy';
 import {
   CreateOfficeDto,
+  CreateRegionalOfficeDto,
   OfficeLifecycleReasonDto,
   OfficeListQueryDto,
   UpdateOfficeDto,
@@ -94,6 +95,34 @@ export class OfficeController {
     return this.offices.reactivate(
       req.user.sub,
       officeId,
+      this.meta(req, requestId),
+    );
+  }
+
+  private meta(req: Request, requestId?: string) {
+    return {
+      ipAddress: req.ip || null,
+      requestId: requestId?.trim() || null,
+    };
+  }
+}
+
+@Controller('organizations/:organizationId/offices')
+@UseGuards(AuthGuard('jwt'))
+export class OrganizationOfficeController {
+  constructor(private readonly offices: OfficeService) {}
+
+  @Post()
+  createRegionalOffice(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+    @Body() body: CreateRegionalOfficeDto,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.offices.createRegionalOffice(
+      req.user.sub,
+      organizationId,
+      body,
       this.meta(req, requestId),
     );
   }

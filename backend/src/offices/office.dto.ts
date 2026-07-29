@@ -70,6 +70,20 @@ export class CreateOfficeDto {
   parent_office_id?: string | null;
 }
 
+export class CreateRegionalOfficeDto {
+  @Transform(trim)
+  @IsString()
+  @MinLength(2)
+  @MaxLength(160)
+  name!: string;
+
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(40)
+  code!: string;
+}
+
 export class UpdateOfficeDto {
   @IsOptional()
   @Transform(trim)

@@ -11,6 +11,7 @@ import { AuditLogEntity } from '../organizations/organization.entities';
 import { sanitizeAuditState } from '../organizations/organization.policy';
 import {
   CreateOfficeDto,
+  CreateRegionalOfficeDto,
   OfficeListQueryDto,
   UpdateOfficeDto,
 } from './office.dto';
@@ -194,10 +195,59 @@ export class OfficeService {
     input: CreateOfficeDto,
     meta: RequestMeta = {},
   ) {
+    return this.createFlatOffice(
+      actorId,
+      {
+        name: input.name,
+        code: input.code,
+        level: input.level,
+        parent_office_id: input.parent_office_id ?? null,
+      },
+      meta,
+    );
+  }
+
+  async createRegionalOffice(
+    actorId: string,
+    organizationId: string,
+    input: CreateRegionalOfficeDto,
+    meta: RequestMeta = {},
+  ) {
     const actor = await this.requireOrgAdmin(actorId);
+    if (organizationId !== actor.organization_id) {
+      throw new ForbiddenException(
+        'Cannot create an office outside your organization',
+      );
+    }
+    return this.createFlatOffice(
+      actorId,
+      {
+        name: input.name,
+        code: input.code,
+        level: 'regional',
+        parent_office_id: null,
+      },
+      meta,
+      actor,
+    );
+  }
+
+  private async createFlatOffice(
+    actorId: string,
+    input: CreateOfficeDto,
+    meta: RequestMeta = {},
+    resolvedActor?: OrgAdminActor,
+  ) {
+    const actor = resolvedActor ?? (await this.requireOrgAdmin(actorId));
     try {
       const id = await this.dataSource.transaction(async (manager) => {
         const code = normalizeOfficeCode(input.code);
+        await this.ensureNameAvailable(
+          manager,
+          actor.organization_id,
+          input.name.trim(),
+          null,
+        );
         await this.validateParent(
           manager,
           actor.organization_id,
@@ -258,7 +308,16 @@ export class OfficeService {
           throw new ConflictException('Archived offices are read-only');
         }
         const before = this.entityState(office);
-        if (input.name !== undefined) office.name = input.name.trim();
+        if (input.name !== undefined) {
+          const name = input.name.trim();
+          await this.ensureNameAvailable(
+            manager,
+            actor.organization_id,
+            name,
+            officeId,
+          );
+          office.name = name;
+        }
         if (input.level !== undefined) office.level = input.level;
         if (input.code !== undefined) {
           const code = normalizeOfficeCode(input.code);
@@ -483,6 +542,27 @@ export class OfficeService {
     if (existing[0]) throw new ConflictException('Office code already exists');
   }
 
+  private async ensureNameAvailable(
+    manager: EntityManager,
+    organizationId: string,
+    name: string,
+    excludeOfficeId: string | null,
+  ) {
+    const params: unknown[] = [organizationId, name];
+    let exclude = '';
+    if (excludeOfficeId) {
+      params.push(excludeOfficeId);
+      exclude = `AND id <> $${params.length}`;
+    }
+    const existing = await manager.query<Array<{ id: string }>>(
+      `SELECT id FROM offices
+       WHERE organization_id = $1 AND lower(trim(name)) = lower(trim($2)) ${exclude}
+       LIMIT 1`,
+      params,
+    );
+    if (existing[0]) throw new ConflictException('Office name already exists');
+  }
+
   private async validateParent(
     manager: EntityManager,
     organizationId: string,
@@ -588,6 +668,9 @@ export class OfficeService {
       const message = String(error.message);
       if (message.includes('offices_org_normalized_code_uidx')) {
         throw new ConflictException('Office code already exists');
+      }
+      if (message.includes('offices_org_name_ci_uidx')) {
+        throw new ConflictException('Office name already exists');
       }
       if (message.includes('Office hierarchy cycle')) {
         throw new ConflictException('Office hierarchy cycle is not allowed');

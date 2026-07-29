@@ -28,6 +28,7 @@ export type Profile = {
   phone: string | null;
   fullName: string;
   role: AppRole;
+  organizationId: string | null;
   regionId: string | null;
   validationStatus: AccountValidationStatus;
   isActive: boolean;
@@ -76,6 +77,7 @@ export function profileFromRow(row: Record<string, unknown>): Profile {
     phone: (row.phone as string | null) ?? null,
     fullName: (row.full_name as string | null) ?? "",
     role: parseAppRole(row.role as string | null),
+    organizationId: (row.organization_id as string | null) ?? null,
     regionId: (row.region_id as string | null) ?? null,
     validationStatus:
       (row.validation_status as AccountValidationStatus | null) ?? "pending",

@@ -21,7 +21,8 @@ for f in \
   "${DB_ROOT}/migrations/009_staff_profiles.sql" \
   "${DB_ROOT}/migrations/010_platform_admin_organization_management.sql" \
   "${DB_ROOT}/migrations/011_organization_admin_office_management.sql" \
-  "${DB_ROOT}/migrations/012_backend_rbac_configuration.sql"
+  "${DB_ROOT}/migrations/012_backend_rbac_configuration.sql" \
+  "${DB_ROOT}/migrations/013_office_name_uniqueness.sql"
 do
   echo "[ehelp-db]   $(basename "$f")"
   "${PSQL[@]}" -f "$f"

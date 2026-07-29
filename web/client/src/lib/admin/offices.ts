@@ -115,6 +115,19 @@ export function createOffice(input: {
   });
 }
 
+export function createRegionalOffice(
+  organizationId: string,
+  input: {
+    name: string;
+    code: string;
+  },
+) {
+  return nestFetch<OfficeDetail>(`/organizations/${organizationId}/offices`, {
+    method: "POST",
+    body: input,
+  });
+}
+
 export function updateOffice(
   id: string,
   input: {
