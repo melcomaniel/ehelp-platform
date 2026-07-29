@@ -238,6 +238,21 @@ export class PlatformOrganizationController {
     );
   }
 
+  @Patch(':organizationId/reactivate')
+  reactivate(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+    @Body() body: ReactivateOrganizationDto,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.organizations.reactivate(
+      req.user.sub,
+      organizationId,
+      body.reason,
+      this.meta(req, requestId),
+    );
+  }
+
   @Patch(':organizationId/archive')
   archive(
     @Req() req: AuthedRequest,

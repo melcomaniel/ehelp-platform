@@ -304,11 +304,19 @@ describe('EHELP API (e2e)', () => {
       .set('Authorization', `Bearer ${organizationAdminToken}`)
       .expect(403);
 
-    await request(app.getHttpServer())
-      .post(`/admin/organizations/${organizationId}/reactivate`)
+    const reactivated = await request(app.getHttpServer())
+      .patch(`/platform/organizations/${organizationId}/reactivate`)
       .set('Authorization', `Bearer ${platformToken}`)
       .send({})
-      .expect(201);
+      .expect(200);
+    const reactivatedOrganization =
+      responseBody<OrganizationResponse>(reactivated);
+    expect(reactivatedOrganization.status).toBe('active');
+    expect(reactivatedOrganization.audit_history[0]).toMatchObject({
+      action: 'organization_reactivated',
+      before_state: { status: 'suspended' },
+      after_state: { status: 'active' },
+    });
     await request(app.getHttpServer())
       .get('/auth/me')
       .set('X-Client-Platform', 'web')

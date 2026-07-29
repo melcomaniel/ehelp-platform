@@ -194,19 +194,10 @@ export function transitionOrganization(
   action: "suspend" | "reactivate" | "archive",
   reason?: string,
 ) {
-  if (action === "archive") {
-    return nestFetch<OrganizationDetail>(
-      `/platform/organizations/${id}/archive`,
-      {
-        method: "PATCH",
-        body: reason ? { reason } : {},
-      },
-    )
-  }
   return nestFetch<OrganizationDetail>(
-    `/admin/organizations/${id}/${action}`,
+    `/platform/organizations/${id}/${action}`,
     {
-      method: "POST",
+      method: "PATCH",
       body: reason ? { reason } : {},
     },
   )
