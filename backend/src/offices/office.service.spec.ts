@@ -103,7 +103,8 @@ function makeService(options?: {
       .mockResolvedValueOnce([actor])
       .mockResolvedValueOnce([officeRow])
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]),
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([]),
     transaction: jest.fn(async (callback) => callback(manager)),
   } as unknown as DataSource;
 
@@ -772,6 +773,389 @@ describe('OfficeService office administrator assignment', () => {
 
     await expect(
       service.createOfficeAdmin('user-1', 'org-1', 'office-1', validInput),
+    ).rejects.toThrow(ConflictException);
+    expect(auditSaves).toHaveLength(0);
+  });
+});
+
+function makeStaffRequestService(options?: {
+  actorOfficeId?: string;
+  officeStatus?: 'active' | 'archived';
+  existingEmail?: boolean;
+  createdRequestRow?: Record<string, unknown>;
+}) {
+  const office = {
+    id: 'office-1',
+    organizationId: 'org-1',
+    status: options?.officeStatus ?? 'active',
+  };
+  const auditSaves: Array<Record<string, unknown>> = [];
+  const savedUserAccounts: Array<Record<string, unknown>> = [];
+  const savedProfiles: Array<Record<string, unknown>> = [];
+  const savedRoleAssignments: Array<Record<string, unknown>> = [];
+
+  const manager = {
+    getRepository: jest.fn((entity: unknown) => {
+      if (entity === OfficeEntity) {
+        return { findOne: jest.fn(async () => office) };
+      }
+      if (entity === UserAccountEntity) {
+        return {
+          findOne: jest.fn(async () =>
+            options?.existingEmail ? { id: 'existing-user' } : null,
+          ),
+          create: jest.fn((value: Record<string, unknown>) => value),
+          save: jest.fn(async (value: Record<string, unknown>) => {
+            savedUserAccounts.push(value);
+            return { ...value, id: 'staff-1' };
+          }),
+        };
+      }
+      if (entity === RoleEntity) {
+        return {
+          findOne: jest.fn(async () => ({ id: 'role-evaluator', code: 'EVALUATOR' })),
+        };
+      }
+      if (entity === StaffProfileEntity) {
+        return {
+          save: jest.fn(async (value: Record<string, unknown>) => {
+            savedProfiles.push(value);
+            return value;
+          }),
+        };
+      }
+      if (entity === UserRoleAssignmentEntity) {
+        return {
+          save: jest.fn(async (value: Record<string, unknown>) => {
+            savedRoleAssignments.push(value);
+            return value;
+          }),
+        };
+      }
+      if (entity === AuditLogEntity) {
+        return {
+          save: jest.fn(async (value: Record<string, unknown>) => {
+            auditSaves.push(value);
+            return value;
+          }),
+        };
+      }
+      throw new Error('Unexpected repository');
+    }),
+  };
+
+  const dataSource = {
+    query: jest.fn(async (sql: string) => {
+      if (sql.includes("r.code = 'OFFICE_ADMIN'")) {
+        return [
+          {
+            id: 'user-1',
+            organization_id: 'org-1',
+            office_id: options?.actorOfficeId ?? 'office-1',
+            account_type: 'staff',
+            status: 'active',
+            is_active: true,
+            organization_status: 'active',
+          },
+        ];
+      }
+      if (sql.includes("r.code IN ('EVALUATOR', 'APPROVER')")) {
+        return [
+          options?.createdRequestRow ?? {
+            id: 'staff-1',
+            email: 'officer@region.gov.ph',
+            status: 'pending',
+            is_active: true,
+            role: 'EVALUATOR',
+            created_at: new Date('2026-01-01T00:00:00Z'),
+            updated_at: new Date('2026-01-01T00:00:00Z'),
+            full_name: 'New Officer',
+            phone: null,
+            invitation_status: null,
+          },
+        ];
+      }
+      return [];
+    }),
+    transaction: jest.fn(async (callback) => callback(manager)),
+  } as unknown as DataSource;
+
+  return {
+    service: new OfficeService(dataSource),
+    dataSource,
+    manager,
+    auditSaves,
+    savedUserAccounts,
+    savedProfiles,
+    savedRoleAssignments,
+  };
+}
+
+describe('OfficeService staff account requests', () => {
+  const validInput = {
+    full_name: 'New Officer',
+    email: 'officer@region.gov.ph',
+    phone: undefined,
+    role: 'evaluator' as const,
+  };
+
+  it('creates a pending Evaluator account scoped to the requesting Office Administrator office', async () => {
+    const {
+      service,
+      auditSaves,
+      savedUserAccounts,
+      savedRoleAssignments,
+    } = makeStaffRequestService();
+
+    const result = await service.requestStaffAccount(
+      'user-1',
+      'office-1',
+      validInput,
+      { requestId: 'req-staff', ipAddress: '127.0.0.1' },
+    );
+
+    expect(result).toMatchObject({
+      id: 'staff-1',
+      email: 'officer@region.gov.ph',
+      status: 'pending',
+      role: 'EVALUATOR',
+    });
+    expect(savedUserAccounts).toHaveLength(1);
+    expect(savedUserAccounts[0]).toMatchObject({
+      organizationId: 'org-1',
+      officeId: 'office-1',
+      accountType: 'staff',
+      status: 'pending',
+    });
+    expect(savedRoleAssignments).toHaveLength(1);
+    expect(savedRoleAssignments[0]).toMatchObject({
+      officeId: 'office-1',
+      roleId: 'role-evaluator',
+    });
+    expect(auditSaves).toHaveLength(1);
+    expect(auditSaves[0]).toMatchObject({
+      organizationId: 'org-1',
+      actorUserId: 'user-1',
+      action: 'staff_account_requested',
+      outcome: 'success',
+      requestId: 'req-staff',
+    });
+  });
+
+  it('rejects requesting staff for a different office', async () => {
+    const { service, dataSource } = makeStaffRequestService({
+      actorOfficeId: 'office-2',
+    });
+
+    await expect(
+      service.requestStaffAccount('user-1', 'office-1', validInput),
+    ).rejects.toThrow(ForbiddenException);
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects requesting staff for an archived office', async () => {
+    const { service, auditSaves } = makeStaffRequestService({
+      officeStatus: 'archived',
+    });
+
+    await expect(
+      service.requestStaffAccount('user-1', 'office-1', validInput),
+    ).rejects.toThrow(ConflictException);
+    expect(auditSaves).toHaveLength(0);
+  });
+
+  it('rejects a duplicate staff email', async () => {
+    const { service, auditSaves } = makeStaffRequestService({
+      existingEmail: true,
+    });
+
+    await expect(
+      service.requestStaffAccount('user-1', 'office-1', validInput),
+    ).rejects.toThrow(ConflictException);
+    expect(auditSaves).toHaveLength(0);
+  });
+});
+
+function makeApproveStaffRequestService(options?: {
+  actorOrganizationId?: string;
+  targetStatus?: string;
+  targetFound?: boolean;
+  roleCode?: string | null;
+}) {
+  const auditSaves: Array<Record<string, unknown>> = [];
+  const savedUsers: Array<Record<string, unknown>> = [];
+  const savedInvitations: Array<Record<string, unknown>> = [];
+  const targetUser = {
+    id: 'staff-1',
+    organizationId: 'org-1',
+    officeId: 'office-1',
+    email: 'officer@region.gov.ph',
+    status: options?.targetStatus ?? 'pending',
+    verifiedAt: null as Date | null,
+  };
+
+  const manager = {
+    getRepository: jest.fn((entity: unknown) => {
+      if (entity === UserAccountEntity) {
+        return {
+          findOne: jest.fn(async () =>
+            options?.targetFound === false ? null : targetUser,
+          ),
+          save: jest.fn(async (value: Record<string, unknown>) => {
+            savedUsers.push({ ...value });
+            return value;
+          }),
+        };
+      }
+      if (entity === UserRoleAssignmentEntity) {
+        return {
+          findOne: jest.fn(async () =>
+            options?.roleCode === null
+              ? null
+              : {
+                  userAccountId: 'staff-1',
+                  officeId: 'office-1',
+                  role: { code: options?.roleCode ?? 'EVALUATOR' },
+                },
+          ),
+        };
+      }
+      if (entity === OrganizationInvitationEntity) {
+        return {
+          save: jest.fn(async (value: Record<string, unknown>) => {
+            savedInvitations.push(value);
+            return { ...value, id: 'invitation-1' };
+          }),
+        };
+      }
+      if (entity === AuditLogEntity) {
+        return {
+          save: jest.fn(async (value: Record<string, unknown>) => {
+            auditSaves.push(value);
+            return value;
+          }),
+        };
+      }
+      throw new Error('Unexpected repository');
+    }),
+  };
+
+  const dataSource = {
+    query: jest.fn(async (sql: string) => {
+      if (sql.includes("r.code = 'ORG_ADMIN'")) {
+        return [
+          {
+            ...actor,
+            organization_id: options?.actorOrganizationId ?? 'org-1',
+          },
+        ];
+      }
+      if (sql.includes("r.code IN ('EVALUATOR', 'APPROVER')")) {
+        return [
+          {
+            id: 'staff-1',
+            email: 'officer@region.gov.ph',
+            status: 'active',
+            is_active: true,
+            role: 'EVALUATOR',
+            created_at: new Date('2026-01-01T00:00:00Z'),
+            updated_at: new Date('2026-01-01T00:00:00Z'),
+            full_name: 'New Officer',
+            phone: null,
+            invitation_status: 'pending',
+          },
+        ];
+      }
+      return [];
+    }),
+    transaction: jest.fn(async (callback) => callback(manager)),
+  } as unknown as DataSource;
+
+  return {
+    service: new OfficeService(dataSource),
+    dataSource,
+    manager,
+    auditSaves,
+    savedUsers,
+    savedInvitations,
+    targetUser,
+  };
+}
+
+describe('OfficeService staff account approval', () => {
+  it('approves a pending Evaluator request and records both audit steps distinctly', async () => {
+    const { service, auditSaves, savedUsers, savedInvitations, targetUser } =
+      makeApproveStaffRequestService();
+
+    const result = await service.approveStaffRequest(
+      'user-1',
+      'org-1',
+      'office-1',
+      'staff-1',
+      { requestId: 'req-approve', ipAddress: '127.0.0.1' },
+    );
+
+    expect(result).toMatchObject({ id: 'staff-1', status: 'active' });
+    expect(savedUsers).toHaveLength(1);
+    expect(targetUser.status).toBe('active');
+    expect(targetUser.verifiedAt).toBeInstanceOf(Date);
+    expect(savedInvitations).toHaveLength(1);
+    expect(savedInvitations[0]).toMatchObject({
+      organizationId: 'org-1',
+      userAccountId: 'staff-1',
+      status: 'pending',
+    });
+    expect(auditSaves.map((a) => a.action)).toEqual([
+      'staff_account_approved',
+      'invitation_created',
+    ]);
+    expect(auditSaves[0]).toMatchObject({
+      organizationId: 'org-1',
+      actorUserId: 'user-1',
+      action: 'staff_account_approved',
+      outcome: 'success',
+      requestId: 'req-approve',
+    });
+  });
+
+  it('rejects a mismatched organization before starting a transaction', async () => {
+    const { service, dataSource } = makeApproveStaffRequestService();
+
+    await expect(
+      service.approveStaffRequest('user-1', 'org-2', 'office-1', 'staff-1'),
+    ).rejects.toThrow(ForbiddenException);
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects approving a request that no longer exists in this office', async () => {
+    const { service, auditSaves } = makeApproveStaffRequestService({
+      targetFound: false,
+    });
+
+    await expect(
+      service.approveStaffRequest('user-1', 'org-1', 'office-1', 'staff-1'),
+    ).rejects.toThrow(NotFoundException);
+    expect(auditSaves).toHaveLength(0);
+  });
+
+  it('rejects approving a request that is not pending', async () => {
+    const { service, auditSaves } = makeApproveStaffRequestService({
+      targetStatus: 'active',
+    });
+
+    await expect(
+      service.approveStaffRequest('user-1', 'org-1', 'office-1', 'staff-1'),
+    ).rejects.toThrow(ConflictException);
+    expect(auditSaves).toHaveLength(0);
+  });
+
+  it('rejects approving an account that is not an Evaluator/Approver request', async () => {
+    const { service, auditSaves } = makeApproveStaffRequestService({
+      roleCode: null,
+    });
+
+    await expect(
+      service.approveStaffRequest('user-1', 'org-1', 'office-1', 'staff-1'),
     ).rejects.toThrow(ConflictException);
     expect(auditSaves).toHaveLength(0);
   });

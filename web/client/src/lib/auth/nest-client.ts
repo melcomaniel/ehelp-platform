@@ -16,6 +16,7 @@ export type NestAuthUser = {
   erd_role?: string;
   region_id?: string | null;
   office_id?: string | null;
+  office_name?: string | null;
   organization_id?: string | null;
   validation_status?: string;
   is_active?: boolean;

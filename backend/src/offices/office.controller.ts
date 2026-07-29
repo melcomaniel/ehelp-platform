@@ -17,6 +17,7 @@ import {
   CreateOfficeAdminDto,
   CreateOfficeDto,
   CreateRegionalOfficeDto,
+  CreateStaffRequestDto,
   OfficeLifecycleReasonDto,
   OfficeListQueryDto,
   UpdateOfficeDto,
@@ -100,6 +101,21 @@ export class OfficeController {
     );
   }
 
+  @Post(':officeId/staff-requests')
+  requestStaffAccount(
+    @Req() req: AuthedRequest,
+    @Param('officeId') officeId: string,
+    @Body() body: CreateStaffRequestDto,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.offices.requestStaffAccount(
+      req.user.sub,
+      officeId,
+      body,
+      this.meta(req, requestId),
+    );
+  }
+
   private meta(req: Request, requestId?: string) {
     return {
       ipAddress: req.ip || null,
@@ -173,6 +189,23 @@ export class OrganizationOfficeController {
       organizationId,
       officeId,
       body,
+      this.meta(req, requestId),
+    );
+  }
+
+  @Post(':officeId/staff-requests/:userId/approve')
+  approveStaffRequest(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+    @Param('officeId') officeId: string,
+    @Param('userId') userId: string,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.offices.approveStaffRequest(
+      req.user.sub,
+      organizationId,
+      officeId,
+      userId,
       this.meta(req, requestId),
     );
   }

@@ -7,6 +7,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { useAdminAccess } from "@/lib/admin/access-provider";
 import {
   OFFICE_LEVEL_LABEL,
+  approveStaffRequest,
   archiveOffice,
   archiveRegionalOffice,
   canArchiveOffice,
@@ -96,6 +97,26 @@ export default function OfficeDetailPage() {
       );
     } finally {
       setBusy(false);
+    }
+  }
+
+  const [approvingId, setApprovingId] = React.useState<string | null>(null);
+
+  async function approveStaff(userId: string) {
+    if (!office) return;
+    setApprovingId(userId);
+    setError(null);
+    try {
+      await approveStaffRequest(office.organization_id, params.officeId, userId);
+      setOffice(await getOffice(params.officeId));
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Unable to approve staff request",
+      );
+    } finally {
+      setApprovingId(null);
     }
   }
 
@@ -423,6 +444,56 @@ export default function OfficeDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Officer account requests</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {office.staff_requests.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No Evaluator/Approver requests for this office yet.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {office.staff_requests.map((request) => (
+                <div
+                  key={request.id}
+                  className="flex flex-col justify-between gap-2 rounded-md border p-3 text-sm sm:flex-row sm:items-center"
+                >
+                  <div>
+                    <p className="font-medium">
+                      {request.full_name}{" "}
+                      <span className="text-muted-foreground">
+                        ({request.role === "EVALUATOR" ? "Evaluator" : "Approver"})
+                      </span>
+                    </p>
+                    <p className="text-muted-foreground">{request.email}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Account: {request.status} · Invitation:{" "}
+                      {request.invitation_status ?? "—"}
+                    </p>
+                  </div>
+                  {request.status === "pending" && (
+                    <Button
+                      size="sm"
+                      disabled={approvingId === request.id}
+                      onClick={() => void approveStaff(request.id)}
+                    >
+                      Approve
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-sm text-muted-foreground">
+            Regional Admins request Officer accounts for their own office;
+            approval here starts the standard device-registration flow before
+            the account can log in.
+          </p>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

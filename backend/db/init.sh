@@ -26,7 +26,8 @@ for f in \
   "${DB_ROOT}/migrations/014_organization_onboarding_policy.sql" \
   "${DB_ROOT}/migrations/015_additional_organization_admins.sql" \
   "${DB_ROOT}/migrations/016_office_admin_assignment.sql" \
-  "${DB_ROOT}/migrations/017_allow_office_admin_audit_action.sql"
+  "${DB_ROOT}/migrations/017_allow_office_admin_audit_action.sql" \
+  "${DB_ROOT}/migrations/018_office_staff_requests_audit_actions.sql"
 do
   echo "[ehelp-db]   $(basename "$f")"
   "${PSQL[@]}" -f "$f"

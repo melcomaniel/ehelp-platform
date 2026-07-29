@@ -15,6 +15,7 @@ export type StaffAccountRow = {
   validationStatus: string;
   isActive: boolean;
   regionId: string | null;
+  officeName: string | null;
 };
 
 function toRow(user: NestAuthUser): StaffAccountRow {
@@ -26,6 +27,7 @@ function toRow(user: NestAuthUser): StaffAccountRow {
     validationStatus: user.validation_status ?? "validated",
     isActive: user.is_active ?? true,
     regionId: user.region_id ?? user.office_id ?? null,
+    officeName: user.office_name ?? null,
   };
 }
 

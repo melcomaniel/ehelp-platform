@@ -804,11 +804,29 @@ export class AuthService {
     }
 
     const rows = await qb.getMany();
+    const officeIds = [
+      ...new Set(rows.map((row) => row.officeId).filter(Boolean)),
+    ] as string[];
+    const officeRows =
+      officeIds.length > 0
+        ? await this.dataSource.query<Array<{ id: string; name: string }>>(
+            `SELECT id, name FROM offices WHERE id = ANY($1::uuid[])`,
+            [officeIds],
+          )
+        : [];
+    const officeNames = new Map(
+      officeRows.map((office) => [office.id, office.name]),
+    );
     const out = [];
     for (const row of rows) {
       const user = await this.attachRole(row);
       const staff = await this.loadStaffProfile(user.id);
-      out.push(this.toProfile(user, staff));
+      out.push({
+        ...this.toProfile(user, staff),
+        office_name: user.officeId
+          ? (officeNames.get(user.officeId) ?? null)
+          : null,
+      });
     }
     return out;
   }
@@ -912,9 +930,14 @@ export class AuthService {
     user: UserAccountEntity,
     deviceFingerprint?: string,
   ) {
+    const gatedRoles: string[] = [
+      ERD_ROLES.ORG_ADMIN,
+      ERD_ROLES.OFFICE_ADMIN,
+      ERD_ROLES.EVALUATOR,
+      ERD_ROLES.APPROVER,
+    ];
     if (
-      (user.erdRoleCode !== ERD_ROLES.ORG_ADMIN &&
-        user.erdRoleCode !== ERD_ROLES.OFFICE_ADMIN) ||
+      !gatedRoles.includes(user.erdRoleCode) ||
       !user.organizationId ||
       !user.email
     ) {

@@ -111,6 +111,14 @@ export class UpdateOfficeDto {
 
 export class CreateOfficeAdminDto extends InitialOrganizationAdminDto {}
 
+export const STAFF_REQUEST_ROLES = ['evaluator', 'approver'] as const;
+export type StaffRequestRole = (typeof STAFF_REQUEST_ROLES)[number];
+
+export class CreateStaffRequestDto extends InitialOrganizationAdminDto {
+  @IsIn(STAFF_REQUEST_ROLES)
+  role!: StaffRequestRole;
+}
+
 export class OfficeLifecycleReasonDto {
   @Transform(trim)
   @IsString()
