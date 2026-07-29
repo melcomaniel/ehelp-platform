@@ -754,15 +754,15 @@ describe('OfficeService office administrator assignment', () => {
     expect(auditSaves).toHaveLength(0);
   });
 
-  it('rejects a second active administrator for the same office', async () => {
+  it('allows multiple administrators for the same office', async () => {
     const { service, auditSaves } = makeOfficeAdminService({
       existingActiveAdmin: true,
     });
 
     await expect(
       service.createOfficeAdmin('user-1', 'org-1', 'office-1', validInput),
-    ).rejects.toThrow(ConflictException);
-    expect(auditSaves).toHaveLength(0);
+    ).resolves.toMatchObject({ id: 'admin-1' });
+    expect(auditSaves).toHaveLength(3);
   });
 
   it('rejects a duplicate administrator email', async () => {

@@ -10,14 +10,12 @@ import {
   archiveOffice,
   archiveRegionalOffice,
   canArchiveOffice,
-  createOfficeAdmin,
   getOffice,
   listParentOfficeOptions,
   officeStatusLabel,
   reactivateOffice,
   reactivateRegionalOffice,
   updateOffice,
-  type OfficeAdmin,
   type OfficeDetail,
   type OfficeLevel,
   type OfficeStatus,
@@ -50,12 +48,6 @@ export default function OfficeDetailPage() {
     null,
   );
   const [busy, setBusy] = React.useState(false);
-  const [assigningAdmin, setAssigningAdmin] = React.useState(false);
-  const [adminError, setAdminError] = React.useState<string | null>(null);
-  const [adminBusy, setAdminBusy] = React.useState(false);
-  const [createdAdmin, setCreatedAdmin] = React.useState<OfficeAdmin | null>(
-    null,
-  );
 
   const load = React.useCallback(async () => {
     if (!isOrgAdmin) return;
@@ -104,32 +96,6 @@ export default function OfficeDetailPage() {
       );
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function assignOfficeAdmin(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!office) return;
-    setAdminBusy(true);
-    setAdminError(null);
-    const data = new FormData(event.currentTarget);
-    const phone = String(data.get("phone") ?? "").trim();
-    try {
-      const admin = await createOfficeAdmin(office.organization_id, office.id, {
-        full_name: String(data.get("full_name") ?? ""),
-        email: String(data.get("email") ?? ""),
-        phone: phone || undefined,
-      });
-      setCreatedAdmin(admin);
-      setAssigningAdmin(false);
-    } catch (caught) {
-      setAdminError(
-        caught instanceof Error
-          ? caught.message
-          : "Unable to assign Regional Administrator",
-      );
-    } finally {
-      setAdminBusy(false);
     }
   }
 
@@ -431,70 +397,29 @@ export default function OfficeDetailPage() {
             <CardTitle>Regional Administrator</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {createdAdmin && (
-              <div
-                className="flex items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900"
-                role="status"
-              >
-                <CheckCircle2Icon className="size-4" />
-                Assignment requested for {createdAdmin.email}. Awaiting
-                admin-approval and device registration.
+            {office.office_admins.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No Regional Administrator assigned yet.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {office.office_admins.map((admin) => (
+                  <div
+                    key={admin.id}
+                    className="rounded-md border p-3 text-sm"
+                  >
+                    <p className="font-medium">{admin.full_name}</p>
+                    <p className="text-muted-foreground">{admin.email}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Account: {admin.status} · Invitation: {admin.invitation_status ?? "—"}
+                    </p>
+                  </div>
+                ))}
               </div>
             )}
-            {adminError && (
-              <p
-                className="rounded-md border border-destructive p-3 text-sm"
-                role="alert"
-              >
-                {adminError}
-              </p>
-            )}
-            <Button
-              variant="outline"
-              disabled={office.status !== "active"}
-              onClick={() => setAssigningAdmin((value) => !value)}
-            >
-              {assigningAdmin ? "Cancel" : "Assign Regional Admin"}
-            </Button>
-            {assigningAdmin && (
-              <form
-                className="grid gap-4 sm:grid-cols-2"
-                onSubmit={assignOfficeAdmin}
-              >
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="admin-full-name">Full name</Label>
-                  <Input
-                    id="admin-full-name"
-                    name="full_name"
-                    required
-                    minLength={2}
-                    maxLength={160}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="admin-email">
-                    Government email (.gov.ph)
-                  </Label>
-                  <Input
-                    id="admin-email"
-                    name="email"
-                    type="email"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="admin-phone">Phone (optional)</Label>
-                  <Input id="admin-phone" name="phone" maxLength={40} />
-                </div>
-                <Button
-                  className="sm:col-span-2 sm:justify-self-end"
-                  type="submit"
-                  disabled={adminBusy}
-                >
-                  Request administrator account
-                </Button>
-              </form>
-            )}
+            <p className="text-sm text-muted-foreground">
+              Create or assign Regional Administrators from Admin → Accounts.
+            </p>
           </CardContent>
         </Card>
       )}

@@ -8,6 +8,7 @@ import {
   registerStaffAccount,
   type StaffAccountRow,
 } from "@/lib/admin/account-actions"
+import { listOffices, type OfficeSummary } from "@/lib/admin/offices"
 import { APP_ROLE_LABEL } from "@/lib/auth/types"
 import {
   DataTable,
@@ -38,7 +39,7 @@ import { UserPlusIcon } from "lucide-react"
 const REGISTERABLE = [
   { value: "approver" as const, label: "Approver" },
   { value: "evaluator" as const, label: "Evaluator" },
-  { value: "satellite_admin" as const, label: "Office Admin" },
+  { value: "satellite_admin" as const, label: "Regional Administrator" },
 ]
 
 export default function AccountsPage() {
@@ -51,8 +52,11 @@ export default function AccountsPage() {
   const [email, setEmail] = React.useState("")
   const [password, setPassword] = React.useState("")
   const [role, setRole] = React.useState<"approver" | "evaluator" | "satellite_admin">("evaluator")
+  const [officeId, setOfficeId] = React.useState("")
+  const [offices, setOffices] = React.useState<OfficeSummary[]>([])
   const [busy, setBusy] = React.useState(false)
   const [message, setMessage] = React.useState<string | null>(null)
+  const [formError, setFormError] = React.useState<string | null>(null)
 
   const canRegister = can("register-accounts") && (isSatelliteAdmin || isDswdAdmin || isPlatformAdmin)
   const roleOptions = isPlatformAdmin || isDswdAdmin
@@ -65,20 +69,33 @@ export default function AccountsPage() {
   }, [])
 
   React.useEffect(() => {
-    if (!accessLoading) void reload()
+    if (!accessLoading) {
+      const timer = window.setTimeout(() => void reload(), 0)
+      return () => window.clearTimeout(timer)
+    }
   }, [accessLoading, reload])
+
+  React.useEffect(() => {
+    if (!accessLoading && isDswdAdmin) {
+      void listOffices({ status: "active", pageSize: 100 }).then((result) => {
+        setOffices(result.data)
+      }).catch(() => setOffices([]))
+    }
+  }, [accessLoading, isDswdAdmin])
 
   const submit = async () => {
     setBusy(true)
     setMessage(null)
+    setFormError(null)
     const result = await registerStaffAccount({
       email,
       fullName: name,
       password,
       role,
+      officeId: role === "satellite_admin" ? officeId : undefined,
     })
     if (!result.ok) {
-      setMessage(result.error)
+      setFormError(result.error)
       setBusy(false)
       return
     }
@@ -87,6 +104,7 @@ export default function AccountsPage() {
     setEmail("")
     setPassword("")
     setRole("evaluator")
+    setOfficeId("")
     setMessage("Staff account created — they can sign in with email/password (mock) or eGov SSO.")
     await reload()
     setBusy(false)
@@ -96,10 +114,16 @@ export default function AccountsPage() {
     <>
       <PageHeader
         title="Staff accounts"
-        description="Provision Nest web accounts (Evaluator, Approver, Office Admin). Staff must exist before SSO on web."
+        description="Provision Nest web accounts (Evaluator, Approver, Regional Administrator). Staff must exist before SSO on web."
       >
         {canRegister && (
-          <Button size="sm" onClick={() => setOpen(true)}>
+          <Button
+            size="sm"
+            onClick={() => {
+              setFormError(null)
+              setOpen(true)
+            }}
+          >
             <UserPlusIcon /> Create staff account
           </Button>
         )}
@@ -136,7 +160,9 @@ export default function AccountsPage() {
                 <Td>{a.fullName || "—"}</Td>
                 <Td className="text-muted-foreground">{a.email ?? "—"}</Td>
                 <Td className="text-muted-foreground">
-                  {APP_ROLE_LABEL[a.role] ?? a.role}
+                  {a.role === "satellite_admin"
+                    ? "Regional Administrator"
+                    : APP_ROLE_LABEL[a.role] ?? a.role}
                 </Td>
                 <Td className="text-muted-foreground">
                   {a.regionId ? a.regionId.slice(0, 8) : "—"}
@@ -153,7 +179,13 @@ export default function AccountsPage() {
         </CardContent>
       </Card>
 
-      <Sheet open={open} onOpenChange={setOpen}>
+      <Sheet
+        open={open}
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen)
+          if (!nextOpen) setFormError(null)
+        }}
+      >
         <SheetContent>
           <SheetHeader>
             <SheetTitle>Create staff account</SheetTitle>
@@ -175,7 +207,7 @@ export default function AccountsPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="staff@agency.gov.ph"
+              placeholder="staff@example.com"
             />
             <Field
               label="Temporary password"
@@ -194,11 +226,43 @@ export default function AccountsPage() {
                 )
               }
             />
+            {role === "satellite_admin" && (
+              <label className="grid gap-2 text-sm">
+                <span className="font-medium">Regional Office</span>
+                <select
+                  className="h-9 rounded-md border bg-transparent px-3"
+                  value={officeId}
+                  onChange={(event) => setOfficeId(event.target.value)}
+                  required
+                >
+                  <option value="">Select a Regional Office</option>
+                  {offices.filter((office) => office.level === "regional").map((office) => (
+                    <option key={office.id} value={office.id}>
+                      {office.name} ({office.code})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {formError && (
+              <p
+                className="rounded-md border border-destructive bg-destructive/5 p-3 text-sm text-destructive"
+                role="alert"
+              >
+                {formError}
+              </p>
+            )}
           </div>
           <SheetFooter>
             <Button
               onClick={() => void submit()}
-              disabled={busy || !name || !email || password.length < 8}
+              disabled={
+                busy ||
+                !name ||
+                !email ||
+                password.length < 8 ||
+                (role === "satellite_admin" && !officeId)
+              }
             >
               Create account
             </Button>

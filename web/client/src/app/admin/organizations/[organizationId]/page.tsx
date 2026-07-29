@@ -367,7 +367,7 @@ function AdminEditor({
               <Input id={`name-${admin.id}`} name="full_name" defaultValue={admin.full_name} required minLength={2} />
             </div>
             <div className="space-y-1">
-              <Label htmlFor={`email-${admin.id}`}>Government email</Label>
+              <Label htmlFor={`email-${admin.id}`}>Email address</Label>
               <Input id={`email-${admin.id}`} name="email" type="email" defaultValue={admin.email} required />
             </div>
             <div className="space-y-1">
@@ -458,14 +458,14 @@ function CreateAdminForm({
         <Input id="new-admin-name" name="full_name" required minLength={2} maxLength={160} />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="new-admin-email">Government email</Label>
+        <Label htmlFor="new-admin-email">Email address</Label>
         <Input
           id="new-admin-email"
           name="email"
           type="email"
           required
           pattern=".+@(?:[A-Za-z0-9-]+\.)*gov\.ph"
-          placeholder="admin@agency.gov.ph"
+          placeholder="admin@example.com"
         />
       </div>
       <div className="space-y-2 sm:col-span-2">

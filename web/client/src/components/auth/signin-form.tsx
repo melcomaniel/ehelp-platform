@@ -90,7 +90,7 @@ export function SignInForm() {
               <Input
                 id="email"
                 type="email"
-                placeholder="you@agency.gov.ph"
+              placeholder="you@example.com"
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}

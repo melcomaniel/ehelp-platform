@@ -46,9 +46,6 @@ export class InitialOrganizationAdminDto {
 
   @Transform(lower)
   @IsEmail()
-  @Matches(/@(?:[a-z0-9-]+\.)*gov\.ph$/i, {
-    message: 'email must be a Philippine government email address (.gov.ph)',
-  })
   @MaxLength(254)
   email!: string;
 
@@ -235,9 +232,6 @@ export class UpdateOrganizationAdminDto {
   @IsOptional()
   @Transform(lower)
   @IsEmail()
-  @Matches(/@(?:[a-z0-9-]+\.)*gov\.ph$/i, {
-    message: 'email must be a Philippine government email address (.gov.ph)',
-  })
   @MaxLength(254)
   email?: string;
 

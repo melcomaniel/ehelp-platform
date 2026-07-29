@@ -156,7 +156,7 @@ export default function NewOrganizationPage() {
               <Input id="admin_name" name="admin_name" required minLength={2} maxLength={160} autoComplete="name" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="admin_email">Government email</Label>
+              <Label htmlFor="admin_email">Email address</Label>
               <Input id="admin_email" name="admin_email" required type="email" maxLength={254} autoComplete="email" />
             </div>
             <div className="space-y-2">

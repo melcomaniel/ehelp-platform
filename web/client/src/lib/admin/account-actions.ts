@@ -47,6 +47,7 @@ export async function registerStaffAccount(input: {
   fullName: string;
   password: string;
   role: "approver" | "evaluator" | "satellite_admin" | "dswd_admin" | "platform_admin";
+  officeId?: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     await nestServerFetch("/auth/staff", {
@@ -56,6 +57,7 @@ export async function registerStaffAccount(input: {
         full_name: input.fullName.trim(),
         password: input.password,
         role: input.role,
+        office_id: input.officeId,
       },
     });
     return { ok: true };

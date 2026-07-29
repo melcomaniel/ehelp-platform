@@ -25,7 +25,7 @@ function validInput() {
 }
 
 describe('CreateOrganizationDto', () => {
-  it('accepts a government admin email and baseline-compliant policy', async () => {
+  it('accepts a valid admin email and baseline-compliant policy', async () => {
     const input = validInput();
     const errors = await validate(
       plainToInstance(CreateOrganizationDto, input),
@@ -33,7 +33,7 @@ describe('CreateOrganizationDto', () => {
     expect(errors).toHaveLength(0);
   });
 
-  it.each(['not-an-email', 'admin@gmail.com'])(
+  it.each(['not-an-email', 'admin@'])(
     'rejects invalid initial administrator email %s',
     async (email) => {
       const input = validInput();
@@ -74,20 +74,20 @@ describe('CreateOrganizationDto', () => {
 });
 
 describe('Organization Administrator DTOs', () => {
-  it('normalizes and accepts an additional administrator government email', async () => {
+  it('normalizes and accepts an additional administrator email', async () => {
     const dto = plainToInstance(CreateOrganizationAdminDto, {
       full_name: ' Additional Administrator ',
-      email: 'ADMIN@AGENCY.GOV.PH ',
+      email: 'ADMIN@EXAMPLE.COM ',
     });
     expect(await validate(dto)).toHaveLength(0);
     expect(dto.full_name).toBe('Additional Administrator');
-    expect(dto.email).toBe('admin@agency.gov.ph');
+    expect(dto.email).toBe('admin@example.com');
   });
 
-  it('rejects a non-government additional administrator email', async () => {
+  it('rejects an invalid additional administrator email', async () => {
     const dto = plainToInstance(CreateOrganizationAdminDto, {
       full_name: 'Additional Administrator',
-      email: 'admin@example.com',
+      email: 'not-an-email',
     });
     expect(
       (await validate(dto)).some((error) => error.property === 'email'),

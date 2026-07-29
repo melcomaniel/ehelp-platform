@@ -22,23 +22,23 @@ describe('OfficeLifecycleReasonDto', () => {
 });
 
 describe('CreateOfficeAdminDto', () => {
-  it('accepts a valid Philippine government email address', async () => {
+  it('accepts any valid email address', async () => {
     const dto = plainToInstance(CreateOfficeAdminDto, {
       full_name: '  Regional Admin  ',
-      email: '  Admin@Region.gov.ph  ',
+      email: '  Admin@Example.com  ',
       phone: ' 09171234567 ',
     });
 
     expect(await validate(dto)).toHaveLength(0);
     expect(dto.full_name).toBe('Regional Admin');
-    expect(dto.email).toBe('admin@region.gov.ph');
+    expect(dto.email).toBe('admin@example.com');
     expect(dto.phone).toBe('09171234567');
   });
 
-  it('rejects a non-government email address', async () => {
+  it('rejects an invalid email address', async () => {
     const dto = plainToInstance(CreateOfficeAdminDto, {
       full_name: 'Regional Admin',
-      email: 'admin@gmail.com',
+      email: 'not-an-email',
     });
 
     expect(await validate(dto)).not.toHaveLength(0);

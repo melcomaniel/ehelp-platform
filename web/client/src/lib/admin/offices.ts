@@ -35,6 +35,7 @@ export type OfficeAudit = {
 
 export type OfficeDetail = OfficeSummary & {
   child_offices: OfficeSummary[];
+  office_admins: OfficeAdmin[];
   audit_history: OfficeAudit[];
 };
 

@@ -206,9 +206,11 @@ export class OfficeService {
        ORDER BY occurred_at DESC LIMIT 50`,
       [actor.organization_id, officeId],
     );
+    const officeAdmins = await this.listOfficeAdmins(officeId);
     return {
       ...this.officeState(office),
       child_offices: children.map((row) => this.officeState(row)),
+      office_admins: officeAdmins,
       audit_history: audits,
     };
   }
@@ -274,20 +276,6 @@ export class OfficeService {
         if (office.status !== 'active') {
           throw new ConflictException(
             'Office must be active to add an administrator',
-          );
-        }
-        const existingAdmin = await manager.query<Array<{ id: string }>>(
-          `SELECT u.id
-           FROM user_accounts u
-           JOIN user_role_assignments ura ON ura.user_account_id = u.id
-           JOIN roles r ON r.id = ura.role_id AND r.code = 'OFFICE_ADMIN'
-           WHERE ura.office_id = $1 AND u.is_active = true AND u.status = 'active'
-           LIMIT 1`,
-          [officeId],
-        );
-        if (existingAdmin[0]) {
-          throw new ConflictException(
-            'This office already has an active Administrator',
           );
         }
         const email = input.email.trim().toLowerCase();

@@ -12,7 +12,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
 import { DataSource } from 'typeorm';
-import { OrganizationInvitationEntity } from '../organizations/organization.entities';
+import {
+  AuditLogEntity,
+  OrganizationInvitationEntity,
+} from '../organizations/organization.entities';
 import { BeneficiaryEntity } from '../users/beneficiary.entity';
 import { LivenessSessionEntity } from '../users/liveness-session.entity';
 import { StaffProfileEntity } from '../users/staff-profile.entity';
@@ -640,6 +643,37 @@ export class AuthService {
     const organizationId =
       input.organization_id ?? actor.organizationId ?? null;
 
+    if (actor.organizationId && organizationId !== actor.organizationId) {
+      throw new ForbiddenException(
+        'Staff accounts must belong to your organization',
+      );
+    }
+
+    if (input.role === 'satellite_admin') {
+      if (!officeId) {
+        throw new BadRequestException(
+          'A Regional Office is required for an Office Admin account',
+        );
+      }
+      if (!organizationId) {
+        throw new BadRequestException(
+          'An organization is required for an Office Admin account',
+        );
+      }
+      const offices = await this.dataSource.query<Array<{ id: string }>>(
+        `SELECT id
+         FROM offices
+         WHERE id = $1 AND organization_id = $2 AND status = 'active'
+         LIMIT 1`,
+        [officeId, organizationId],
+      );
+      if (!offices[0]) {
+        throw new BadRequestException(
+          'Regional Office must belong to your organization and be active',
+        );
+      }
+    }
+
     const accountType =
       input.role === 'platform_admin' ? 'platform_admin' : 'staff';
 
@@ -667,6 +701,63 @@ export class AuthService {
     );
 
     await this.assignRole(user.id, input.role, officeId);
+
+    if (input.role === 'satellite_admin' && organizationId && officeId) {
+      const invitation = await this.dataSource
+        .getRepository(OrganizationInvitationEntity)
+        .save({
+          organizationId,
+          userAccountId: user.id,
+          email,
+          status: 'pending',
+          invitedByUserId: actorUserId,
+          acceptedAt: null,
+        });
+      const audit = this.dataSource.getRepository(AuditLogEntity);
+      await audit.save([
+        audit.create({
+          organizationId,
+          actorUserId,
+          action: 'office_admin_created',
+          entityType: 'user_account',
+          entityId: user.id,
+          beforeState: null,
+          afterState: {
+            email,
+            full_name: input.full_name.trim(),
+            organization_id: organizationId,
+            office_id: officeId,
+            status: user.status,
+          },
+          outcome: 'success',
+        }),
+        audit.create({
+          organizationId,
+          actorUserId,
+          action: 'role_assigned',
+          entityType: 'user_role_assignment',
+          entityId: user.id,
+          beforeState: null,
+          afterState: {
+            user_account_id: user.id,
+            role: 'OFFICE_ADMIN',
+            office_id: officeId,
+          },
+          outcome: 'success',
+        }),
+        audit.create({
+          organizationId,
+          actorUserId,
+          action: 'invitation_created',
+          entityType: 'organization_invitation',
+          entityId: invitation.id,
+          beforeState: null,
+          afterState: { email, status: invitation.status },
+          outcome: 'success',
+        }),
+      ]);
+    }
+
     user = (await this.findById(user.id))!;
     const staff = await this.loadStaffProfile(user.id);
     return this.toProfile(user, staff);
@@ -822,7 +913,8 @@ export class AuthService {
     deviceFingerprint?: string,
   ) {
     if (
-      user.erdRoleCode !== ERD_ROLES.ORG_ADMIN ||
+      (user.erdRoleCode !== ERD_ROLES.ORG_ADMIN &&
+        user.erdRoleCode !== ERD_ROLES.OFFICE_ADMIN) ||
       !user.organizationId ||
       !user.email
     ) {
@@ -843,7 +935,7 @@ export class AuthService {
       if (!fingerprint) {
         throw new ForbiddenException({
           message:
-            'Device registration is required before the first Organization Administrator login',
+            'Device registration is required before the first administrator login',
           code: 'device_registration_required',
         });
       }
