@@ -52,6 +52,11 @@ export type OrganizationDetail = {
   code: string
   name: string
   status: OrganizationStatus
+  policy_config: {
+    mfa_required: true
+    device_registration_required: true
+    session_timeout_minutes: number
+  }
   office_count: number
   suspended_at: string | null
   archived_at: string | null
@@ -155,6 +160,11 @@ export function createOrganization(input: {
   name: string
   code: string
   creation_key: string
+  policy_config: {
+    mfa_required: true
+    device_registration_required: true
+    session_timeout_minutes: number
+  }
   initial_admin: {
     full_name: string
     email: string

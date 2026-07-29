@@ -256,6 +256,7 @@ export class AuthService {
   async ssoExchange(
     exchangeCode: string,
     clientPlatform: ClientPlatform = 'mobile',
+    deviceFingerprint?: string,
   ) {
     const profile = await this.sso.exchangeCode(exchangeCode);
 
@@ -321,7 +322,7 @@ export class AuthService {
     user = await this.attachRole(user);
     this.assertClientPlatform(user, clientPlatform);
     await this.assertActiveContext(user);
-    await this.acceptPendingOrganizationInvitation(user);
+    await this.activatePendingOrganizationInvitation(user, deviceFingerprint);
 
     const tokens = await this.issueTokens(user);
     return {
@@ -729,6 +730,7 @@ export class AuthService {
     email: string,
     password: string,
     clientPlatform: ClientPlatform = 'mobile',
+    deviceFingerprint?: string,
   ) {
     const mock = this.config.get('AUTH_PROVIDER_MODE') === 'mock';
     let user = await this.findByEmail(email);
@@ -775,7 +777,7 @@ export class AuthService {
     user = await this.attachRole(user);
     this.assertClientPlatform(user, clientPlatform);
     await this.assertActiveContext(user);
-    await this.acceptPendingOrganizationInvitation(user);
+    await this.activatePendingOrganizationInvitation(user, deviceFingerprint);
     return this.issueTokens(user);
   }
 
@@ -815,7 +817,10 @@ export class AuthService {
     }
   }
 
-  private async acceptPendingOrganizationInvitation(user: UserAccountEntity) {
+  private async activatePendingOrganizationInvitation(
+    user: UserAccountEntity,
+    deviceFingerprint?: string,
+  ) {
     if (
       user.erdRoleCode !== ERD_ROLES.ORG_ADMIN ||
       !user.organizationId ||
@@ -834,19 +839,49 @@ export class AuthService {
         lock: { mode: 'pessimistic_write' },
       });
       if (!invitation) return;
+      const fingerprint = deviceFingerprint?.trim();
+      if (!fingerprint) {
+        throw new ForbiddenException({
+          message:
+            'Device registration is required before the first Organization Administrator login',
+          code: 'device_registration_required',
+        });
+      }
+      await manager.query(
+        `INSERT INTO device_registrations (
+           user_account_id, device_fingerprint, status, approved_at
+         ) VALUES ($1, $2, 'approved', now())
+         ON CONFLICT (user_account_id, device_fingerprint)
+         DO UPDATE SET status = 'approved', approved_at = now(), updated_at = now()`,
+        [user.id, fingerprint],
+      );
       invitation.status = 'accepted';
       invitation.acceptedAt = new Date();
       await invitations.save(invitation);
       await manager.query(
         `INSERT INTO audit_logs (
            organization_id, actor_user_id, action, entity_type, entity_id,
-           after_state, outcome
+           before_state, after_state, outcome
+         ) VALUES ($1, $2, 'device_registered', 'user_account', $2,
+                   $3::jsonb, $4::jsonb, 'success')`,
+        [
+          user.organizationId,
+          user.id,
+          JSON.stringify({ registered: false }),
+          JSON.stringify({ registered: true }),
+        ],
+      );
+      await manager.query(
+        `INSERT INTO audit_logs (
+           organization_id, actor_user_id, action, entity_type, entity_id,
+           before_state, after_state, outcome
          ) VALUES ($1, $2, 'invitation_accepted', 'organization_invitation', $3,
-                   $4::jsonb, 'success')`,
+                   $4::jsonb, $5::jsonb, 'success')`,
         [
           user.organizationId,
           user.id,
           invitation.id,
+          JSON.stringify({ status: 'pending', email: user.email }),
           JSON.stringify({ status: 'accepted', email: user.email }),
         ],
       );

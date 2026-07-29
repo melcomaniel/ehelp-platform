@@ -64,7 +64,11 @@ export class AuthController {
   @Post('sso/exchange')
   ssoExchange(@Body() body: SsoExchangeDto, @Req() req: Request) {
     const platform = this.clientPlatform(req, body.client_platform);
-    return this.auth.ssoExchange(body.exchange_code, platform);
+    return this.auth.ssoExchange(
+      body.exchange_code,
+      platform,
+      body.device_fingerprint,
+    );
   }
 
   @Post('staff')
@@ -170,6 +174,7 @@ export class AuthController {
       body.email,
       body.password,
       this.clientPlatform(req, body.client_platform),
+      body.device_fingerprint,
     );
   }
 

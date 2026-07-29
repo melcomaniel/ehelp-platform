@@ -1,8 +1,23 @@
 import { ConflictException } from '@nestjs/common';
+import {
+  PLATFORM_SECURITY_BASELINE,
+  type InitialPolicyConfigDto,
+} from './organization.dto';
 import type { OrganizationStatus } from './organization.entities';
 
 export function normalizeOrganizationCode(code: string): string {
   return code.trim().toUpperCase();
+}
+
+export function normalizeInitialPolicyConfig(
+  input: InitialPolicyConfigDto,
+): Record<string, unknown> {
+  return {
+    mfa_required: PLATFORM_SECURITY_BASELINE.mfa_required,
+    device_registration_required:
+      PLATFORM_SECURITY_BASELINE.device_registration_required,
+    session_timeout_minutes: input.session_timeout_minutes,
+  };
 }
 
 export function assertOrganizationTransition(

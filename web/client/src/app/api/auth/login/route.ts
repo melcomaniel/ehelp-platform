@@ -10,6 +10,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const email = String(body.email ?? "").trim();
   const password = String(body.password ?? "");
+  const deviceFingerprint = String(body.device_fingerprint ?? "").trim();
   if (!email || !password) {
     return NextResponse.json(
       { message: "Email and password are required" },
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
       email,
       password,
       client_platform: "web",
+      device_fingerprint: deviceFingerprint || undefined,
     }),
     cache: "no-store",
   });

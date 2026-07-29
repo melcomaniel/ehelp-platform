@@ -88,11 +88,16 @@ describe('EHELP API (e2e)', () => {
     const suffix = randomUUID().replaceAll('-', '').slice(-6);
     const creationKey = randomUUID();
     const code = `QA${suffix}`.toUpperCase();
-    const email = `citizen.${suffix}@example.local`;
+    const email = `citizen.${suffix}@mock.gov.ph`;
     const payload = {
       name: `E2E Organization ${suffix}`,
       code,
       creation_key: creationKey,
+      policy_config: {
+        mfa_required: true,
+        device_registration_required: true,
+        session_timeout_minutes: 20,
+      },
       initial_admin: {
         full_name: 'E2E Organization Administrator',
         email,
@@ -118,12 +123,27 @@ describe('EHELP API (e2e)', () => {
     expect(repeatedOrganization.id).toBe(organizationId);
     expect(repeatedOrganization.admins).toHaveLength(1);
 
+    await request(app.getHttpServer())
+      .post('/auth/sso/exchange')
+      .set('X-Client-Platform', 'web')
+      .send({
+        exchange_code: `mock-${suffix}`,
+        client_platform: 'web',
+      })
+      .expect(403)
+      .expect((response) => {
+        expect(responseBody<{ code: string }>(response).code).toBe(
+          'device_registration_required',
+        );
+      });
+
     const sso = await request(app.getHttpServer())
       .post('/auth/sso/exchange')
       .set('X-Client-Platform', 'web')
       .send({
         exchange_code: `mock-${suffix}`,
         client_platform: 'web',
+        device_fingerprint: `e2e:${suffix}`,
       })
       .expect(201);
     const organizationAdmin = responseBody<AuthResponse>(sso);

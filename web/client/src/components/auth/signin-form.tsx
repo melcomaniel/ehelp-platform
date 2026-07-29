@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { homeRouteForRole, parseAppRole } from "@/lib/auth/types";
+import { getOrCreateDeviceFingerprint } from "@/lib/auth/device";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,7 +42,10 @@ export function SignInForm() {
         const res = await fetch("/api/auth/sso", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ exchange_code: code }),
+          body: JSON.stringify({
+            exchange_code: code,
+            device_fingerprint: getOrCreateDeviceFingerprint(),
+          }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.message || "SSO failed");
@@ -55,6 +59,7 @@ export function SignInForm() {
         body: JSON.stringify({
           email: email.trim(),
           password,
+          device_fingerprint: getOrCreateDeviceFingerprint(),
         }),
       });
       const data = await res.json().catch(() => ({}));

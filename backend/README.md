@@ -157,9 +157,12 @@ history before dropping lifecycle or audit structures.
 Organization creation does not issue a password or duplicate SSO. It provisions
 the government email, staff profile, `ORG_ADMIN` assignment, and a pending
 invitation in one PostgreSQL transaction. Signing in through the existing eGov
-SSO flow with that email accepts the invitation. Suspended accounts and staff in
-suspended/archived organizations are rejected at token issuance, `/auth/me`, and
-protected tenant operations, including requests using an existing JWT.
+SSO flow with that email registers the browser device and accepts the invitation
+before issuing the first session. Initial policy configuration is allowlisted:
+MFA and device registration are mandatory and tenant session timeout cannot
+exceed the 30-minute platform baseline. Suspended accounts and staff in
+suspended/archived organizations are rejected at token issuance, `/auth/me`,
+and protected tenant operations, including requests using an existing JWT.
 
 `PLATFORM_ADMIN` is explicitly denied from tenant business APIs such as
 applications, beneficiary relationships, evaluation, approval, programs, and

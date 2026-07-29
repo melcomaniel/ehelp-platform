@@ -1,7 +1,11 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  Equals,
+  IsBoolean,
+  IsDefined,
   IsEmail,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
@@ -21,6 +25,12 @@ const lower = ({ value }: { value: unknown }) =>
 const upper = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().toUpperCase() : value;
 
+export const PLATFORM_SECURITY_BASELINE = Object.freeze({
+  mfa_required: true as const,
+  device_registration_required: true as const,
+  session_timeout_minutes: 30,
+});
+
 export class InitialOrganizationAdminDto {
   @Transform(trim)
   @IsString()
@@ -30,6 +40,9 @@ export class InitialOrganizationAdminDto {
 
   @Transform(lower)
   @IsEmail()
+  @Matches(/@(?:[a-z0-9-]+\.)*gov\.ph$/i, {
+    message: 'email must be a Philippine government email address (.gov.ph)',
+  })
   @MaxLength(254)
   email!: string;
 
@@ -38,6 +51,30 @@ export class InitialOrganizationAdminDto {
   @IsString()
   @MaxLength(40)
   phone?: string;
+}
+
+export class InitialPolicyConfigDto {
+  @IsBoolean()
+  @Equals(true, {
+    message: 'mfa_required cannot weaken the platform security baseline',
+  })
+  mfa_required!: true;
+
+  @IsBoolean()
+  @Equals(true, {
+    message:
+      'device_registration_required cannot weaken the platform security baseline',
+  })
+  device_registration_required!: true;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(5)
+  @Max(PLATFORM_SECURITY_BASELINE.session_timeout_minutes, {
+    message:
+      'session_timeout_minutes cannot exceed the platform security baseline of 30 minutes',
+  })
+  session_timeout_minutes!: number;
 }
 
 export class CreateOrganizationDto {
@@ -56,6 +93,12 @@ export class CreateOrganizationDto {
   creation_key!: string;
 
   @ValidateNested()
+  @IsDefined()
+  @Type(() => InitialPolicyConfigDto)
+  policy_config!: InitialPolicyConfigDto;
+
+  @ValidateNested()
+  @IsDefined()
   @Type(() => InitialOrganizationAdminDto)
   initial_admin!: InitialOrganizationAdminDto;
 }

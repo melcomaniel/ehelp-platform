@@ -89,8 +89,7 @@ export type RbacResource = {
 };
 
 export type RbacDecision =
-  | { allowed: true; scope: RbacScope }
-  | { allowed: false; reason: string };
+  { allowed: true; scope: RbacScope } | { allowed: false; reason: string };
 
 const ROLE_GRANTS: Record<ErdRoleCode, RbacGrant[]> = {
   PLATFORM_ADMIN: [
@@ -165,8 +164,9 @@ const ROLE_GRANTS: Record<ErdRoleCode, RbacGrant[]> = {
   ],
 };
 
-export const RBAC_ROLE_GRANTS: Readonly<Record<ErdRoleCode, readonly RbacGrant[]>> =
-  ROLE_GRANTS;
+export const RBAC_ROLE_GRANTS: Readonly<
+  Record<ErdRoleCode, readonly RbacGrant[]>
+> = ROLE_GRANTS;
 
 export const PLATFORM_ADMIN_EXPLICIT_DENIES: readonly RbacPermission[] = [
   'beneficiary.register',
@@ -181,6 +181,9 @@ export const PLATFORM_ADMIN_EXPLICIT_DENIES: readonly RbacPermission[] = [
   'disbursement.view_own',
   'program_template.create',
   'program_template.publish_version',
+  'program_template.retire',
+  'program_template.override_bounds_define',
+  'program_template.override_allowed_fields',
   'workflow.manage',
   'rule_set.manage',
 ];

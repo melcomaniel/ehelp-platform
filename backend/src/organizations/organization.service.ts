@@ -34,6 +34,7 @@ import {
 } from './organization.entities';
 import {
   assertOrganizationTransition,
+  normalizeInitialPolicyConfig,
   normalizeOrganizationCode,
   sanitizeAuditState,
 } from './organization.policy';
@@ -203,7 +204,8 @@ export class OrganizationService {
            'organization_suspended', 'organization_reactivated',
            'organization_archived', 'organization_admin_created',
            'organization_admin_updated', 'organization_admin_suspended',
-           'role_assigned', 'invitation_created', 'invitation_accepted'
+           'role_assigned', 'invitation_created', 'invitation_accepted',
+           'device_registered'
          )
        ORDER BY occurred_at DESC LIMIT 50`,
       [organizationId],
@@ -413,7 +415,7 @@ export class OrganizationService {
             code,
             name: input.name.trim(),
             status: 'active',
-            policyConfig: {},
+            policyConfig: normalizeInitialPolicyConfig(input.policy_config),
             creationKey: input.creation_key,
             suspendedAt: null,
             archivedAt: null,
@@ -465,7 +467,13 @@ export class OrganizationService {
           action: 'organization_admin_created',
           entityType: 'user_account',
           entityId: user.id,
-          after: { email, full_name: input.initial_admin.full_name },
+          after: {
+            email,
+            full_name: input.initial_admin.full_name,
+            organization_id: organization.id,
+            office_id: null,
+            status: user.status,
+          },
           ...meta,
         });
         await this.audit(manager, actorId, organization.id, {
@@ -813,6 +821,7 @@ export class OrganizationService {
       code: organization.code,
       name: organization.name,
       status: organization.status,
+      policy_config: organization.policyConfig,
       suspended_at: organization.suspendedAt,
       archived_at: organization.archivedAt,
       lifecycle_reason: organization.lifecycleReason,

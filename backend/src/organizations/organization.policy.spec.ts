@@ -1,6 +1,7 @@
 import { ConflictException } from '@nestjs/common';
 import {
   assertOrganizationTransition,
+  normalizeInitialPolicyConfig,
   normalizeOrganizationCode,
   sanitizeAuditState,
 } from './organization.policy';
@@ -8,6 +9,20 @@ import {
 describe('organization policy', () => {
   it('normalizes organization codes', () => {
     expect(normalizeOrganizationCode(' dswd-ncr ')).toBe('DSWD-NCR');
+  });
+
+  it('persists only policy controls allowed by the platform baseline', () => {
+    expect(
+      normalizeInitialPolicyConfig({
+        mfa_required: true,
+        device_registration_required: true,
+        session_timeout_minutes: 15,
+      }),
+    ).toEqual({
+      mfa_required: true,
+      device_registration_required: true,
+      session_timeout_minutes: 15,
+    });
   });
 
   it.each([

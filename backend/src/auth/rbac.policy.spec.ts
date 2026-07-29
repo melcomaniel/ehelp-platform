@@ -62,6 +62,20 @@ describe('PRD RBAC policy', () => {
     });
   });
 
+  it.each([
+    'program_template.create',
+    'program_template.publish_version',
+    'program_template.retire',
+    'program_template.override_bounds_define',
+    'program_template.override_allowed_fields',
+    'workflow.manage',
+    'rule_set.manage',
+  ] as const)('denies platform administrators %s', (permission) => {
+    expect(
+      decideRbac(platform, permission, { organizationId: 'org-1' }).allowed,
+    ).toBe(false);
+  });
+
   it('allows organization admins to manage own organization templates only', () => {
     expect(
       decideRbac(orgAdmin, 'program_template.create', {
