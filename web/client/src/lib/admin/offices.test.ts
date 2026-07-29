@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   archiveRegionalOffice,
   canArchiveOffice,
+  createOfficeAdmin,
   officeStatusLabel,
   reactivateRegionalOffice,
 } from "./offices";
@@ -83,6 +84,45 @@ describe("office UI policy", () => {
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({}),
+      }),
+    );
+  });
+
+  it("creates a Regional Office admin through the org-scoped POST endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "admin-1",
+          email: "admin@region.gov.ph",
+          full_name: "Regional Admin",
+          phone: null,
+          status: "active",
+          is_active: true,
+          invitation_status: "pending",
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createOfficeAdmin("org-1", "office-1", {
+      full_name: "Regional Admin",
+      email: "admin@region.gov.ph",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/nest/organizations/org-1/offices/office-1/admins",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          full_name: "Regional Admin",
+          email: "admin@region.gov.ph",
+        }),
       }),
     );
   });

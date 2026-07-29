@@ -6,7 +6,16 @@ import {
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { OfficeEntity } from '../domain/domain.entities';
-import { AuditLogEntity } from '../organizations/organization.entities';
+import {
+  AuditLogEntity,
+  OrganizationInvitationEntity,
+} from '../organizations/organization.entities';
+import { StaffProfileEntity } from '../users/staff-profile.entity';
+import {
+  RoleEntity,
+  UserAccountEntity,
+  UserRoleAssignmentEntity,
+} from '../users/user.entity';
 import { OfficeService } from './office.service';
 
 const actor = {
@@ -540,5 +549,230 @@ describe('OfficeService regional office reactivation', () => {
 
     expect(office.status).toBe('active');
     expect(auditSaves).toHaveLength(1);
+  });
+});
+
+function makeOfficeAdminService(options?: {
+  actorOrganizationId?: string;
+  officeStatus?: 'active' | 'archived';
+  existingActiveAdmin?: boolean;
+  existingEmail?: boolean;
+  createdAdminRow?: Record<string, unknown>;
+}) {
+  const office = {
+    id: 'office-1',
+    organizationId: 'org-1',
+    parentOfficeId: null,
+    name: 'Region III',
+    code: 'REGION_III',
+    normalizedCode: 'REGION_III',
+    level: 'regional',
+    status: options?.officeStatus ?? 'active',
+    archivedAt: null as Date | null,
+    lifecycleReason: null as string | null,
+    createdByUserId: 'user-1',
+    updatedByUserId: 'user-1',
+  };
+  const auditSaves: Array<Record<string, unknown>> = [];
+  const savedUserAccounts: Array<Record<string, unknown>> = [];
+  const savedProfiles: Array<Record<string, unknown>> = [];
+  const savedRoleAssignments: Array<Record<string, unknown>> = [];
+  const savedInvitations: Array<Record<string, unknown>> = [];
+
+  const manager = {
+    query: jest.fn(async (sql: string) => {
+      if (sql.includes("r.code = 'OFFICE_ADMIN'") && sql.includes('is_active')) {
+        return options?.existingActiveAdmin ? [{ id: 'existing-admin' }] : [];
+      }
+      return [];
+    }),
+    getRepository: jest.fn((entity: unknown) => {
+      if (entity === OfficeEntity) {
+        return {
+          findOne: jest.fn(async () => office),
+        };
+      }
+      if (entity === UserAccountEntity) {
+        return {
+          findOne: jest.fn(async () =>
+            options?.existingEmail ? { id: 'existing-user' } : null,
+          ),
+          create: jest.fn((value: Record<string, unknown>) => value),
+          save: jest.fn(async (value: Record<string, unknown>) => {
+            savedUserAccounts.push(value);
+            return { ...value, id: 'admin-1' };
+          }),
+        };
+      }
+      if (entity === RoleEntity) {
+        return {
+          findOne: jest.fn(async () => ({ id: 'role-office-admin' })),
+        };
+      }
+      if (entity === StaffProfileEntity) {
+        return {
+          save: jest.fn(async (value: Record<string, unknown>) => {
+            savedProfiles.push(value);
+            return value;
+          }),
+        };
+      }
+      if (entity === UserRoleAssignmentEntity) {
+        return {
+          save: jest.fn(async (value: Record<string, unknown>) => {
+            savedRoleAssignments.push(value);
+            return value;
+          }),
+        };
+      }
+      if (entity === OrganizationInvitationEntity) {
+        return {
+          save: jest.fn(async (value: Record<string, unknown>) => {
+            savedInvitations.push(value);
+            return { ...value, id: 'invitation-1' };
+          }),
+        };
+      }
+      if (entity === AuditLogEntity) {
+        return {
+          save: jest.fn(async (value: Record<string, unknown>) => {
+            auditSaves.push(value);
+            return value;
+          }),
+        };
+      }
+      throw new Error('Unexpected repository');
+    }),
+  };
+
+  const dataSource = {
+    query: jest.fn(async (sql: string) => {
+      if (sql.includes('FROM user_accounts u') && sql.includes("'ORG_ADMIN'")) {
+        return [
+          {
+            ...actor,
+            organization_id: options?.actorOrganizationId ?? 'org-1',
+          },
+        ];
+      }
+      if (sql.includes("r.code = 'OFFICE_ADMIN'")) {
+        return [
+          options?.createdAdminRow ?? {
+            id: 'admin-1',
+            email: 'admin@region.gov.ph',
+            status: 'active',
+            is_active: true,
+            created_at: new Date('2026-01-01T00:00:00Z'),
+            updated_at: new Date('2026-01-01T00:00:00Z'),
+            full_name: 'Regional Admin',
+            phone: null,
+            invitation_status: 'pending',
+          },
+        ];
+      }
+      return [];
+    }),
+    transaction: jest.fn(async (callback) => callback(manager)),
+  } as unknown as DataSource;
+
+  return {
+    service: new OfficeService(dataSource),
+    dataSource,
+    manager,
+    auditSaves,
+    savedUserAccounts,
+    savedProfiles,
+    savedRoleAssignments,
+    savedInvitations,
+  };
+}
+
+describe('OfficeService office administrator assignment', () => {
+  const validInput = {
+    full_name: 'Regional Admin',
+    email: 'admin@region.gov.ph',
+    phone: undefined,
+  };
+
+  it('creates an Office Administrator scoped to the office and writes audit records', async () => {
+    const {
+      service,
+      auditSaves,
+      savedUserAccounts,
+      savedRoleAssignments,
+      savedInvitations,
+    } = makeOfficeAdminService();
+
+    const result = await service.createOfficeAdmin(
+      'user-1',
+      'org-1',
+      'office-1',
+      validInput,
+      { requestId: 'req-office-admin', ipAddress: '127.0.0.1' },
+    );
+
+    expect(result).toMatchObject({ id: 'admin-1', email: 'admin@region.gov.ph' });
+    expect(savedUserAccounts).toHaveLength(1);
+    expect(savedUserAccounts[0]).toMatchObject({
+      organizationId: 'org-1',
+      officeId: 'office-1',
+      accountType: 'staff',
+    });
+    expect(savedRoleAssignments).toHaveLength(1);
+    expect(savedRoleAssignments[0]).toMatchObject({
+      officeId: 'office-1',
+      roleId: 'role-office-admin',
+    });
+    expect(savedInvitations).toHaveLength(1);
+    expect(auditSaves).toHaveLength(3);
+    expect(auditSaves.map((a) => a.action)).toEqual([
+      'office_admin_created',
+      'role_assigned',
+      'invitation_created',
+    ]);
+  });
+
+  it('rejects a mismatched organization before starting a transaction', async () => {
+    const { service, dataSource } = makeOfficeAdminService({
+      actorOrganizationId: 'org-2',
+    });
+
+    await expect(
+      service.createOfficeAdmin('user-1', 'org-1', 'office-1', validInput),
+    ).rejects.toThrow(ForbiddenException);
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects assigning an administrator to an archived office', async () => {
+    const { service, auditSaves } = makeOfficeAdminService({
+      officeStatus: 'archived',
+    });
+
+    await expect(
+      service.createOfficeAdmin('user-1', 'org-1', 'office-1', validInput),
+    ).rejects.toThrow(ConflictException);
+    expect(auditSaves).toHaveLength(0);
+  });
+
+  it('rejects a second active administrator for the same office', async () => {
+    const { service, auditSaves } = makeOfficeAdminService({
+      existingActiveAdmin: true,
+    });
+
+    await expect(
+      service.createOfficeAdmin('user-1', 'org-1', 'office-1', validInput),
+    ).rejects.toThrow(ConflictException);
+    expect(auditSaves).toHaveLength(0);
+  });
+
+  it('rejects a duplicate administrator email', async () => {
+    const { service, auditSaves } = makeOfficeAdminService({
+      existingEmail: true,
+    });
+
+    await expect(
+      service.createOfficeAdmin('user-1', 'org-1', 'office-1', validInput),
+    ).rejects.toThrow(ConflictException);
+    expect(auditSaves).toHaveLength(0);
   });
 });

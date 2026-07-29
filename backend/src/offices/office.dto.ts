@@ -9,6 +9,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import { InitialOrganizationAdminDto } from '../organizations/organization.dto';
 import {
   OFFICE_LEVELS,
   type OfficeLevel,
@@ -107,6 +108,8 @@ export class UpdateOfficeDto {
   @IsUUID()
   parent_office_id?: string | null;
 }
+
+export class CreateOfficeAdminDto extends InitialOrganizationAdminDto {}
 
 export class OfficeLifecycleReasonDto {
   @Transform(trim)

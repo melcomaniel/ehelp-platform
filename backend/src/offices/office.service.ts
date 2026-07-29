@@ -7,9 +7,19 @@ import {
 } from '@nestjs/common';
 import { DataSource, EntityManager, QueryFailedError } from 'typeorm';
 import { OfficeEntity } from '../domain/domain.entities';
-import { AuditLogEntity } from '../organizations/organization.entities';
-import { sanitizeAuditState } from '../organizations/organization.policy';
 import {
+  AuditLogEntity,
+  OrganizationInvitationEntity,
+} from '../organizations/organization.entities';
+import { sanitizeAuditState } from '../organizations/organization.policy';
+import { StaffProfileEntity } from '../users/staff-profile.entity';
+import {
+  RoleEntity,
+  UserAccountEntity,
+  UserRoleAssignmentEntity,
+} from '../users/user.entity';
+import {
+  CreateOfficeAdminDto,
   CreateOfficeDto,
   CreateRegionalOfficeDto,
   OfficeListQueryDto,
@@ -60,6 +70,18 @@ type AuditRow = {
   reason: string | null;
   outcome: string;
   occurred_at: Date;
+};
+
+type OfficeAdminRow = {
+  id: string;
+  email: string;
+  status: string;
+  is_active: boolean;
+  created_at: Date;
+  updated_at: Date;
+  full_name: string;
+  phone: string | null;
+  invitation_status: string | null;
 };
 
 @Injectable()
@@ -178,7 +200,8 @@ export class OfficeService {
          AND entity_id = $2
          AND action IN (
            'office_created', 'office_updated', 'office_parent_changed',
-           'office_archived', 'office_reactivated'
+           'office_archived', 'office_reactivated', 'office_admin_created',
+           'role_assigned', 'invitation_created'
          )
        ORDER BY occurred_at DESC LIMIT 50`,
       [actor.organization_id, officeId],
@@ -230,6 +253,126 @@ export class OfficeService {
       meta,
       actor,
     );
+  }
+
+  async createOfficeAdmin(
+    actorId: string,
+    organizationId: string,
+    officeId: string,
+    input: CreateOfficeAdminDto,
+    meta: RequestMeta = {},
+  ) {
+    const actor = await this.requireOrgAdmin(actorId);
+    if (organizationId !== actor.organization_id) {
+      throw new ForbiddenException(
+        'Cannot assign an administrator to an office outside your organization',
+      );
+    }
+    try {
+      const adminId = await this.dataSource.transaction(async (manager) => {
+        const office = await this.lockOffice(manager, organizationId, officeId);
+        if (office.status !== 'active') {
+          throw new ConflictException(
+            'Office must be active to add an administrator',
+          );
+        }
+        const existingAdmin = await manager.query<Array<{ id: string }>>(
+          `SELECT u.id
+           FROM user_accounts u
+           JOIN user_role_assignments ura ON ura.user_account_id = u.id
+           JOIN roles r ON r.id = ura.role_id AND r.code = 'OFFICE_ADMIN'
+           WHERE ura.office_id = $1 AND u.is_active = true AND u.status = 'active'
+           LIMIT 1`,
+          [officeId],
+        );
+        if (existingAdmin[0]) {
+          throw new ConflictException(
+            'This office already has an active Administrator',
+          );
+        }
+        const email = input.email.trim().toLowerCase();
+        if (
+          await manager
+            .getRepository(UserAccountEntity)
+            .findOne({ where: { email } })
+        ) {
+          throw new ConflictException('Administrator email already exists');
+        }
+        const role = await manager
+          .getRepository(RoleEntity)
+          .findOne({ where: { code: 'OFFICE_ADMIN' } });
+        if (!role)
+          throw new ConflictException('OFFICE_ADMIN role is not seeded');
+
+        const userRepo = manager.getRepository(UserAccountEntity);
+        const user = await userRepo.save(
+          userRepo.create({
+            organizationId,
+            officeId,
+            accountType: 'staff',
+            email,
+            passwordHash: null,
+            status: 'active',
+            verifiedAt: null,
+            isActive: true,
+          }),
+        );
+        await manager.getRepository(StaffProfileEntity).save({
+          userAccountId: user.id,
+          fullName: input.full_name.trim(),
+          phone: input.phone?.trim() || null,
+        });
+        await manager.getRepository(UserRoleAssignmentEntity).save({
+          userAccountId: user.id,
+          roleId: role.id,
+          officeId,
+        });
+        const invitation = await manager
+          .getRepository(OrganizationInvitationEntity)
+          .save({
+            organizationId,
+            userAccountId: user.id,
+            email,
+            status: 'pending',
+            invitedByUserId: actorId,
+            acceptedAt: null,
+          });
+        await this.audit(manager, actorId, organizationId, {
+          action: 'office_admin_created',
+          entityId: office.id,
+          after: {
+            user_account_id: user.id,
+            email,
+            full_name: input.full_name.trim(),
+            organization_id: organizationId,
+            office_id: officeId,
+            status: user.status,
+          },
+          ...meta,
+        });
+        await this.audit(manager, actorId, organizationId, {
+          action: 'role_assigned',
+          entityId: office.id,
+          after: {
+            user_account_id: user.id,
+            role: 'OFFICE_ADMIN',
+            office_id: officeId,
+          },
+          ...meta,
+        });
+        await this.audit(manager, actorId, organizationId, {
+          action: 'invitation_created',
+          entityId: office.id,
+          after: { user_account_id: user.id, email, status: invitation.status },
+          ...meta,
+        });
+        return user.id;
+      });
+      const admins = await this.listOfficeAdmins(officeId);
+      return admins.find((admin) => admin.id === adminId)!;
+    } catch (error) {
+      this.rethrowConflict(error);
+    }
   }
 
   private async createFlatOffice(
@@ -497,6 +640,27 @@ export class OfficeService {
       await this.resumeDeferredWorkflowTasks(manager, office.id);
     });
     return this.detail(actorId, officeId);
+  }
+
+  private async listOfficeAdmins(officeId: string): Promise<OfficeAdminRow[]> {
+    return this.dataSource.query<OfficeAdminRow[]>(
+      `SELECT u.id, u.email, u.status, u.is_active, u.created_at, u.updated_at,
+              sp.full_name, sp.phone,
+              invitation.status AS invitation_status
+       FROM user_accounts u
+       JOIN user_role_assignments ura
+         ON ura.user_account_id = u.id AND ura.office_id = $1
+       JOIN roles r ON r.id = ura.role_id AND r.code = 'OFFICE_ADMIN'
+       JOIN staff_profiles sp ON sp.user_account_id = u.id
+       LEFT JOIN LATERAL (
+         SELECT oi.status FROM organization_invitations oi
+         WHERE oi.user_account_id = u.id AND oi.organization_id = u.organization_id
+         ORDER BY oi.created_at DESC LIMIT 1
+       ) invitation ON true
+       WHERE u.office_id = $1
+       ORDER BY u.created_at ASC`,
+      [officeId],
+    );
   }
 
   private async resumeDeferredWorkflowTasks(
@@ -778,6 +942,9 @@ export class OfficeService {
         throw new ConflictException(
           'Parent office must belong to the same organization',
         );
+      }
+      if (message.includes('user_accounts_email_key')) {
+        throw new ConflictException('Administrator email already exists');
       }
     }
     throw error;

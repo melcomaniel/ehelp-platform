@@ -49,6 +49,18 @@ export type OfficePage = {
   };
 };
 
+export type OfficeAdmin = {
+  id: string;
+  email: string;
+  full_name: string;
+  phone: string | null;
+  status: string;
+  is_active: boolean;
+  invitation_status: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ParentOfficeOption = {
   id: string;
   name: string;
@@ -180,6 +192,20 @@ export function reactivateRegionalOffice(
     {
       method: "PATCH",
       body: {},
+    },
+  );
+}
+
+export function createOfficeAdmin(
+  organizationId: string,
+  officeId: string,
+  input: { full_name: string; email: string; phone?: string },
+) {
+  return nestFetch<OfficeAdmin>(
+    `/organizations/${organizationId}/offices/${officeId}/admins`,
+    {
+      method: "POST",
+      body: input,
     },
   );
 }

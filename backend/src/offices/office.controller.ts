@@ -14,6 +14,7 @@ import { AuthGuard } from '@nestjs/passport';
 import type { Request } from 'express';
 import type { JwtPayload } from '../auth/jwt.strategy';
 import {
+  CreateOfficeAdminDto,
   CreateOfficeDto,
   CreateRegionalOfficeDto,
   OfficeLifecycleReasonDto,
@@ -155,6 +156,23 @@ export class OrganizationOfficeController {
       req.user.sub,
       organizationId,
       officeId,
+      this.meta(req, requestId),
+    );
+  }
+
+  @Post(':officeId/admins')
+  createOfficeAdmin(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+    @Param('officeId') officeId: string,
+    @Body() body: CreateOfficeAdminDto,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.offices.createOfficeAdmin(
+      req.user.sub,
+      organizationId,
+      officeId,
+      body,
       this.meta(req, requestId),
     );
   }
