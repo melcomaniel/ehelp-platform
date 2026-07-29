@@ -52,6 +52,11 @@ export type OrganizationDetail = {
   code: string
   name: string
   status: OrganizationStatus
+  policy_config: {
+    mfa_required: true
+    device_registration_required: true
+    session_timeout_minutes: number
+  }
   office_count: number
   suspended_at: string | null
   archived_at: string | null
@@ -87,18 +92,20 @@ export function organizationStatusLabel(status: OrganizationStatus) {
 }
 
 export function canArchiveOrganization(status: OrganizationStatus) {
-  return status === "suspended"
+  return status === "active" || status === "suspended"
 }
 
 export function listOrganizations(input: {
   search?: string
   status?: string
+  includeArchived?: boolean
   page?: number
   pageSize?: number
 }) {
   const query = new URLSearchParams()
   if (input.search) query.set("search", input.search)
   if (input.status) query.set("status", input.status)
+  if (input.includeArchived) query.set("include_archived", "true")
   query.set("page", String(input.page ?? 1))
   query.set("page_size", String(input.pageSize ?? 20))
   return nestFetch<OrganizationPage>(
@@ -155,6 +162,11 @@ export function createOrganization(input: {
   name: string
   code: string
   creation_key: string
+  policy_config: {
+    mfa_required: true
+    device_registration_required: true
+    session_timeout_minutes: number
+  }
   initial_admin: {
     full_name: string
     email: string
@@ -183,9 +195,9 @@ export function transitionOrganization(
   reason?: string,
 ) {
   return nestFetch<OrganizationDetail>(
-    `/admin/organizations/${id}/${action}`,
+    `/platform/organizations/${id}/${action}`,
     {
-      method: "POST",
+      method: "PATCH",
       body: reason ? { reason } : {},
     },
   )
@@ -197,8 +209,24 @@ export function updateOrganizationAdmin(
   input: { full_name?: string; email?: string; phone?: string },
 ) {
   return nestFetch<OrganizationDetail>(
-    `/admin/organizations/${organizationId}/admins/${adminId}`,
+    `/platform/organizations/${organizationId}/admins/${adminId}`,
     { method: "PATCH", body: input },
+  )
+}
+
+export function createOrganizationAdmin(
+  organizationId: string,
+  input: { full_name: string; email: string; phone?: string },
+) {
+  return nestFetch<OrganizationAdmin>(
+    `/platform/organizations/${organizationId}/admins`,
+    { method: "POST", body: input },
+  )
+}
+
+export function getOrganizationAdmins(organizationId: string) {
+  return nestFetch<OrganizationAdmin[]>(
+    `/platform/organizations/${organizationId}/admins`,
   )
 }
 
@@ -208,7 +236,21 @@ export function suspendOrganizationAdmin(
   reason: string,
 ) {
   return nestFetch<OrganizationDetail>(
-    `/admin/organizations/${organizationId}/admins/${adminId}/suspend`,
-    { method: "POST", body: { reason } },
+    `/platform/organizations/${organizationId}/admins/${adminId}`,
+    { method: "PATCH", body: { status: "suspended", reason } },
+  )
+}
+
+export function reactivateOrganizationAdmin(
+  organizationId: string,
+  adminId: string,
+  reason?: string,
+) {
+  return nestFetch<OrganizationDetail>(
+    `/platform/organizations/${organizationId}/admins/${adminId}`,
+    {
+      method: "PATCH",
+      body: { status: "active", ...(reason ? { reason } : {}) },
+    },
   )
 }

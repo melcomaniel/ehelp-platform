@@ -7,12 +7,15 @@ import { useParams, useSearchParams } from "next/navigation";
 import { useAdminAccess } from "@/lib/admin/access-provider";
 import {
   OFFICE_LEVEL_LABEL,
+  approveStaffRequest,
   archiveOffice,
+  archiveRegionalOffice,
   canArchiveOffice,
   getOffice,
   listParentOfficeOptions,
   officeStatusLabel,
   reactivateOffice,
+  reactivateRegionalOffice,
   updateOffice,
   type OfficeDetail,
   type OfficeLevel,
@@ -97,9 +100,29 @@ export default function OfficeDetailPage() {
     }
   }
 
+  const [approvingId, setApprovingId] = React.useState<string | null>(null);
+
+  async function approveStaff(userId: string) {
+    if (!office) return;
+    setApprovingId(userId);
+    setError(null);
+    try {
+      await approveStaffRequest(office.organization_id, params.officeId, userId);
+      setOffice(await getOffice(params.officeId));
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Unable to approve staff request",
+      );
+    } finally {
+      setApprovingId(null);
+    }
+  }
+
   async function applyLifecycle(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!action) return;
+    if (!action || !office) return;
     setBusy(true);
     setError(null);
     const reason = String(
@@ -108,8 +131,19 @@ export default function OfficeDetailPage() {
     try {
       setOffice(
         action === "archive"
-          ? await archiveOffice(params.officeId, reason)
-          : await reactivateOffice(params.officeId),
+          ? office.level === "regional"
+            ? await archiveRegionalOffice(
+                office.organization_id,
+                params.officeId,
+                reason,
+              )
+            : await archiveOffice(params.officeId, reason)
+          : office.level === "regional"
+            ? await reactivateRegionalOffice(
+                office.organization_id,
+                params.officeId,
+              )
+            : await reactivateOffice(params.officeId),
       );
       setAction(null);
     } catch (caught) {
@@ -309,7 +343,9 @@ export default function OfficeDetailPage() {
               disabled={!canArchiveOffice(office)}
               onClick={() => setAction("archive")}
             >
-              Archive
+              {office.level === "regional"
+                ? "Archive Regional Office"
+                : "Archive Office"}
             </Button>
             <Button
               variant="outline"
@@ -332,7 +368,9 @@ export default function OfficeDetailPage() {
               aria-labelledby="office-lifecycle-title"
             >
               <p id="office-lifecycle-title" className="font-medium">
-                Confirm {action} for {office.name}
+                {action === "archive" && office.level === "regional"
+                  ? `Confirm Archive Regional Office for ${office.name}`
+                  : `Confirm ${action} for ${office.name}`}
               </p>
               {action === "archive" && (
                 <div className="space-y-2">
@@ -359,7 +397,9 @@ export default function OfficeDetailPage() {
                   variant={action === "archive" ? "destructive" : "default"}
                   disabled={busy}
                 >
-                  Confirm {action}
+                  {action === "archive" && office.level === "regional"
+                    ? "Archive Regional Office"
+                    : `Confirm ${action}`}
                 </Button>
               </div>
             </form>
@@ -369,6 +409,89 @@ export default function OfficeDetailPage() {
               Latest lifecycle reason: {office.lifecycle_reason}
             </p>
           )}
+        </CardContent>
+      </Card>
+
+      {office.level === "regional" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Regional Administrator</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {office.office_admins.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No Regional Administrator assigned yet.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {office.office_admins.map((admin) => (
+                  <div
+                    key={admin.id}
+                    className="rounded-md border p-3 text-sm"
+                  >
+                    <p className="font-medium">{admin.full_name}</p>
+                    <p className="text-muted-foreground">{admin.email}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Account: {admin.status} · Invitation: {admin.invitation_status ?? "—"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-sm text-muted-foreground">
+              Create or assign Regional Administrators from Admin → Accounts.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Officer account requests</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {office.staff_requests.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No Evaluator/Approver requests for this office yet.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {office.staff_requests.map((request) => (
+                <div
+                  key={request.id}
+                  className="flex flex-col justify-between gap-2 rounded-md border p-3 text-sm sm:flex-row sm:items-center"
+                >
+                  <div>
+                    <p className="font-medium">
+                      {request.full_name}{" "}
+                      <span className="text-muted-foreground">
+                        ({request.role === "EVALUATOR" ? "Evaluator" : "Approver"})
+                      </span>
+                    </p>
+                    <p className="text-muted-foreground">{request.email}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Account: {request.status} · Invitation:{" "}
+                      {request.invitation_status ?? "—"}
+                    </p>
+                  </div>
+                  {request.status === "pending" && (
+                    <Button
+                      size="sm"
+                      disabled={approvingId === request.id}
+                      onClick={() => void approveStaff(request.id)}
+                    >
+                      Approve
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-sm text-muted-foreground">
+            Regional Admins request Officer accounts for their own office;
+            approval here starts the standard device-registration flow before
+            the account can log in.
+          </p>
         </CardContent>
       </Card>
 

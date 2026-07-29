@@ -9,6 +9,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import { InitialOrganizationAdminDto } from '../organizations/organization.dto';
 import {
   OFFICE_LEVELS,
   type OfficeLevel,
@@ -70,6 +71,20 @@ export class CreateOfficeDto {
   parent_office_id?: string | null;
 }
 
+export class CreateRegionalOfficeDto {
+  @Transform(trim)
+  @IsString()
+  @MinLength(2)
+  @MaxLength(160)
+  name!: string;
+
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(40)
+  code!: string;
+}
+
 export class UpdateOfficeDto {
   @IsOptional()
   @Transform(trim)
@@ -92,6 +107,16 @@ export class UpdateOfficeDto {
   @IsOptional()
   @IsUUID()
   parent_office_id?: string | null;
+}
+
+export class CreateOfficeAdminDto extends InitialOrganizationAdminDto {}
+
+export const STAFF_REQUEST_ROLES = ['evaluator', 'approver'] as const;
+export type StaffRequestRole = (typeof STAFF_REQUEST_ROLES)[number];
+
+export class CreateStaffRequestDto extends InitialOrganizationAdminDto {
+  @IsIn(STAFF_REQUEST_ROLES)
+  role!: StaffRequestRole;
 }
 
 export class OfficeLifecycleReasonDto {

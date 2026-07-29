@@ -30,6 +30,11 @@ export default function NewOrganizationPage() {
         name: String(data.get("name") ?? ""),
         code: String(data.get("code") ?? "").toUpperCase(),
         creation_key: creationKey.current,
+        policy_config: {
+          mfa_required: true,
+          device_registration_required: true,
+          session_timeout_minutes: Number(data.get("session_timeout_minutes")),
+        },
         initial_admin: {
           full_name: String(data.get("admin_name") ?? ""),
           email: String(data.get("admin_email") ?? "").toLowerCase(),
@@ -111,6 +116,38 @@ export default function NewOrganizationPage() {
 
         <Card>
           <CardHeader>
+            <CardTitle>Initial security policy</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="session_timeout_minutes">
+                Session timeout (minutes)
+              </Label>
+              <Input
+                id="session_timeout_minutes"
+                name="session_timeout_minutes"
+                type="number"
+                min={5}
+                max={30}
+                defaultValue={30}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Platform baseline</Label>
+              <Input
+                value="MFA and device registration required"
+                disabled
+              />
+              <p className="text-xs text-muted-foreground">
+                These controls cannot be disabled for an organization.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>Initial Organization Administrator</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -119,7 +156,7 @@ export default function NewOrganizationPage() {
               <Input id="admin_name" name="admin_name" required minLength={2} maxLength={160} autoComplete="name" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="admin_email">Government email</Label>
+              <Label htmlFor="admin_email">Email address</Label>
               <Input id="admin_email" name="admin_email" required type="email" maxLength={254} autoComplete="email" />
             </div>
             <div className="space-y-2">

@@ -29,6 +29,7 @@ export default function OrganizationsPage() {
   const [searchInput, setSearchInput] = React.useState("")
   const [search, setSearch] = React.useState("")
   const [status, setStatus] = React.useState("")
+  const [includeArchived, setIncludeArchived] = React.useState(false)
   const [page, setPage] = React.useState(1)
   const [result, setResult] = React.useState<OrganizationPage | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -39,13 +40,15 @@ export default function OrganizationsPage() {
     setLoading(true)
     setError(null)
     try {
-      setResult(await listOrganizations({ search, status, page }))
+      setResult(
+        await listOrganizations({ search, status, includeArchived, page }),
+      )
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to load organizations")
     } finally {
       setLoading(false)
     }
-  }, [isPlatformAdmin, page, search, status])
+  }, [includeArchived, isPlatformAdmin, page, search, status])
 
   React.useEffect(() => {
     if (!accessLoading) {
@@ -83,7 +86,7 @@ export default function OrganizationsPage() {
       <Card>
         <CardContent className="pt-6">
           <form
-            className="grid gap-4 md:grid-cols-[1fr_220px_auto]"
+            className="grid gap-4 md:grid-cols-[1fr_220px_auto_auto]"
             onSubmit={(event) => {
               event.preventDefault()
               setPage(1)
@@ -116,6 +119,17 @@ export default function OrganizationsPage() {
                 <option value="archived">Archived</option>
               </select>
             </div>
+            <label className="flex h-9 items-center gap-2 self-end text-sm">
+              <input
+                type="checkbox"
+                checked={includeArchived}
+                onChange={(event) => {
+                  setPage(1)
+                  setIncludeArchived(event.target.checked)
+                }}
+              />
+              Include archived
+            </label>
             <Button className="self-end" type="submit" variant="outline">
               <SearchIcon /> Search
             </Button>

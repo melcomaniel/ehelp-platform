@@ -14,6 +14,7 @@ import { AuthGuard } from '@nestjs/passport';
 import type { Request } from 'express';
 import type { JwtPayload } from '../auth/jwt.strategy';
 import {
+  CreateOrganizationAdminDto,
   CreateOrganizationDto,
   LifecycleReasonDto,
   OrganizationAdminListQueryDto,
@@ -164,6 +165,104 @@ export class OrganizationController {
       req.user.sub,
       organizationId,
       adminId,
+      body.reason,
+      this.meta(req, requestId),
+    );
+  }
+
+  private meta(req: Request, requestId?: string) {
+    return {
+      ipAddress: req.ip || null,
+      requestId: requestId?.trim() || null,
+    };
+  }
+}
+
+@Controller('platform/organizations')
+@UseGuards(AuthGuard('jwt'))
+export class PlatformOrganizationController {
+  constructor(private readonly organizations: OrganizationService) {}
+
+  @Get(':organizationId/admins')
+  admins(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+  ) {
+    return this.organizations.listAdmins(req.user.sub, organizationId);
+  }
+
+  @Post(':organizationId/admins')
+  createAdmin(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+    @Body() body: CreateOrganizationAdminDto,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.organizations.createAdmin(
+      req.user.sub,
+      organizationId,
+      body,
+      this.meta(req, requestId),
+    );
+  }
+
+  @Patch(':organizationId/admins/:adminId')
+  updateAdmin(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+    @Param('adminId') adminId: string,
+    @Body() body: UpdateOrganizationAdminDto,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.organizations.updateAdmin(
+      req.user.sub,
+      organizationId,
+      adminId,
+      body,
+      this.meta(req, requestId),
+    );
+  }
+
+  @Patch(':organizationId/suspend')
+  suspend(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+    @Body() body: LifecycleReasonDto,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.organizations.suspend(
+      req.user.sub,
+      organizationId,
+      body.reason,
+      this.meta(req, requestId),
+    );
+  }
+
+  @Patch(':organizationId/reactivate')
+  reactivate(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+    @Body() body: ReactivateOrganizationDto,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.organizations.reactivate(
+      req.user.sub,
+      organizationId,
+      body.reason,
+      this.meta(req, requestId),
+    );
+  }
+
+  @Patch(':organizationId/archive')
+  archive(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+    @Body() body: LifecycleReasonDto,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.organizations.archive(
+      req.user.sub,
+      organizationId,
       body.reason,
       this.meta(req, requestId),
     );

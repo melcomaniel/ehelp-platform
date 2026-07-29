@@ -167,9 +167,12 @@ Middleware guards `/admin`, `/staff`, `/dashboard` and redirects by role.
 Organization Management is also authorized by Nest on every request; sidebar
 visibility and Next middleware are not the security boundary. New Organization
 Administrators activate through the same eGov SSO exchange as existing staff,
-using the government email provisioned with the tenant. Suspend/archive actions
-preserve data and require confirmation; archive is available only after
-suspension and is terminal in the UI.
+using the government email provisioned with the tenant. The browser supplies a
+stable device registration identifier during that first activation. Organization
+creation also submits an initial policy constrained by the mandatory MFA/device
+controls and 30-minute maximum session timeout. Suspend/archive actions preserve
+data and require confirmation; archive is available only after suspension and is
+terminal in the UI.
 
 Organization Administrators manage offices through Nest `/admin/offices`.
 The web UI never exposes an organization selector for this flow; Nest resolves

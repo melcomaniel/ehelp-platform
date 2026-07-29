@@ -1,8 +1,23 @@
 import { ConflictException } from '@nestjs/common';
+import {
+  PLATFORM_SECURITY_BASELINE,
+  type InitialPolicyConfigDto,
+} from './organization.dto';
 import type { OrganizationStatus } from './organization.entities';
 
 export function normalizeOrganizationCode(code: string): string {
   return code.trim().toUpperCase();
+}
+
+export function normalizeInitialPolicyConfig(
+  input: InitialPolicyConfigDto,
+): Record<string, unknown> {
+  return {
+    mfa_required: PLATFORM_SECURITY_BASELINE.mfa_required,
+    device_registration_required:
+      PLATFORM_SECURITY_BASELINE.device_registration_required,
+    session_timeout_minutes: input.session_timeout_minutes,
+  };
 }
 
 export function assertOrganizationTransition(
@@ -10,14 +25,12 @@ export function assertOrganizationTransition(
   next: OrganizationStatus,
 ): void {
   const allowed =
-    (current === 'active' && next === 'suspended') ||
+    (current === 'active' && (next === 'suspended' || next === 'archived')) ||
     (current === 'suspended' && (next === 'active' || next === 'archived'));
   if (!allowed) {
-    const message =
-      next === 'archived' && current === 'active'
-        ? 'Organization must be suspended before it can be archived'
-        : `Organization cannot transition from ${current} to ${next}`;
-    throw new ConflictException(message);
+    throw new ConflictException(
+      `Organization cannot transition from ${current} to ${next}`,
+    );
   }
 }
 

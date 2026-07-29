@@ -7,10 +7,22 @@ import {
 } from '@nestjs/common';
 import { DataSource, EntityManager, QueryFailedError } from 'typeorm';
 import { OfficeEntity } from '../domain/domain.entities';
-import { AuditLogEntity } from '../organizations/organization.entities';
-import { sanitizeAuditState } from '../organizations/organization.policy';
 import {
+  AuditLogEntity,
+  OrganizationInvitationEntity,
+} from '../organizations/organization.entities';
+import { sanitizeAuditState } from '../organizations/organization.policy';
+import { StaffProfileEntity } from '../users/staff-profile.entity';
+import {
+  RoleEntity,
+  UserAccountEntity,
+  UserRoleAssignmentEntity,
+} from '../users/user.entity';
+import {
+  CreateOfficeAdminDto,
   CreateOfficeDto,
+  CreateRegionalOfficeDto,
+  CreateStaffRequestDto,
   OfficeListQueryDto,
   UpdateOfficeDto,
 } from './office.dto';
@@ -29,6 +41,17 @@ type OrgAdminActor = {
   id: string;
   organization_id: string;
   organization_name: string;
+};
+
+type OfficeAdminActor = {
+  id: string;
+  organization_id: string;
+  office_id: string;
+};
+
+const STAFF_REQUEST_ROLE_CODE: Record<CreateStaffRequestDto['role'], string> = {
+  evaluator: 'EVALUATOR',
+  approver: 'APPROVER',
 };
 
 type OfficeRow = {
@@ -59,6 +82,31 @@ type AuditRow = {
   reason: string | null;
   outcome: string;
   occurred_at: Date;
+};
+
+type OfficeAdminRow = {
+  id: string;
+  email: string;
+  status: string;
+  is_active: boolean;
+  created_at: Date;
+  updated_at: Date;
+  full_name: string;
+  phone: string | null;
+  invitation_status: string | null;
+};
+
+type StaffRequestRow = {
+  id: string;
+  email: string;
+  status: string;
+  is_active: boolean;
+  role: string;
+  created_at: Date;
+  updated_at: Date;
+  full_name: string;
+  phone: string | null;
+  invitation_status: string | null;
 };
 
 @Injectable()
@@ -177,14 +225,20 @@ export class OfficeService {
          AND entity_id = $2
          AND action IN (
            'office_created', 'office_updated', 'office_parent_changed',
-           'office_archived', 'office_reactivated'
+           'office_archived', 'office_reactivated', 'office_admin_created',
+           'role_assigned', 'invitation_created',
+           'staff_account_requested', 'staff_account_approved'
          )
        ORDER BY occurred_at DESC LIMIT 50`,
       [actor.organization_id, officeId],
     );
+    const officeAdmins = await this.listOfficeAdmins(officeId);
+    const staffRequests = await this.listStaffRequests(officeId);
     return {
       ...this.officeState(office),
       child_offices: children.map((row) => this.officeState(row)),
+      office_admins: officeAdmins,
+      staff_requests: staffRequests.map((row) => this.staffRequestState(row)),
       audit_history: audits,
     };
   }
@@ -194,10 +248,320 @@ export class OfficeService {
     input: CreateOfficeDto,
     meta: RequestMeta = {},
   ) {
+    return this.createFlatOffice(
+      actorId,
+      {
+        name: input.name,
+        code: input.code,
+        level: input.level,
+        parent_office_id: input.parent_office_id ?? null,
+      },
+      meta,
+    );
+  }
+
+  async createRegionalOffice(
+    actorId: string,
+    organizationId: string,
+    input: CreateRegionalOfficeDto,
+    meta: RequestMeta = {},
+  ) {
     const actor = await this.requireOrgAdmin(actorId);
+    if (organizationId !== actor.organization_id) {
+      throw new ForbiddenException(
+        'Cannot create an office outside your organization',
+      );
+    }
+    return this.createFlatOffice(
+      actorId,
+      {
+        name: input.name,
+        code: input.code,
+        level: 'regional',
+        parent_office_id: null,
+      },
+      meta,
+      actor,
+    );
+  }
+
+  async createOfficeAdmin(
+    actorId: string,
+    organizationId: string,
+    officeId: string,
+    input: CreateOfficeAdminDto,
+    meta: RequestMeta = {},
+  ) {
+    const actor = await this.requireOrgAdmin(actorId);
+    if (organizationId !== actor.organization_id) {
+      throw new ForbiddenException(
+        'Cannot assign an administrator to an office outside your organization',
+      );
+    }
+    try {
+      const adminId = await this.dataSource.transaction(async (manager) => {
+        const office = await this.lockOffice(manager, organizationId, officeId);
+        if (office.status !== 'active') {
+          throw new ConflictException(
+            'Office must be active to add an administrator',
+          );
+        }
+        const email = input.email.trim().toLowerCase();
+        if (
+          await manager
+            .getRepository(UserAccountEntity)
+            .findOne({ where: { email } })
+        ) {
+          throw new ConflictException('Administrator email already exists');
+        }
+        const role = await manager
+          .getRepository(RoleEntity)
+          .findOne({ where: { code: 'OFFICE_ADMIN' } });
+        if (!role)
+          throw new ConflictException('OFFICE_ADMIN role is not seeded');
+
+        const userRepo = manager.getRepository(UserAccountEntity);
+        const user = await userRepo.save(
+          userRepo.create({
+            organizationId,
+            officeId,
+            accountType: 'staff',
+            email,
+            passwordHash: null,
+            status: 'active',
+            verifiedAt: null,
+            isActive: true,
+          }),
+        );
+        await manager.getRepository(StaffProfileEntity).save({
+          userAccountId: user.id,
+          fullName: input.full_name.trim(),
+          phone: input.phone?.trim() || null,
+        });
+        await manager.getRepository(UserRoleAssignmentEntity).save({
+          userAccountId: user.id,
+          roleId: role.id,
+          officeId,
+        });
+        const invitation = await manager
+          .getRepository(OrganizationInvitationEntity)
+          .save({
+            organizationId,
+            userAccountId: user.id,
+            email,
+            status: 'pending',
+            invitedByUserId: actorId,
+            acceptedAt: null,
+          });
+        await this.audit(manager, actorId, organizationId, {
+          action: 'office_admin_created',
+          entityId: office.id,
+          after: {
+            user_account_id: user.id,
+            email,
+            full_name: input.full_name.trim(),
+            organization_id: organizationId,
+            office_id: officeId,
+            status: user.status,
+          },
+          ...meta,
+        });
+        await this.audit(manager, actorId, organizationId, {
+          action: 'role_assigned',
+          entityId: office.id,
+          after: {
+            user_account_id: user.id,
+            role: 'OFFICE_ADMIN',
+            office_id: officeId,
+          },
+          ...meta,
+        });
+        await this.audit(manager, actorId, organizationId, {
+          action: 'invitation_created',
+          entityId: office.id,
+          after: { user_account_id: user.id, email, status: invitation.status },
+          ...meta,
+        });
+        return user.id;
+      });
+      const admins = await this.listOfficeAdmins(officeId);
+      return admins.find((admin) => admin.id === adminId)!;
+    } catch (error) {
+      this.rethrowConflict(error);
+    }
+  }
+
+  /** Regional Admin requests a new Officer (Evaluator/Approver) account for their own office. */
+  async requestStaffAccount(
+    actorId: string,
+    officeId: string,
+    input: CreateStaffRequestDto,
+    meta: RequestMeta = {},
+  ) {
+    const actor = await this.requireOfficeAdmin(actorId);
+    if (officeId !== actor.office_id) {
+      throw new ForbiddenException(
+        'Cannot request staff for a different office',
+      );
+    }
+    try {
+      const userId = await this.dataSource.transaction(async (manager) => {
+        const office = await manager.getRepository(OfficeEntity).findOne({
+          where: { id: officeId, organizationId: actor.organization_id },
+        });
+        if (!office) throw new NotFoundException('Office not found');
+        if (office.status !== 'active') {
+          throw new ConflictException(
+            'Office must be active to request a staff account',
+          );
+        }
+        const email = input.email.trim().toLowerCase();
+        if (
+          await manager
+            .getRepository(UserAccountEntity)
+            .findOne({ where: { email } })
+        ) {
+          throw new ConflictException('Staff email already exists');
+        }
+        const roleCode = STAFF_REQUEST_ROLE_CODE[input.role];
+        const role = await manager
+          .getRepository(RoleEntity)
+          .findOne({ where: { code: roleCode } });
+        if (!role) throw new ConflictException(`${roleCode} role is not seeded`);
+
+        const userRepo = manager.getRepository(UserAccountEntity);
+        const user = await userRepo.save(
+          userRepo.create({
+            organizationId: actor.organization_id,
+            officeId,
+            accountType: 'staff',
+            email,
+            passwordHash: null,
+            status: 'pending',
+            verifiedAt: null,
+            isActive: true,
+          }),
+        );
+        await manager.getRepository(StaffProfileEntity).save({
+          userAccountId: user.id,
+          fullName: input.full_name.trim(),
+          phone: input.phone?.trim() || null,
+        });
+        await manager.getRepository(UserRoleAssignmentEntity).save({
+          userAccountId: user.id,
+          roleId: role.id,
+          officeId,
+        });
+        await this.audit(manager, actorId, actor.organization_id, {
+          action: 'staff_account_requested',
+          entityId: office.id,
+          after: {
+            user_account_id: user.id,
+            email,
+            full_name: input.full_name.trim(),
+            role: roleCode,
+            office_id: officeId,
+            status: user.status,
+          },
+          ...meta,
+        });
+        return user.id;
+      });
+      return await this.getStaffRequest(officeId, userId);
+    } catch (error) {
+      this.rethrowConflict(error);
+    }
+  }
+
+  /** Organization Admin approves a pending staff request; account may then complete device registration on first login. */
+  async approveStaffRequest(
+    actorId: string,
+    organizationId: string,
+    officeId: string,
+    userId: string,
+    meta: RequestMeta = {},
+  ) {
+    const actor = await this.requireOrgAdmin(actorId);
+    if (organizationId !== actor.organization_id) {
+      throw new ForbiddenException(
+        'Cannot approve staff outside your organization',
+      );
+    }
+    try {
+      await this.dataSource.transaction(async (manager) => {
+        const userRepo = manager.getRepository(UserAccountEntity);
+        const user = await userRepo.findOne({
+          where: { id: userId, organizationId, officeId },
+        });
+        if (!user) throw new NotFoundException('Staff request not found');
+        if (user.status !== 'pending') {
+          throw new ConflictException(
+            'Staff request is not awaiting approval',
+          );
+        }
+        const assignment = await manager
+          .getRepository(UserRoleAssignmentEntity)
+          .findOne({ where: { userAccountId: user.id, officeId } });
+        const roleCode = assignment?.role?.code;
+        if (roleCode !== 'EVALUATOR' && roleCode !== 'APPROVER') {
+          throw new ConflictException(
+            'Only Evaluator/Approver requests can be approved here',
+          );
+        }
+        const before = { status: user.status };
+        user.status = 'active';
+        user.verifiedAt = new Date();
+        await userRepo.save(user);
+        const invitation = await manager
+          .getRepository(OrganizationInvitationEntity)
+          .save({
+            organizationId,
+            userAccountId: user.id,
+            email: user.email!,
+            status: 'pending',
+            invitedByUserId: actorId,
+            acceptedAt: null,
+          });
+        await this.audit(manager, actorId, organizationId, {
+          action: 'staff_account_approved',
+          entityId: officeId,
+          before,
+          after: { status: user.status, role: roleCode, office_id: officeId },
+          ...meta,
+        });
+        await this.audit(manager, actorId, organizationId, {
+          action: 'invitation_created',
+          entityId: officeId,
+          after: {
+            user_account_id: user.id,
+            email: user.email,
+            status: invitation.status,
+          },
+          ...meta,
+        });
+      });
+      return await this.getStaffRequest(officeId, userId);
+    } catch (error) {
+      this.rethrowConflict(error);
+    }
+  }
+
+  private async createFlatOffice(
+    actorId: string,
+    input: CreateOfficeDto,
+    meta: RequestMeta = {},
+    resolvedActor?: OrgAdminActor,
+  ) {
+    const actor = resolvedActor ?? (await this.requireOrgAdmin(actorId));
     try {
       const id = await this.dataSource.transaction(async (manager) => {
         const code = normalizeOfficeCode(input.code);
+        await this.ensureNameAvailable(
+          manager,
+          actor.organization_id,
+          input.name.trim(),
+          null,
+        );
         await this.validateParent(
           manager,
           actor.organization_id,
@@ -258,7 +622,16 @@ export class OfficeService {
           throw new ConflictException('Archived offices are read-only');
         }
         const before = this.entityState(office);
-        if (input.name !== undefined) office.name = input.name.trim();
+        if (input.name !== undefined) {
+          const name = input.name.trim();
+          await this.ensureNameAvailable(
+            manager,
+            actor.organization_id,
+            name,
+            officeId,
+          );
+          office.name = name;
+        }
         if (input.level !== undefined) office.level = input.level;
         if (input.code !== undefined) {
           const code = normalizeOfficeCode(input.code);
@@ -307,12 +680,44 @@ export class OfficeService {
     meta: RequestMeta = {},
   ) {
     const actor = await this.requireOrgAdmin(actorId);
+    return this.archiveForActor(actorId, actor, officeId, reason, meta, false);
+  }
+
+  async archiveRegionalOffice(
+    actorId: string,
+    organizationId: string,
+    officeId: string,
+    reason: string,
+    meta: RequestMeta = {},
+  ) {
+    const actor = await this.requireOrgAdmin(actorId);
+    if (organizationId !== actor.organization_id) {
+      throw new ForbiddenException(
+        'Cannot archive an office outside your organization',
+      );
+    }
+    return this.archiveForActor(actorId, actor, officeId, reason, meta, true);
+  }
+
+  private async archiveForActor(
+    actorId: string,
+    actor: OrgAdminActor,
+    officeId: string,
+    reason: string,
+    meta: RequestMeta,
+    requireRegional: boolean,
+  ) {
     await this.dataSource.transaction(async (manager) => {
       const office = await this.lockOffice(
         manager,
         actor.organization_id,
         officeId,
       );
+      if (requireRegional && office.level !== 'regional') {
+        throw new ConflictException(
+          'Only Regional Offices can use this archive endpoint',
+        );
+      }
       assertOfficeTransition(office.status as OfficeStatus, 'archived');
       const activeChildren = await manager.query<Array<{ count: number }>>(
         `SELECT count(*)::int AS count
@@ -345,12 +750,42 @@ export class OfficeService {
 
   async reactivate(actorId: string, officeId: string, meta: RequestMeta = {}) {
     const actor = await this.requireOrgAdmin(actorId);
+    return this.reactivateForActor(actorId, actor, officeId, meta, false);
+  }
+
+  async reactivateRegionalOffice(
+    actorId: string,
+    organizationId: string,
+    officeId: string,
+    meta: RequestMeta = {},
+  ) {
+    const actor = await this.requireOrgAdmin(actorId);
+    if (organizationId !== actor.organization_id) {
+      throw new ForbiddenException(
+        'Cannot reactivate an office outside your organization',
+      );
+    }
+    return this.reactivateForActor(actorId, actor, officeId, meta, true);
+  }
+
+  private async reactivateForActor(
+    actorId: string,
+    actor: OrgAdminActor,
+    officeId: string,
+    meta: RequestMeta,
+    requireRegional: boolean,
+  ) {
     await this.dataSource.transaction(async (manager) => {
       const office = await this.lockOffice(
         manager,
         actor.organization_id,
         officeId,
       );
+      if (requireRegional && office.level !== 'regional') {
+        throw new ConflictException(
+          'Only Regional Offices can use this reactivate endpoint',
+        );
+      }
       assertOfficeTransition(office.status as OfficeStatus, 'active');
       if (office.parentOfficeId) {
         await this.validateParent(
@@ -373,8 +808,66 @@ export class OfficeService {
         after: this.entityState(office),
         ...meta,
       });
+      await this.resumeDeferredWorkflowTasks(manager, office.id);
     });
     return this.detail(actorId, officeId);
+  }
+
+  private async listOfficeAdmins(officeId: string): Promise<OfficeAdminRow[]> {
+    return this.dataSource.query<OfficeAdminRow[]>(
+      `SELECT u.id, u.email, u.status, u.is_active, u.created_at, u.updated_at,
+              sp.full_name, sp.phone,
+              invitation.status AS invitation_status
+       FROM user_accounts u
+       JOIN user_role_assignments ura
+         ON ura.user_account_id = u.id AND ura.office_id = $1
+       JOIN roles r ON r.id = ura.role_id AND r.code = 'OFFICE_ADMIN'
+       JOIN staff_profiles sp ON sp.user_account_id = u.id
+       LEFT JOIN LATERAL (
+         SELECT oi.status FROM organization_invitations oi
+         WHERE oi.user_account_id = u.id AND oi.organization_id = u.organization_id
+         ORDER BY oi.created_at DESC LIMIT 1
+       ) invitation ON true
+       WHERE u.office_id = $1
+       ORDER BY u.created_at ASC`,
+      [officeId],
+    );
+  }
+
+  private async resumeDeferredWorkflowTasks(
+    manager: EntityManager,
+    officeId: string,
+  ) {
+    await manager.query(
+      `INSERT INTO workflow_tasks (
+         application_id, workflow_step_id, status
+       )
+       SELECT a.id, step.id, 'pending'
+       FROM applications a
+       JOIN workflow_definitions wd
+         ON wd.program_template_version_id = a.program_template_version_id
+       JOIN LATERAL (
+         SELECT ws.id
+         FROM workflow_steps ws
+         WHERE ws.workflow_definition_id = wd.id
+           AND ws.step_type = CASE
+             WHEN a.status = 'in_evaluation' THEN 'evaluation'
+             WHEN a.status = 'in_approval' THEN 'approval'
+           END
+         ORDER BY ws.sort_order ASC
+         LIMIT 1
+       ) step ON true
+       WHERE a.office_id = $1
+         AND a.status IN ('in_evaluation', 'in_approval')
+         AND NOT EXISTS (
+           SELECT 1
+           FROM workflow_tasks task
+           WHERE task.application_id = a.id
+             AND task.workflow_step_id = step.id
+             AND task.status = 'pending'
+         )`,
+      [officeId],
+    );
   }
 
   private async requireOrgAdmin(actorId: string): Promise<OrgAdminActor> {
@@ -421,6 +914,93 @@ export class OfficeService {
       id: actor.id,
       organization_id: actor.organization_id,
       organization_name: actor.organization_name,
+    };
+  }
+
+  private async requireOfficeAdmin(actorId: string): Promise<OfficeAdminActor> {
+    const rows = await this.dataSource.query<
+      Array<{
+        id: string;
+        organization_id: string | null;
+        office_id: string | null;
+        account_type: string;
+        status: string;
+        is_active: boolean;
+        organization_status: string | null;
+      }>
+    >(
+      `SELECT u.id, u.organization_id, u.office_id, u.account_type,
+              u.status, u.is_active, org.status AS organization_status
+       FROM user_accounts u
+       JOIN user_role_assignments ura ON ura.user_account_id = u.id
+       JOIN roles r ON r.id = ura.role_id AND r.code = 'OFFICE_ADMIN'
+       LEFT JOIN organizations org ON org.id = u.organization_id
+       WHERE u.id = $1
+       LIMIT 1`,
+      [actorId],
+    );
+    const actor = rows[0];
+    if (!actor) throw new ForbiddenException('Office Administrator required');
+    if (!actor.is_active || actor.status !== 'active') {
+      throw new UnauthorizedException('Account is suspended');
+    }
+    if (
+      actor.account_type !== 'staff' ||
+      !actor.organization_id ||
+      !actor.office_id
+    ) {
+      throw new ForbiddenException('Invalid Office Administrator scope');
+    }
+    if (actor.organization_status !== 'active') {
+      throw new ForbiddenException('Organization is suspended or archived');
+    }
+    return {
+      id: actor.id,
+      organization_id: actor.organization_id,
+      office_id: actor.office_id,
+    };
+  }
+
+  private async listStaffRequests(officeId: string): Promise<StaffRequestRow[]> {
+    return this.dataSource.query<StaffRequestRow[]>(
+      `SELECT u.id, u.email, u.status, u.is_active, r.code AS role,
+              u.created_at, u.updated_at, sp.full_name, sp.phone,
+              invitation.status AS invitation_status
+       FROM user_accounts u
+       JOIN user_role_assignments ura
+         ON ura.user_account_id = u.id AND ura.office_id = $1
+       JOIN roles r ON r.id = ura.role_id AND r.code IN ('EVALUATOR', 'APPROVER')
+       JOIN staff_profiles sp ON sp.user_account_id = u.id
+       LEFT JOIN LATERAL (
+         SELECT oi.status FROM organization_invitations oi
+         WHERE oi.user_account_id = u.id AND oi.organization_id = u.organization_id
+         ORDER BY oi.created_at DESC LIMIT 1
+       ) invitation ON true
+       WHERE u.office_id = $1
+       ORDER BY u.created_at DESC`,
+      [officeId],
+    );
+  }
+
+  private async getStaffRequest(officeId: string, userId: string) {
+    const rows = await this.listStaffRequests(officeId);
+    const row = rows.find((candidate) => candidate.id === userId);
+    if (!row) throw new NotFoundException('Staff request not found');
+    return this.staffRequestState(row);
+  }
+
+  private staffRequestState(row: StaffRequestRow) {
+    return {
+      id: row.id,
+      email: row.email,
+      status: row.status,
+      is_active: row.is_active,
+      role: row.role,
+      full_name: row.full_name,
+      phone: row.phone,
+      invitation_status: row.invitation_status,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
     };
   }
 
@@ -481,6 +1061,27 @@ export class OfficeService {
       params,
     );
     if (existing[0]) throw new ConflictException('Office code already exists');
+  }
+
+  private async ensureNameAvailable(
+    manager: EntityManager,
+    organizationId: string,
+    name: string,
+    excludeOfficeId: string | null,
+  ) {
+    const params: unknown[] = [organizationId, name];
+    let exclude = '';
+    if (excludeOfficeId) {
+      params.push(excludeOfficeId);
+      exclude = `AND id <> $${params.length}`;
+    }
+    const existing = await manager.query<Array<{ id: string }>>(
+      `SELECT id FROM offices
+       WHERE organization_id = $1 AND lower(trim(name)) = lower(trim($2)) ${exclude}
+       LIMIT 1`,
+      params,
+    );
+    if (existing[0]) throw new ConflictException('Office name already exists');
   }
 
   private async validateParent(
@@ -589,6 +1190,9 @@ export class OfficeService {
       if (message.includes('offices_org_normalized_code_uidx')) {
         throw new ConflictException('Office code already exists');
       }
+      if (message.includes('offices_org_name_ci_uidx')) {
+        throw new ConflictException('Office name already exists');
+      }
       if (message.includes('Office hierarchy cycle')) {
         throw new ConflictException('Office hierarchy cycle is not allowed');
       }
@@ -596,6 +1200,9 @@ export class OfficeService {
         throw new ConflictException(
           'Parent office must belong to the same organization',
         );
+      }
+      if (message.includes('user_accounts_email_key')) {
+        throw new ConflictException('Administrator email already exists');
       }
     }
     throw error;

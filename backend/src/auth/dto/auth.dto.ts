@@ -1,4 +1,12 @@
-import { IsIn, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
+import {
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class SsoExchangeDto {
   @IsString()
@@ -9,6 +17,12 @@ export class SsoExchangeDto {
   @IsOptional()
   @IsIn(['mobile', 'web'])
   client_platform?: 'mobile' | 'web';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  @Matches(/^[A-Za-z0-9._:-]+$/)
+  device_fingerprint?: string;
 }
 
 export class LivenessCreateDto {
@@ -86,6 +100,12 @@ export class DevLoginDto {
   @IsOptional()
   @IsIn(['mobile', 'web'])
   client_platform?: 'mobile' | 'web';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  @Matches(/^[A-Za-z0-9._:-]+$/)
+  device_fingerprint?: string;
 }
 
 const STAFF_APP_ROLES = [

@@ -9,6 +9,7 @@ import {
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const exchangeCode = String(body.exchange_code ?? "").trim();
+  const deviceFingerprint = String(body.device_fingerprint ?? "").trim();
   if (!exchangeCode) {
     return NextResponse.json(
       { message: "exchange_code is required" },
@@ -25,6 +26,7 @@ export async function POST(request: Request) {
     body: JSON.stringify({
       exchange_code: exchangeCode,
       client_platform: "web",
+      device_fingerprint: deviceFingerprint || undefined,
     }),
     cache: "no-store",
   });

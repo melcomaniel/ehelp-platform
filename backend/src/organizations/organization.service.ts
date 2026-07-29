@@ -19,6 +19,7 @@ import {
   UserRoleAssignmentEntity,
 } from '../users/user.entity';
 import {
+  CreateOrganizationAdminDto,
   CreateOrganizationDto,
   OrganizationAdminListQueryDto,
   OrganizationListQueryDto,
@@ -34,6 +35,7 @@ import {
 } from './organization.entities';
 import {
   assertOrganizationTransition,
+  normalizeInitialPolicyConfig,
   normalizeOrganizationCode,
   sanitizeAuditState,
 } from './organization.policy';
@@ -128,6 +130,9 @@ export class OrganizationService {
     const pageSize = query.page_size || 20;
     const params: unknown[] = [];
     const clauses: string[] = [];
+    if (!query.include_archived && query.status !== 'archived') {
+      clauses.push(`o.status <> 'archived'`);
+    }
     if (query.search) {
       params.push(`%${query.search}%`);
       clauses.push(
@@ -201,9 +206,11 @@ export class OrganizationService {
          AND action IN (
            'organization_created', 'organization_updated',
            'organization_suspended', 'organization_reactivated',
-           'organization_archived', 'organization_admin_created',
+          'organization_archived', 'organization_admin_created',
            'organization_admin_updated', 'organization_admin_suspended',
-           'role_assigned', 'invitation_created', 'invitation_accepted'
+           'organization_admin_reactivated',
+           'role_assigned', 'invitation_created', 'invitation_accepted',
+           'device_registered'
          )
        ORDER BY occurred_at DESC LIMIT 50`,
       [organizationId],
@@ -296,6 +303,12 @@ export class OrganizationService {
         total_pages: Math.max(1, Math.ceil(total / pageSize)),
       },
     };
+  }
+
+  async listAdmins(actorId: string, organizationId: string) {
+    await this.requirePlatformAdmin(actorId);
+    await this.requireOrganizationExists(organizationId);
+    return this.listAdminsForOrganization(organizationId);
   }
 
   async listOffices(
@@ -395,65 +408,18 @@ export class OrganizationService {
         ) {
           throw new ConflictException('Organization code already exists');
         }
-        const email = input.initial_admin.email.trim().toLowerCase();
-        if (
-          await manager.getRepository(UserAccountEntity).findOne({
-            where: { email },
-          })
-        ) {
-          throw new ConflictException('Administrator email already exists');
-        }
-        const role = await manager.getRepository(RoleEntity).findOne({
-          where: { code: 'ORG_ADMIN' },
-        });
-        if (!role) throw new ConflictException('ORG_ADMIN role is not seeded');
-
         const organization = await orgRepo.save(
           orgRepo.create({
             code,
             name: input.name.trim(),
             status: 'active',
-            policyConfig: {},
+            policyConfig: normalizeInitialPolicyConfig(input.policy_config),
             creationKey: input.creation_key,
             suspendedAt: null,
             archivedAt: null,
             lifecycleReason: null,
           }),
         );
-        const userRepo = manager.getRepository(UserAccountEntity);
-        const user = await userRepo.save(
-          userRepo.create({
-            organizationId: organization.id,
-            officeId: null,
-            accountType: 'staff',
-            email,
-            passwordHash: null,
-            status: 'active',
-            verifiedAt: null,
-            isActive: true,
-          }),
-        );
-        await manager.getRepository(StaffProfileEntity).save({
-          userAccountId: user.id,
-          fullName: input.initial_admin.full_name.trim(),
-          phone: input.initial_admin.phone?.trim() || null,
-        });
-        await manager.getRepository(UserRoleAssignmentEntity).save({
-          userAccountId: user.id,
-          roleId: role.id,
-          officeId: null,
-        });
-        const invitation = await manager
-          .getRepository(OrganizationInvitationEntity)
-          .save({
-            organizationId: organization.id,
-            userAccountId: user.id,
-            email,
-            status: 'pending',
-            invitedByUserId: actorId,
-            acceptedAt: null,
-          });
-
         await this.audit(manager, actorId, organization.id, {
           action: 'organization_created',
           entityType: 'organization',
@@ -461,30 +427,50 @@ export class OrganizationService {
           after: this.organizationState(organization),
           ...meta,
         });
-        await this.audit(manager, actorId, organization.id, {
-          action: 'organization_admin_created',
-          entityType: 'user_account',
-          entityId: user.id,
-          after: { email, full_name: input.initial_admin.full_name },
-          ...meta,
-        });
-        await this.audit(manager, actorId, organization.id, {
-          action: 'role_assigned',
-          entityType: 'user_role_assignment',
-          entityId: user.id,
-          after: { user_account_id: user.id, role: 'ORG_ADMIN' },
-          ...meta,
-        });
-        await this.audit(manager, actorId, organization.id, {
-          action: 'invitation_created',
-          entityType: 'organization_invitation',
-          entityId: invitation.id,
-          after: { email, status: invitation.status },
-          ...meta,
-        });
+        await this.provisionOrganizationAdmin(
+          manager,
+          actorId,
+          organization.id,
+          input.initial_admin,
+          meta,
+        );
         return organization.id;
       });
       return this.detail(actorId, id);
+    } catch (error) {
+      this.rethrowConflict(error);
+    }
+  }
+
+  async createAdmin(
+    actorId: string,
+    organizationId: string,
+    input: CreateOrganizationAdminDto,
+    meta: RequestMeta = {},
+  ) {
+    await this.requirePlatformAdmin(actorId);
+    try {
+      const adminId = await this.dataSource.transaction(async (manager) => {
+        const organization = await manager
+          .getRepository(OrganizationEntity)
+          .findOne({ where: { id: organizationId } });
+        if (!organization)
+          throw new NotFoundException('Organization not found');
+        if (organization.status !== 'active') {
+          throw new ConflictException(
+            'Organization must be active to add an administrator',
+          );
+        }
+        return this.provisionOrganizationAdmin(
+          manager,
+          actorId,
+          organizationId,
+          input,
+          meta,
+        );
+      });
+      const admins = await this.listAdminsForOrganization(organizationId);
+      return admins.find((admin) => admin.id === adminId)!;
     } catch (error) {
       this.rethrowConflict(error);
     }
@@ -570,6 +556,19 @@ export class OrganizationService {
     meta: RequestMeta = {},
   ) {
     await this.requirePlatformAdmin(actorId);
+    if (
+      input.full_name === undefined &&
+      input.email === undefined &&
+      input.phone === undefined &&
+      input.status === undefined
+    ) {
+      throw new ConflictException(
+        'At least one administrator field must be provided',
+      );
+    }
+    if (input.status === 'suspended' && !input.reason) {
+      throw new ConflictException('A suspension reason is required');
+    }
     try {
       await this.dataSource.transaction(async (manager) => {
         await this.requireOrganizationWritable(manager, organizationId);
@@ -594,18 +593,45 @@ export class OrganizationService {
         if (input.phone !== undefined) profile.phone = input.phone || null;
         await manager.getRepository(UserAccountEntity).save(admin);
         await profileRepo.save(profile);
-        await this.audit(manager, actorId, organizationId, {
-          action: 'organization_admin_updated',
-          entityType: 'user_account',
-          entityId: adminId,
-          before,
-          after: {
-            email: admin.email,
-            full_name: profile.fullName,
-            phone: profile.phone,
-          },
-          ...meta,
-        });
+        const profileChanged =
+          input.email !== undefined ||
+          input.full_name !== undefined ||
+          input.phone !== undefined;
+        if (input.email !== undefined) {
+          await manager.getRepository(OrganizationInvitationEntity).update(
+            {
+              organizationId,
+              userAccountId: adminId,
+              status: 'pending',
+            },
+            { email: input.email },
+          );
+        }
+        if (profileChanged) {
+          await this.audit(manager, actorId, organizationId, {
+            action: 'organization_admin_updated',
+            entityType: 'user_account',
+            entityId: adminId,
+            before,
+            after: {
+              email: admin.email,
+              full_name: profile.fullName,
+              phone: profile.phone,
+            },
+            ...meta,
+          });
+        }
+        if (input.status !== undefined) {
+          await this.transitionAdminStatus(
+            manager,
+            actorId,
+            organizationId,
+            admin,
+            input.status,
+            input.reason ?? null,
+            meta,
+          );
+        }
       });
       return this.detail(actorId, organizationId);
     } catch (error) {
@@ -628,24 +654,136 @@ export class OrganizationService {
         organizationId,
         adminId,
       );
-      if (!admin.isActive || admin.status !== 'active') {
-        throw new ConflictException('Organization Administrator is not active');
-      }
-      const before = { status: admin.status, is_active: admin.isActive };
-      admin.status = 'suspended';
-      admin.isActive = false;
-      await manager.getRepository(UserAccountEntity).save(admin);
-      await this.audit(manager, actorId, organizationId, {
-        action: 'organization_admin_suspended',
-        entityType: 'user_account',
-        entityId: adminId,
-        before,
-        after: { status: admin.status, is_active: admin.isActive },
+      await this.transitionAdminStatus(
+        manager,
+        actorId,
+        organizationId,
+        admin,
+        'suspended',
         reason,
-        ...meta,
-      });
+        meta,
+      );
     });
     return this.detail(actorId, organizationId);
+  }
+
+  private async provisionOrganizationAdmin(
+    manager: EntityManager,
+    actorId: string,
+    organizationId: string,
+    input: CreateOrganizationAdminDto,
+    meta: RequestMeta,
+  ) {
+    const email = input.email.trim().toLowerCase();
+    if (
+      await manager
+        .getRepository(UserAccountEntity)
+        .findOne({ where: { email } })
+    ) {
+      throw new ConflictException('Administrator email already exists');
+    }
+    const role = await manager
+      .getRepository(RoleEntity)
+      .findOne({ where: { code: 'ORG_ADMIN' } });
+    if (!role) throw new ConflictException('ORG_ADMIN role is not seeded');
+
+    const userRepo = manager.getRepository(UserAccountEntity);
+    const user = await userRepo.save(
+      userRepo.create({
+        organizationId,
+        officeId: null,
+        accountType: 'staff',
+        email,
+        passwordHash: null,
+        status: 'active',
+        verifiedAt: null,
+        isActive: true,
+      }),
+    );
+    await manager.getRepository(StaffProfileEntity).save({
+      userAccountId: user.id,
+      fullName: input.full_name.trim(),
+      phone: input.phone?.trim() || null,
+    });
+    await manager.getRepository(UserRoleAssignmentEntity).save({
+      userAccountId: user.id,
+      roleId: role.id,
+      officeId: null,
+    });
+    const invitation = await manager
+      .getRepository(OrganizationInvitationEntity)
+      .save({
+        organizationId,
+        userAccountId: user.id,
+        email,
+        status: 'pending',
+        invitedByUserId: actorId,
+        acceptedAt: null,
+      });
+    await this.audit(manager, actorId, organizationId, {
+      action: 'organization_admin_created',
+      entityType: 'user_account',
+      entityId: user.id,
+      after: {
+        email,
+        full_name: input.full_name.trim(),
+        organization_id: organizationId,
+        office_id: null,
+        status: user.status,
+      },
+      ...meta,
+    });
+    await this.audit(manager, actorId, organizationId, {
+      action: 'role_assigned',
+      entityType: 'user_role_assignment',
+      entityId: user.id,
+      after: { user_account_id: user.id, role: 'ORG_ADMIN' },
+      ...meta,
+    });
+    await this.audit(manager, actorId, organizationId, {
+      action: 'invitation_created',
+      entityType: 'organization_invitation',
+      entityId: invitation.id,
+      after: { email, status: invitation.status },
+      ...meta,
+    });
+    return user.id;
+  }
+
+  private async transitionAdminStatus(
+    manager: EntityManager,
+    actorId: string,
+    organizationId: string,
+    admin: UserAccountEntity,
+    next: 'active' | 'suspended',
+    reason: string | null,
+    meta: RequestMeta,
+  ) {
+    const currentlyActive = admin.isActive && admin.status === 'active';
+    if (
+      (next === 'active' && currentlyActive) ||
+      (next === 'suspended' && !currentlyActive)
+    ) {
+      throw new ConflictException(
+        `Organization Administrator is already ${next}`,
+      );
+    }
+    const before = { status: admin.status, is_active: admin.isActive };
+    admin.status = next;
+    admin.isActive = next === 'active';
+    await manager.getRepository(UserAccountEntity).save(admin);
+    await this.audit(manager, actorId, organizationId, {
+      action:
+        next === 'active'
+          ? 'organization_admin_reactivated'
+          : 'organization_admin_suspended',
+      entityType: 'user_account',
+      entityId: admin.id,
+      before,
+      after: { status: admin.status, is_active: admin.isActive },
+      reason,
+      ...meta,
+    });
   }
 
   private async transition(
@@ -739,6 +877,16 @@ export class OrganizationService {
     );
   }
 
+  private async requireOrganizationExists(organizationId: string) {
+    if (
+      !(await this.organizations.findOne({
+        where: { id: organizationId },
+      }))
+    ) {
+      throw new NotFoundException('Organization not found');
+    }
+  }
+
   private async requireOrganizationAdmin(
     manager: EntityManager,
     organizationId: string,
@@ -813,6 +961,7 @@ export class OrganizationService {
       code: organization.code,
       name: organization.name,
       status: organization.status,
+      policy_config: organization.policyConfig,
       suspended_at: organization.suspendedAt,
       archived_at: organization.archivedAt,
       lifecycle_reason: organization.lifecycleReason,

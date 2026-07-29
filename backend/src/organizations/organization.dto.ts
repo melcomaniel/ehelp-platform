@@ -1,7 +1,11 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  Equals,
+  IsBoolean,
+  IsDefined,
   IsEmail,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
@@ -10,6 +14,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { OFFICE_LEVELS, type OfficeLevel } from '../offices/office.policy';
@@ -20,6 +25,17 @@ const lower = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().toLowerCase() : value;
 const upper = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().toUpperCase() : value;
+const booleanQuery = ({ value }: { value: unknown }) => {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return value;
+};
+
+export const PLATFORM_SECURITY_BASELINE = Object.freeze({
+  mfa_required: true as const,
+  device_registration_required: true as const,
+  session_timeout_minutes: 30,
+});
 
 export class InitialOrganizationAdminDto {
   @Transform(trim)
@@ -40,6 +56,32 @@ export class InitialOrganizationAdminDto {
   phone?: string;
 }
 
+export class CreateOrganizationAdminDto extends InitialOrganizationAdminDto {}
+
+export class InitialPolicyConfigDto {
+  @IsBoolean()
+  @Equals(true, {
+    message: 'mfa_required cannot weaken the platform security baseline',
+  })
+  mfa_required!: true;
+
+  @IsBoolean()
+  @Equals(true, {
+    message:
+      'device_registration_required cannot weaken the platform security baseline',
+  })
+  device_registration_required!: true;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(5)
+  @Max(PLATFORM_SECURITY_BASELINE.session_timeout_minutes, {
+    message:
+      'session_timeout_minutes cannot exceed the platform security baseline of 30 minutes',
+  })
+  session_timeout_minutes!: number;
+}
+
 export class CreateOrganizationDto {
   @Transform(trim)
   @IsString()
@@ -56,6 +98,12 @@ export class CreateOrganizationDto {
   creation_key!: string;
 
   @ValidateNested()
+  @IsDefined()
+  @Type(() => InitialPolicyConfigDto)
+  policy_config!: InitialPolicyConfigDto;
+
+  @ValidateNested()
+  @IsDefined()
   @Type(() => InitialOrganizationAdminDto)
   initial_admin!: InitialOrganizationAdminDto;
 }
@@ -85,6 +133,11 @@ export class OrganizationListQueryDto {
   @IsOptional()
   @IsIn(['active', 'suspended', 'archived'])
   status?: 'active' | 'suspended' | 'archived';
+
+  @IsOptional()
+  @Transform(booleanQuery)
+  @IsBoolean()
+  include_archived = false;
 
   @IsOptional()
   @Type(() => Number)
@@ -187,4 +240,18 @@ export class UpdateOrganizationAdminDto {
   @IsString()
   @MaxLength(40)
   phone?: string;
+
+  @IsOptional()
+  @IsIn(['active', 'suspended'])
+  status?: 'active' | 'suspended';
+
+  @ValidateIf(
+    (input: UpdateOrganizationAdminDto) =>
+      input.status === 'suspended' || input.reason !== undefined,
+  )
+  @Transform(trim)
+  @IsString()
+  @MinLength(3)
+  @MaxLength(500)
+  reason?: string;
 }

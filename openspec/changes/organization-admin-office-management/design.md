@@ -41,7 +41,8 @@ Conceptual operations:
 | POST | `/admin/offices` | create one active office in actor organization |
 | GET | `/admin/offices/:officeId` | tenant-scoped office detail |
 | PATCH | `/admin/offices/:officeId` | edit allowed office metadata |
-| POST | `/admin/offices/:officeId/archive` | active to archived/inactive, reason required |
+| PATCH | `/organizations/:organizationId/offices/:officeId/archive` | canonical Regional Office archive route; owner scope and reason required |
+| POST | `/admin/offices/:officeId/archive` | compatibility alias for active to archived |
 | POST | `/admin/offices/:officeId/reactivate` | archived/inactive to active |
 | GET | `/admin/offices/parent-options` | active same-tenant parent choices |
 
@@ -72,7 +73,9 @@ Parent assignment validates that the parent exists in the same organization, is 
 
 ### 5. Lifecycle is soft and auditable
 
-Allowed office statuses are `active` and `archived`. Archive requires a reason and is rejected when the office has active direct child offices. Reactivation is rejected unless the organization is active. No ordinary endpoint physically deletes offices.
+Allowed office statuses are `active` and `archived`; offices do not have a suspended state. Archive requires a reason and is rejected when the office has active direct child offices. The canonical organization-scoped route additionally requires a Regional Office owned by the actor's organization. Reactivation is rejected unless the organization is active. No ordinary endpoint physically deletes offices.
+
+Archived offices are excluded from selectors and cannot receive new applications, draft submissions, or workflow tasks. Pending tasks created before archival remain actionable. If completing one advances an application, the next task is deferred; reactivation idempotently creates the missing task for the application's current stage.
 
 ### 6. Audit in the same transaction
 
@@ -84,7 +87,7 @@ Add:
 
 - `/admin/offices` list with search, type/status/parent filters, pagination, empty/error states, and actions.
 - `/admin/offices/new` create form with parent selector and no organization selector.
-- `/admin/offices/[officeId]` detail page with office metadata, parent, direct children, status, timestamps, audit history, edit form, archive dialog, and reactivation dialog.
+- `/admin/offices/[officeId]` detail page with office metadata, parent, direct children, status, timestamps, audit history, edit form, an **Archive Regional Office** action for regional records, and reactivation dialog.
 
 Sidebar exposes `Offices` only to Organization Administrators. UI hiding is not the security boundary.
 

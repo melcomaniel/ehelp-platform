@@ -18,7 +18,7 @@ export class MockEgovSsoProvider implements EgovSsoProvider {
     const suffix = exchangeCode.slice(-6) || 'DEMO01';
     return {
       uniqid: `MOCK-${suffix.toUpperCase()}`,
-      email: `citizen.${suffix.toLowerCase()}@example.local`,
+      email: `citizen.${suffix.toLowerCase()}@mock.gov.ph`,
       birth_date: '1990-01-01',
       first_name: 'DEMO',
       middle_name: 'SANTOS',

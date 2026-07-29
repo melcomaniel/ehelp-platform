@@ -35,6 +35,8 @@ export type OfficeAudit = {
 
 export type OfficeDetail = OfficeSummary & {
   child_offices: OfficeSummary[];
+  office_admins: OfficeAdmin[];
+  staff_requests: StaffRequest[];
   audit_history: OfficeAudit[];
 };
 
@@ -47,6 +49,33 @@ export type OfficePage = {
     total: number;
     total_pages: number;
   };
+};
+
+export type OfficeAdmin = {
+  id: string;
+  email: string;
+  full_name: string;
+  phone: string | null;
+  status: string;
+  is_active: boolean;
+  invitation_status: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type StaffRequestRole = "EVALUATOR" | "APPROVER";
+
+export type StaffRequest = {
+  id: string;
+  email: string;
+  full_name: string;
+  phone: string | null;
+  role: StaffRequestRole;
+  status: string;
+  is_active: boolean;
+  invitation_status: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ParentOfficeOption = {
@@ -115,6 +144,19 @@ export function createOffice(input: {
   });
 }
 
+export function createRegionalOffice(
+  organizationId: string,
+  input: {
+    name: string;
+    code: string;
+  },
+) {
+  return nestFetch<OfficeDetail>(`/organizations/${organizationId}/offices`, {
+    method: "POST",
+    body: input,
+  });
+}
+
 export function updateOffice(
   id: string,
   input: {
@@ -137,9 +179,81 @@ export function archiveOffice(id: string, reason: string) {
   });
 }
 
+export function archiveRegionalOffice(
+  organizationId: string,
+  officeId: string,
+  reason: string,
+) {
+  return nestFetch<OfficeDetail>(
+    `/organizations/${organizationId}/offices/${officeId}/archive`,
+    {
+      method: "PATCH",
+      body: { reason },
+    },
+  );
+}
+
 export function reactivateOffice(id: string) {
   return nestFetch<OfficeDetail>(`/admin/offices/${id}/reactivate`, {
     method: "POST",
     body: {},
   });
+}
+
+export function reactivateRegionalOffice(
+  organizationId: string,
+  officeId: string,
+) {
+  return nestFetch<OfficeDetail>(
+    `/organizations/${organizationId}/offices/${officeId}/reactivate`,
+    {
+      method: "PATCH",
+      body: {},
+    },
+  );
+}
+
+export function createOfficeAdmin(
+  organizationId: string,
+  officeId: string,
+  input: { full_name: string; email: string; phone?: string },
+) {
+  return nestFetch<OfficeAdmin>(
+    `/organizations/${organizationId}/offices/${officeId}/admins`,
+    {
+      method: "POST",
+      body: input,
+    },
+  );
+}
+
+/** Regional Admin requests a new Officer (Evaluator/Approver) account for their own office. */
+export function requestStaffAccount(
+  officeId: string,
+  input: {
+    full_name: string;
+    email: string;
+    phone?: string;
+    role: "evaluator" | "approver";
+  },
+) {
+  return nestFetch<StaffRequest>(`/admin/offices/${officeId}/staff-requests`, {
+    method: "POST",
+    body: input,
+  });
+}
+
+/** Organization Admin approves a pending staff request. */
+export function approveStaffRequest(
+  organizationId: string,
+  officeId: string,
+  userId: string,
+) {
+  return nestFetch<StaffRequest>(
+    `/organizations/${organizationId}/offices/${officeId}/staff-requests/${userId}/approve`,
+    {
+      method: "POST",
+      body: {},
+    },
+  );
 }

@@ -12,7 +12,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
 import { DataSource } from 'typeorm';
-import { OrganizationInvitationEntity } from '../organizations/organization.entities';
+import {
+  AuditLogEntity,
+  OrganizationInvitationEntity,
+} from '../organizations/organization.entities';
 import { BeneficiaryEntity } from '../users/beneficiary.entity';
 import { LivenessSessionEntity } from '../users/liveness-session.entity';
 import { StaffProfileEntity } from '../users/staff-profile.entity';
@@ -256,6 +259,7 @@ export class AuthService {
   async ssoExchange(
     exchangeCode: string,
     clientPlatform: ClientPlatform = 'mobile',
+    deviceFingerprint?: string,
   ) {
     const profile = await this.sso.exchangeCode(exchangeCode);
 
@@ -321,7 +325,7 @@ export class AuthService {
     user = await this.attachRole(user);
     this.assertClientPlatform(user, clientPlatform);
     await this.assertActiveContext(user);
-    await this.acceptPendingOrganizationInvitation(user);
+    await this.activatePendingOrganizationInvitation(user, deviceFingerprint);
 
     const tokens = await this.issueTokens(user);
     return {
@@ -639,6 +643,37 @@ export class AuthService {
     const organizationId =
       input.organization_id ?? actor.organizationId ?? null;
 
+    if (actor.organizationId && organizationId !== actor.organizationId) {
+      throw new ForbiddenException(
+        'Staff accounts must belong to your organization',
+      );
+    }
+
+    if (input.role === 'satellite_admin') {
+      if (!officeId) {
+        throw new BadRequestException(
+          'A Regional Office is required for an Office Admin account',
+        );
+      }
+      if (!organizationId) {
+        throw new BadRequestException(
+          'An organization is required for an Office Admin account',
+        );
+      }
+      const offices = await this.dataSource.query<Array<{ id: string }>>(
+        `SELECT id
+         FROM offices
+         WHERE id = $1 AND organization_id = $2 AND status = 'active'
+         LIMIT 1`,
+        [officeId, organizationId],
+      );
+      if (!offices[0]) {
+        throw new BadRequestException(
+          'Regional Office must belong to your organization and be active',
+        );
+      }
+    }
+
     const accountType =
       input.role === 'platform_admin' ? 'platform_admin' : 'staff';
 
@@ -666,6 +701,63 @@ export class AuthService {
     );
 
     await this.assignRole(user.id, input.role, officeId);
+
+    if (input.role === 'satellite_admin' && organizationId && officeId) {
+      const invitation = await this.dataSource
+        .getRepository(OrganizationInvitationEntity)
+        .save({
+          organizationId,
+          userAccountId: user.id,
+          email,
+          status: 'pending',
+          invitedByUserId: actorUserId,
+          acceptedAt: null,
+        });
+      const audit = this.dataSource.getRepository(AuditLogEntity);
+      await audit.save([
+        audit.create({
+          organizationId,
+          actorUserId,
+          action: 'office_admin_created',
+          entityType: 'user_account',
+          entityId: user.id,
+          beforeState: null,
+          afterState: {
+            email,
+            full_name: input.full_name.trim(),
+            organization_id: organizationId,
+            office_id: officeId,
+            status: user.status,
+          },
+          outcome: 'success',
+        }),
+        audit.create({
+          organizationId,
+          actorUserId,
+          action: 'role_assigned',
+          entityType: 'user_role_assignment',
+          entityId: user.id,
+          beforeState: null,
+          afterState: {
+            user_account_id: user.id,
+            role: 'OFFICE_ADMIN',
+            office_id: officeId,
+          },
+          outcome: 'success',
+        }),
+        audit.create({
+          organizationId,
+          actorUserId,
+          action: 'invitation_created',
+          entityType: 'organization_invitation',
+          entityId: invitation.id,
+          beforeState: null,
+          afterState: { email, status: invitation.status },
+          outcome: 'success',
+        }),
+      ]);
+    }
+
     user = (await this.findById(user.id))!;
     const staff = await this.loadStaffProfile(user.id);
     return this.toProfile(user, staff);
@@ -712,11 +804,29 @@ export class AuthService {
     }
 
     const rows = await qb.getMany();
+    const officeIds = [
+      ...new Set(rows.map((row) => row.officeId).filter(Boolean)),
+    ] as string[];
+    const officeRows =
+      officeIds.length > 0
+        ? await this.dataSource.query<Array<{ id: string; name: string }>>(
+            `SELECT id, name FROM offices WHERE id = ANY($1::uuid[])`,
+            [officeIds],
+          )
+        : [];
+    const officeNames = new Map(
+      officeRows.map((office) => [office.id, office.name]),
+    );
     const out = [];
     for (const row of rows) {
       const user = await this.attachRole(row);
       const staff = await this.loadStaffProfile(user.id);
-      out.push(this.toProfile(user, staff));
+      out.push({
+        ...this.toProfile(user, staff),
+        office_name: user.officeId
+          ? (officeNames.get(user.officeId) ?? null)
+          : null,
+      });
     }
     return out;
   }
@@ -729,6 +839,7 @@ export class AuthService {
     email: string,
     password: string,
     clientPlatform: ClientPlatform = 'mobile',
+    deviceFingerprint?: string,
   ) {
     const mock = this.config.get('AUTH_PROVIDER_MODE') === 'mock';
     let user = await this.findByEmail(email);
@@ -775,7 +886,7 @@ export class AuthService {
     user = await this.attachRole(user);
     this.assertClientPlatform(user, clientPlatform);
     await this.assertActiveContext(user);
-    await this.acceptPendingOrganizationInvitation(user);
+    await this.activatePendingOrganizationInvitation(user, deviceFingerprint);
     return this.issueTokens(user);
   }
 
@@ -815,9 +926,18 @@ export class AuthService {
     }
   }
 
-  private async acceptPendingOrganizationInvitation(user: UserAccountEntity) {
+  private async activatePendingOrganizationInvitation(
+    user: UserAccountEntity,
+    deviceFingerprint?: string,
+  ) {
+    const gatedRoles: string[] = [
+      ERD_ROLES.ORG_ADMIN,
+      ERD_ROLES.OFFICE_ADMIN,
+      ERD_ROLES.EVALUATOR,
+      ERD_ROLES.APPROVER,
+    ];
     if (
-      user.erdRoleCode !== ERD_ROLES.ORG_ADMIN ||
+      !gatedRoles.includes(user.erdRoleCode) ||
       !user.organizationId ||
       !user.email
     ) {
@@ -834,19 +954,49 @@ export class AuthService {
         lock: { mode: 'pessimistic_write' },
       });
       if (!invitation) return;
+      const fingerprint = deviceFingerprint?.trim();
+      if (!fingerprint) {
+        throw new ForbiddenException({
+          message:
+            'Device registration is required before the first administrator login',
+          code: 'device_registration_required',
+        });
+      }
+      await manager.query(
+        `INSERT INTO device_registrations (
+           user_account_id, device_fingerprint, status, approved_at
+         ) VALUES ($1, $2, 'approved', now())
+         ON CONFLICT (user_account_id, device_fingerprint)
+         DO UPDATE SET status = 'approved', approved_at = now(), updated_at = now()`,
+        [user.id, fingerprint],
+      );
       invitation.status = 'accepted';
       invitation.acceptedAt = new Date();
       await invitations.save(invitation);
       await manager.query(
         `INSERT INTO audit_logs (
            organization_id, actor_user_id, action, entity_type, entity_id,
-           after_state, outcome
+           before_state, after_state, outcome
+         ) VALUES ($1, $2, 'device_registered', 'user_account', $2,
+                   $3::jsonb, $4::jsonb, 'success')`,
+        [
+          user.organizationId,
+          user.id,
+          JSON.stringify({ registered: false }),
+          JSON.stringify({ registered: true }),
+        ],
+      );
+      await manager.query(
+        `INSERT INTO audit_logs (
+           organization_id, actor_user_id, action, entity_type, entity_id,
+           before_state, after_state, outcome
          ) VALUES ($1, $2, 'invitation_accepted', 'organization_invitation', $3,
-                   $4::jsonb, 'success')`,
+                   $4::jsonb, $5::jsonb, 'success')`,
         [
           user.organizationId,
           user.id,
           invitation.id,
+          JSON.stringify({ status: 'pending', email: user.email }),
           JSON.stringify({ status: 'accepted', email: user.email }),
         ],
       );

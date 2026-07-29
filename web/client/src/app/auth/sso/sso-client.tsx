@@ -4,25 +4,28 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { homeRouteForRole, parseAppRole } from "@/lib/auth/types";
+import { getOrCreateDeviceFingerprint } from "@/lib/auth/device";
 
 export default function WebSsoClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [error, setError] = useState<string | null>(null);
+  const code = searchParams.get("exchange_code")?.trim() ?? "";
+  const [error, setError] = useState<string | null>(
+    code ? null : "Missing exchange_code",
+  );
 
   useEffect(() => {
-    const code = searchParams.get("exchange_code")?.trim();
-    if (!code) {
-      setError("Missing exchange_code");
-      return;
-    }
+    if (!code) return;
     let cancelled = false;
     (async () => {
       try {
         const res = await fetch("/api/auth/sso", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ exchange_code: code }),
+          body: JSON.stringify({
+            exchange_code: code,
+            device_fingerprint: getOrCreateDeviceFingerprint(),
+          }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.message || "SSO failed");
@@ -38,7 +41,7 @@ export default function WebSsoClient() {
     return () => {
       cancelled = true;
     };
-  }, [router, searchParams]);
+  }, [code, router]);
 
   return (
     <main className="mx-auto flex min-h-[50vh] max-w-md flex-col items-center justify-center gap-3 px-6 py-16 text-center">

@@ -132,7 +132,8 @@ An active, unscoped `PLATFORM_ADMIN` (`organization_id = NULL`,
 | `GET`, `PATCH` | `/admin/organizations/:id` | View or edit approved organization metadata |
 | `POST` | `/admin/organizations/:id/suspend` | Preserve data and block tenant access; reason required |
 | `POST` | `/admin/organizations/:id/reactivate` | Restore the tenant without reactivating suspended accounts |
-| `POST` | `/admin/organizations/:id/archive` | Archive a suspended tenant; reason required |
+| `PATCH` | `/platform/organizations/:id/archive` | Archive an active or suspended tenant; reason required |
+| `POST` | `/admin/organizations/:id/archive` | Temporary compatibility alias for archive |
 | `PATCH` | `/admin/organizations/:id/admins/:adminId` | Edit approved Organization Administrator metadata |
 | `POST` | `/admin/organizations/:id/admins/:adminId/suspend` | Suspend an Organization Administrator account |
 
@@ -146,6 +147,7 @@ can manage offices in their own organization through:
 | `GET`, `PATCH` | `/admin/offices/:id` | View or edit allowed office metadata |
 | `POST` | `/admin/offices/:id/archive` | Soft-archive an active office; reason required; active children block archive |
 | `POST` | `/admin/offices/:id/reactivate` | Restore an archived office when the organization is active |
+| `PATCH` | `/organizations/:organizationId/offices/:id/archive` | Canonical Regional Office archive route; tenant ownership and regional level required |
 
 Migration `010_platform_admin_organization_management.sql` adds archived
 lifecycle state, SSO-compatible invitation records, normalized code/idempotency
@@ -157,9 +159,12 @@ history before dropping lifecycle or audit structures.
 Organization creation does not issue a password or duplicate SSO. It provisions
 the government email, staff profile, `ORG_ADMIN` assignment, and a pending
 invitation in one PostgreSQL transaction. Signing in through the existing eGov
-SSO flow with that email accepts the invitation. Suspended accounts and staff in
-suspended/archived organizations are rejected at token issuance, `/auth/me`, and
-protected tenant operations, including requests using an existing JWT.
+SSO flow with that email registers the browser device and accepts the invitation
+before issuing the first session. Initial policy configuration is allowlisted:
+MFA and device registration are mandatory and tenant session timeout cannot
+exceed the 30-minute platform baseline. Suspended accounts and staff in
+suspended/archived organizations are rejected at token issuance, `/auth/me`,
+and protected tenant operations, including requests using an existing JWT.
 
 `PLATFORM_ADMIN` is explicitly denied from tenant business APIs such as
 applications, beneficiary relationships, evaluation, approval, programs, and

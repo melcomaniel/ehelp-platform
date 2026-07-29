@@ -50,7 +50,8 @@ Conceptual operations:
 | PATCH | `/admin/organizations/:id` | allowed metadata only |
 | POST | `/admin/organizations/:id/suspend` | active to suspended, reason required |
 | POST | `/admin/organizations/:id/reactivate` | suspended to active |
-| POST | `/admin/organizations/:id/archive` | suspended to archived, reason required |
+| PATCH | `/platform/organizations/:id/archive` | active or suspended to archived, reason required |
+| POST | `/admin/organizations/:id/archive` | temporary compatibility alias for archive |
 | PATCH | `/admin/organizations/:id/admins/:adminId` | allowed admin profile metadata |
 | POST | `/admin/organizations/:id/admins/:adminId/suspend` | independently suspend admin |
 
@@ -118,13 +119,14 @@ Middleware/sidebar hiding is defense in depth only. Organization routes remain i
 Allowed transitions:
 
 ```text
-active -> suspended -> active
-                |
-                v
-             archived
+active <-> suspended
+  |          |
+  +----------+--> archived
 ```
 
-Archive is terminal and read-only. Suspend/archive preserve all rows and record actor, time, reason, previous/new state. Invalid transitions return conflict. Archive requires a prior suspension and reason. Reactivation does not alter account status.
+Archive is a separate terminal, read-only offboarding action available from active or suspended state. Suspend/archive preserve all rows and record actor, time, reason, previous/new state. Invalid transitions return conflict. Reactivation does not alter account status, and archived organizations have no reactivation path.
+
+This slice retains archived tenant data in place and performs no deletion, anonymization, export, or storage-tier migration. Compliance approval of retention duration, export/access controls, legal-hold handling, and eventual disposal remains a production-rollout prerequisite and follow-up capability.
 
 ### 7. Audit writes are append-only and sanitized
 

@@ -5,13 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { useAdminAccess } from "@/lib/admin/access-provider";
-import {
-  OFFICE_LEVEL_LABEL,
-  createOffice,
-  listParentOfficeOptions,
-  type OfficeLevel,
-  type ParentOfficeOption,
-} from "@/lib/admin/offices";
+import { createRegionalOffice } from "@/lib/admin/offices";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,38 +17,21 @@ export default function NewOfficePage() {
   const router = useRouter();
   const { profile, loading: accessLoading } = useAdminAccess();
   const isOrgAdmin = profile?.role === "dswd_admin";
-  const [parents, setParents] = React.useState<ParentOfficeOption[]>([]);
-  const [loadingParents, setLoadingParents] = React.useState(true);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (!accessLoading && isOrgAdmin) {
-      void listParentOfficeOptions()
-        .then((result) => setParents(result.data))
-        .catch((caught) =>
-          setError(
-            caught instanceof Error
-              ? caught.message
-              : "Unable to load parent offices",
-          ),
-        )
-        .finally(() => setLoadingParents(false));
-    }
-  }, [accessLoading, isOrgAdmin]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
     const data = new FormData(event.currentTarget);
-    const parentOfficeId = String(data.get("parent_office_id") ?? "");
     try {
-      const office = await createOffice({
+      if (!profile?.organizationId) {
+        throw new Error("Organization scope is missing from your session");
+      }
+      const office = await createRegionalOffice(profile.organizationId, {
         name: String(data.get("name") ?? ""),
         code: String(data.get("code") ?? ""),
-        level: String(data.get("level") ?? "municipal") as OfficeLevel,
-        parent_office_id: parentOfficeId || null,
       });
       router.push(`/admin/offices/${office.id}?created=1`);
     } catch (caught) {
@@ -127,38 +104,6 @@ export default function NewOfficePage() {
                 className="uppercase"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="level">Office type</Label>
-              <select
-                id="level"
-                name="level"
-                required
-                className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
-                defaultValue="municipal"
-              >
-                {Object.entries(OFFICE_LEVEL_LABEL).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="parent_office_id">Parent office</Label>
-              <select
-                id="parent_office_id"
-                name="parent_office_id"
-                className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
-                disabled={loadingParents}
-              >
-                <option value="">No parent office</option>
-                {parents.map((office) => (
-                  <option key={office.id} value={office.id}>
-                    {office.name} ({office.code})
-                  </option>
-                ))}
-              </select>
-            </div>
           </CardContent>
         </Card>
 
@@ -175,7 +120,7 @@ export default function NewOfficePage() {
           <Button variant="outline" render={<Link href="/admin/offices" />}>
             Cancel
           </Button>
-          <Button type="submit" disabled={submitting || loadingParents}>
+          <Button type="submit" disabled={submitting}>
             {submitting ? "Creating..." : "Create office"}
           </Button>
         </div>

@@ -6,7 +6,10 @@ import {
   UserAccountEntity,
   UserRoleAssignmentEntity,
 } from '../users/user.entity';
-import { OrganizationController } from './organization.controller';
+import {
+  OrganizationController,
+  PlatformOrganizationController,
+} from './organization.controller';
 import {
   AuditLogEntity,
   OrganizationEntity,
@@ -26,7 +29,7 @@ import { OrganizationService } from './organization.service';
       UserRoleAssignmentEntity,
     ]),
   ],
-  controllers: [OrganizationController],
+  controllers: [OrganizationController, PlatformOrganizationController],
   providers: [OrganizationService],
 })
 export class OrganizationModule {}

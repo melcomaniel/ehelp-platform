@@ -16,6 +16,7 @@ export type NestAuthUser = {
   erd_role?: string;
   region_id?: string | null;
   office_id?: string | null;
+  office_name?: string | null;
   organization_id?: string | null;
   validation_status?: string;
   is_active?: boolean;
@@ -42,6 +43,7 @@ export function profileFromNestUser(user: NestAuthUser): Profile {
     phone: user.phone,
     fullName: user.full_name ?? "",
     role: parseAppRole(user.role) as AppRole,
+    organizationId: user.organization_id ?? null,
     regionId: user.region_id ?? user.office_id ?? null,
     validationStatus:
       (user.validation_status as Profile["validationStatus"]) ?? "validated",

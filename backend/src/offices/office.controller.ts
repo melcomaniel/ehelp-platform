@@ -14,7 +14,10 @@ import { AuthGuard } from '@nestjs/passport';
 import type { Request } from 'express';
 import type { JwtPayload } from '../auth/jwt.strategy';
 import {
+  CreateOfficeAdminDto,
   CreateOfficeDto,
+  CreateRegionalOfficeDto,
+  CreateStaffRequestDto,
   OfficeLifecycleReasonDto,
   OfficeListQueryDto,
   UpdateOfficeDto,
@@ -94,6 +97,115 @@ export class OfficeController {
     return this.offices.reactivate(
       req.user.sub,
       officeId,
+      this.meta(req, requestId),
+    );
+  }
+
+  @Post(':officeId/staff-requests')
+  requestStaffAccount(
+    @Req() req: AuthedRequest,
+    @Param('officeId') officeId: string,
+    @Body() body: CreateStaffRequestDto,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.offices.requestStaffAccount(
+      req.user.sub,
+      officeId,
+      body,
+      this.meta(req, requestId),
+    );
+  }
+
+  private meta(req: Request, requestId?: string) {
+    return {
+      ipAddress: req.ip || null,
+      requestId: requestId?.trim() || null,
+    };
+  }
+}
+
+@Controller('organizations/:organizationId/offices')
+@UseGuards(AuthGuard('jwt'))
+export class OrganizationOfficeController {
+  constructor(private readonly offices: OfficeService) {}
+
+  @Post()
+  createRegionalOffice(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+    @Body() body: CreateRegionalOfficeDto,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.offices.createRegionalOffice(
+      req.user.sub,
+      organizationId,
+      body,
+      this.meta(req, requestId),
+    );
+  }
+
+  @Patch(':officeId/archive')
+  archiveRegionalOffice(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+    @Param('officeId') officeId: string,
+    @Body() body: OfficeLifecycleReasonDto,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.offices.archiveRegionalOffice(
+      req.user.sub,
+      organizationId,
+      officeId,
+      body.reason,
+      this.meta(req, requestId),
+    );
+  }
+
+  @Patch(':officeId/reactivate')
+  reactivateRegionalOffice(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+    @Param('officeId') officeId: string,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.offices.reactivateRegionalOffice(
+      req.user.sub,
+      organizationId,
+      officeId,
+      this.meta(req, requestId),
+    );
+  }
+
+  @Post(':officeId/admins')
+  createOfficeAdmin(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+    @Param('officeId') officeId: string,
+    @Body() body: CreateOfficeAdminDto,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.offices.createOfficeAdmin(
+      req.user.sub,
+      organizationId,
+      officeId,
+      body,
+      this.meta(req, requestId),
+    );
+  }
+
+  @Post(':officeId/staff-requests/:userId/approve')
+  approveStaffRequest(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+    @Param('officeId') officeId: string,
+    @Param('userId') userId: string,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.offices.approveStaffRequest(
+      req.user.sub,
+      organizationId,
+      officeId,
+      userId,
       this.meta(req, requestId),
     );
   }
