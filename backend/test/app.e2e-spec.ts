@@ -14,7 +14,11 @@ type OrganizationResponse = {
   id: string;
   status: string;
   admins: Array<{ id: string; invitation_status: string }>;
-  audit_history: unknown[];
+  audit_history: Array<{
+    action: string;
+    before_state: { status?: string } | null;
+    after_state: { status?: string } | null;
+  }>;
 };
 
 function responseBody<T>(response: { body: unknown }): T {
@@ -126,11 +130,18 @@ describe('EHELP API (e2e)', () => {
     const organizationAdminToken = organizationAdmin.access_token;
     expect(organizationAdmin.user.organization_id).toBe(organizationId);
 
-    await request(app.getHttpServer())
-      .post(`/admin/organizations/${organizationId}/suspend`)
+    const suspended = await request(app.getHttpServer())
+      .patch(`/platform/organizations/${organizationId}/suspend`)
       .set('Authorization', `Bearer ${platformToken}`)
       .send({ reason: 'E2E tenant suspension' })
-      .expect(201);
+      .expect(200);
+    const suspendedOrganization = responseBody<OrganizationResponse>(suspended);
+    expect(suspendedOrganization.status).toBe('suspended');
+    expect(suspendedOrganization.audit_history[0]).toMatchObject({
+      action: 'organization_suspended',
+      before_state: { status: 'active' },
+      after_state: { status: 'suspended' },
+    });
     await request(app.getHttpServer())
       .get('/auth/me')
       .set('X-Client-Platform', 'web')
@@ -175,6 +186,6 @@ describe('EHELP API (e2e)', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    if (app) await app.close();
   });
 });

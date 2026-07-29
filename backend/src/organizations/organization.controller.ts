@@ -176,3 +176,31 @@ export class OrganizationController {
     };
   }
 }
+
+@Controller('platform/organizations')
+@UseGuards(AuthGuard('jwt'))
+export class PlatformOrganizationController {
+  constructor(private readonly organizations: OrganizationService) {}
+
+  @Patch(':organizationId/suspend')
+  suspend(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+    @Body() body: LifecycleReasonDto,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.organizations.suspend(
+      req.user.sub,
+      organizationId,
+      body.reason,
+      this.meta(req, requestId),
+    );
+  }
+
+  private meta(req: Request, requestId?: string) {
+    return {
+      ipAddress: req.ip || null,
+      requestId: requestId?.trim() || null,
+    };
+  }
+}
