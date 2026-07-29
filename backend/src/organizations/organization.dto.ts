@@ -24,6 +24,11 @@ const lower = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().toLowerCase() : value;
 const upper = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().toUpperCase() : value;
+const booleanQuery = ({ value }: { value: unknown }) => {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return value;
+};
 
 export const PLATFORM_SECURITY_BASELINE = Object.freeze({
   mfa_required: true as const,
@@ -128,6 +133,11 @@ export class OrganizationListQueryDto {
   @IsOptional()
   @IsIn(['active', 'suspended', 'archived'])
   status?: 'active' | 'suspended' | 'archived';
+
+  @IsOptional()
+  @Transform(booleanQuery)
+  @IsBoolean()
+  include_archived = false;
 
   @IsOptional()
   @Type(() => Number)

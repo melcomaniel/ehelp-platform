@@ -132,7 +132,8 @@ An active, unscoped `PLATFORM_ADMIN` (`organization_id = NULL`,
 | `GET`, `PATCH` | `/admin/organizations/:id` | View or edit approved organization metadata |
 | `POST` | `/admin/organizations/:id/suspend` | Preserve data and block tenant access; reason required |
 | `POST` | `/admin/organizations/:id/reactivate` | Restore the tenant without reactivating suspended accounts |
-| `POST` | `/admin/organizations/:id/archive` | Archive a suspended tenant; reason required |
+| `PATCH` | `/platform/organizations/:id/archive` | Archive an active or suspended tenant; reason required |
+| `POST` | `/admin/organizations/:id/archive` | Temporary compatibility alias for archive |
 | `PATCH` | `/admin/organizations/:id/admins/:adminId` | Edit approved Organization Administrator metadata |
 | `POST` | `/admin/organizations/:id/admins/:adminId/suspend` | Suspend an Organization Administrator account |
 

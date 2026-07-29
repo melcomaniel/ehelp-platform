@@ -92,18 +92,20 @@ export function organizationStatusLabel(status: OrganizationStatus) {
 }
 
 export function canArchiveOrganization(status: OrganizationStatus) {
-  return status === "suspended"
+  return status === "active" || status === "suspended"
 }
 
 export function listOrganizations(input: {
   search?: string
   status?: string
+  includeArchived?: boolean
   page?: number
   pageSize?: number
 }) {
   const query = new URLSearchParams()
   if (input.search) query.set("search", input.search)
   if (input.status) query.set("status", input.status)
+  if (input.includeArchived) query.set("include_archived", "true")
   query.set("page", String(input.page ?? 1))
   query.set("page_size", String(input.pageSize ?? 20))
   return nestFetch<OrganizationPage>(
@@ -192,6 +194,15 @@ export function transitionOrganization(
   action: "suspend" | "reactivate" | "archive",
   reason?: string,
 ) {
+  if (action === "archive") {
+    return nestFetch<OrganizationDetail>(
+      `/platform/organizations/${id}/archive`,
+      {
+        method: "PATCH",
+        body: reason ? { reason } : {},
+      },
+    )
+  }
   return nestFetch<OrganizationDetail>(
     `/admin/organizations/${id}/${action}`,
     {

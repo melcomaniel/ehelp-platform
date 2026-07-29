@@ -580,8 +580,9 @@ export default function OrganizationDetailPage() {
                 </summary>
                 <div className="mt-4 space-y-4">
                   <p className="text-sm text-amber-950/80">
-                    Suspension blocks tenant operations. Archival is terminal,
-                    read-only, and only available after suspension.
+                    Suspension temporarily blocks tenant operations. Archival is
+                    a separate permanent offboarding action that preserves
+                    historical data and cannot be reversed here.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <Button variant="outline" disabled={organization.status !== "active"} onClick={() => setAction("suspend")}>Suspend</Button>

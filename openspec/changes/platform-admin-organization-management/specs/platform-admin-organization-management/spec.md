@@ -31,15 +31,19 @@ The system SHALL enforce active, unscoped `PLATFORM_ADMIN` authorization server-
 - **THEN** the server returns the standard forbidden response and no other-tenant data
 
 ### Requirement: Organization listing
-The system SHALL provide searchable, status-filtered, paginated organization listing including name, normalized code, status, primary Organization Administrator, inexpensive office count, and creation/update timestamps.
+The system SHALL provide searchable, status-filtered, paginated organization listing including name, normalized code, status, primary Organization Administrator, inexpensive office count, and creation/update timestamps, and SHALL exclude archived organizations by default.
 
 #### Scenario: Filter organizations
 - **WHEN** a Platform Administrator supplies search, status, page, and page-size parameters
 - **THEN** the system returns the matching authorized page and pagination metadata
 
 #### Scenario: Archived history visibility
-- **WHEN** a Platform Administrator filters for archived organizations
+- **WHEN** a Platform Administrator explicitly includes archived organizations or filters for archived status
 - **THEN** archived organizations remain visible in the history list
+
+#### Scenario: Default active organization listing
+- **WHEN** a Platform Administrator lists or searches organizations without explicitly requesting archived history
+- **THEN** archived organizations are excluded from results and pagination totals
 
 ### Requirement: Organization creation
 The system SHALL allow an authorized Platform Administrator to create an active organization with required name and unique normalized code and SHALL validate all input server-side.
@@ -167,18 +171,14 @@ The system SHALL allow a suspended organization to transition to active with con
 - **THEN** that administrator remains unable to authenticate or use protected operations
 
 ### Requirement: Organization archival
-The system SHALL allow only a suspended organization to transition to terminal archived state with explicit confirmation and reason, SHALL make it read-only, and MUST NOT physically delete tenant history.
+The system SHALL allow an active or suspended organization to transition to terminal archived state with explicit confirmation and reason, SHALL make it read-only, and MUST NOT physically delete tenant history.
 
-#### Scenario: Archive suspended organization
-- **WHEN** a Platform Administrator confirms archive of a suspended organization with a reason
+#### Scenario: Archive active or suspended organization
+- **WHEN** a Platform Administrator confirms archive of an active or suspended organization with a reason
 - **THEN** status becomes archived, tenant authentication and writes are denied, history is preserved, and the action is audited
 
-#### Scenario: Reject direct active-to-archived transition
-- **WHEN** a Platform Administrator attempts to archive an active organization
-- **THEN** the server returns a conflict, the organization remains active, and the response explains that suspension is required
-
 #### Scenario: Archived organization mutation
-- **WHEN** any client attempts to edit or reactivate an archived organization
+- **WHEN** any client attempts to edit, suspend, reactivate, or archive an archived organization
 - **THEN** the system rejects the operation and preserves archived state
 
 ### Requirement: Organization Administrator account management

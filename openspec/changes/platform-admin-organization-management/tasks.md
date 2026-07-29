@@ -26,7 +26,7 @@
 - [x] 4.2 Implement Platform Administrator organization list and detail queries with Organization Administrator, office-count, and relevant audit summaries
 - [x] 4.3 Implement transactional, idempotent organization plus initial Organization Administrator, role, invitation, and audit creation
 - [x] 4.4 Implement allowed organization metadata editing with normalized-code conflict protection and before/after audit
-- [x] 4.5 Implement reasoned suspend, explicit reactivate, and suspended-only archive/decommission state transitions
+- [x] 4.5 Implement reasoned suspend, explicit reactivate, and active-or-suspended archive/decommission state transitions
 - [x] 4.6 Implement Organization Administrator list, allowed metadata editing, and independent account suspension with path tenant checks
 - [x] 4.7 Expose authenticated Nest organization-management endpoints with server-derived actor identity and safe standard errors
 - [x] 4.8 Add service/controller unit and integration tests for access, transaction rollback, duplicates, lifecycle, cross-tenant denial, invitation, and audit behavior
@@ -42,7 +42,7 @@
 - [x] 5.5 Build combined organization and initial Organization Administrator creation UI with accessible validation, idempotency, and success feedback
 - [x] 5.6 Build organization detail UI with metadata, office summary, Organization Administrators, creation metadata, and relevant audit history only
 - [x] 5.7 Build allowed organization editing UI and understandable duplicate/validation errors
-- [x] 5.8 Build accessible confirmation flows for suspend, reactivate, and suspended-only archive with invalid actions disabled
+- [x] 5.8 Build accessible confirmation flows for suspend, reactivate, and active-or-suspended archive with invalid actions disabled
 - [x] 5.9 Build Organization Administrator metadata editing and account-suspension UI
 - [x] 5.10 Add Organization Admins directory page with table, search, filters, pagination, and organization detail links
 - [x] 5.11 Convert organization detail sections to local tabs, defaulting to Offices

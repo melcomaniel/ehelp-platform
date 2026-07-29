@@ -27,24 +27,19 @@ describe('organization policy', () => {
 
   it.each([
     ['active', 'suspended'],
+    ['active', 'archived'],
     ['suspended', 'active'],
     ['suspended', 'archived'],
   ] as const)('allows %s to %s', (current, next) => {
     expect(() => assertOrganizationTransition(current, next)).not.toThrow();
   });
 
-  it('requires suspension before archive', () => {
-    expect(() => assertOrganizationTransition('active', 'archived')).toThrow(
-      new ConflictException(
-        'Organization must be suspended before it can be archived',
-      ),
-    );
-  });
-
   it('treats archived as terminal', () => {
-    expect(() => assertOrganizationTransition('archived', 'active')).toThrow(
-      ConflictException,
-    );
+    for (const next of ['active', 'suspended', 'archived'] as const) {
+      expect(() => assertOrganizationTransition('archived', next)).toThrow(
+        ConflictException,
+      );
+    }
   });
 
   it('removes secrets recursively from audit state', () => {

@@ -197,6 +197,21 @@ export class PlatformOrganizationController {
     );
   }
 
+  @Patch(':organizationId/archive')
+  archive(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+    @Body() body: LifecycleReasonDto,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.organizations.archive(
+      req.user.sub,
+      organizationId,
+      body.reason,
+      this.meta(req, requestId),
+    );
+  }
+
   private meta(req: Request, requestId?: string) {
     return {
       ipAddress: req.ip || null,

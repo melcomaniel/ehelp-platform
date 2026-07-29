@@ -1,6 +1,9 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { CreateOrganizationDto } from './organization.dto';
+import {
+  CreateOrganizationDto,
+  OrganizationListQueryDto,
+} from './organization.dto';
 
 function validInput() {
   return {
@@ -60,6 +63,35 @@ describe('CreateOrganizationDto', () => {
     );
     expect(errors.map((error) => error.property)).toEqual(
       expect.arrayContaining(['policy_config', 'initial_admin']),
+    );
+  });
+});
+
+describe('OrganizationListQueryDto', () => {
+  it('defaults archived organizations to excluded', async () => {
+    const query = plainToInstance(OrganizationListQueryDto, {});
+    expect(await validate(query)).toHaveLength(0);
+    expect(query.include_archived).toBe(false);
+  });
+
+  it.each([
+    ['true', true],
+    ['false', false],
+  ] as const)('parses include_archived=%s', async (value, expected) => {
+    const query = plainToInstance(OrganizationListQueryDto, {
+      include_archived: value,
+    });
+    expect(await validate(query)).toHaveLength(0);
+    expect(query.include_archived).toBe(expected);
+  });
+
+  it('rejects an invalid include_archived value', async () => {
+    const query = plainToInstance(OrganizationListQueryDto, {
+      include_archived: 'yes',
+    });
+    const errors = await validate(query);
+    expect(errors.some((error) => error.property === 'include_archived')).toBe(
+      true,
     );
   });
 });

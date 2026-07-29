@@ -25,14 +25,12 @@ export function assertOrganizationTransition(
   next: OrganizationStatus,
 ): void {
   const allowed =
-    (current === 'active' && next === 'suspended') ||
+    (current === 'active' && (next === 'suspended' || next === 'archived')) ||
     (current === 'suspended' && (next === 'active' || next === 'archived'));
   if (!allowed) {
-    const message =
-      next === 'archived' && current === 'active'
-        ? 'Organization must be suspended before it can be archived'
-        : `Organization cannot transition from ${current} to ${next}`;
-    throw new ConflictException(message);
+    throw new ConflictException(
+      `Organization cannot transition from ${current} to ${next}`,
+    );
   }
 }
 

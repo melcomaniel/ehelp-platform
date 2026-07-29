@@ -102,13 +102,19 @@ function TenantStatusBar({
 }
 
 async function listAllOrganizations() {
-  const first = await listOrganizations({ page: 1, pageSize: 100 })
+  const first = await listOrganizations({
+    includeArchived: true,
+    page: 1,
+    pageSize: 100,
+  })
   const pages = Array.from(
     { length: Math.max(0, first.pagination.total_pages - 1) },
     (_, index) => index + 2,
   )
   const rest = await Promise.all(
-    pages.map((page) => listOrganizations({ page, pageSize: 100 })),
+    pages.map((page) =>
+      listOrganizations({ includeArchived: true, page, pageSize: 100 }),
+    ),
   )
 
   return {

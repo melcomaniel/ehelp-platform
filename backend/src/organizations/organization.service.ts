@@ -129,6 +129,9 @@ export class OrganizationService {
     const pageSize = query.page_size || 20;
     const params: unknown[] = [];
     const clauses: string[] = [];
+    if (!query.include_archived && query.status !== 'archived') {
+      clauses.push(`o.status <> 'archived'`);
+    }
     if (query.search) {
       params.push(`%${query.search}%`);
       clauses.push(

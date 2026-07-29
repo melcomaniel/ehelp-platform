@@ -190,19 +190,53 @@ describe('EHELP API (e2e)', () => {
       .set('Authorization', `Bearer ${organizationAdminToken}`)
       .expect(401);
 
-    await request(app.getHttpServer())
-      .post(`/admin/organizations/${organizationId}/suspend`)
-      .set('Authorization', `Bearer ${platformToken}`)
-      .send({ reason: 'Prepare E2E tenant for archive' })
-      .expect(201);
     const archived = await request(app.getHttpServer())
-      .post(`/admin/organizations/${organizationId}/archive`)
+      .patch(`/platform/organizations/${organizationId}/archive`)
       .set('Authorization', `Bearer ${platformToken}`)
-      .send({ reason: 'E2E cleanup archive' })
-      .expect(201);
+      .send({ reason: 'E2E direct active archive' })
+      .expect(200);
     const archivedOrganization = responseBody<OrganizationResponse>(archived);
     expect(archivedOrganization.status).toBe('archived');
-    expect(archivedOrganization.audit_history.length).toBeGreaterThanOrEqual(9);
+    expect(archivedOrganization.audit_history[0]).toMatchObject({
+      action: 'organization_archived',
+      before_state: { status: 'active' },
+      after_state: { status: 'archived' },
+    });
+
+    await request(app.getHttpServer())
+      .post(`/admin/organizations/${organizationId}/archive`)
+      .set('Authorization', `Bearer ${platformToken}`)
+      .send({ reason: 'Compatibility route remains available' })
+      .expect(409);
+
+    await request(app.getHttpServer())
+      .get('/admin/organizations')
+      .set('Authorization', `Bearer ${platformToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body = responseBody<{ data: Array<{ id: string }> }>(response);
+        expect(body.data.some((item) => item.id === organizationId)).toBe(
+          false,
+        );
+      });
+
+    await request(app.getHttpServer())
+      .get('/admin/organizations?include_archived=true')
+      .set('Authorization', `Bearer ${platformToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body = responseBody<{ data: Array<{ id: string }> }>(response);
+        expect(body.data.some((item) => item.id === organizationId)).toBe(true);
+      });
+
+    await request(app.getHttpServer())
+      .get('/admin/organizations?status=archived')
+      .set('Authorization', `Bearer ${platformToken}`)
+      .expect(200)
+      .expect((response) => {
+        const body = responseBody<{ data: Array<{ id: string }> }>(response);
+        expect(body.data.some((item) => item.id === organizationId)).toBe(true);
+      });
   });
 
   afterAll(async () => {
