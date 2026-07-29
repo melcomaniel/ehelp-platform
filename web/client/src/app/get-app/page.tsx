@@ -3,8 +3,12 @@ import Link from "next/link";
 /** Beneficiary landing — citizens use the Flutter mobile app, not the web dashboard. */
 export default function GetAppPage() {
   return (
-    <main className="mx-auto flex min-h-[70vh] max-w-lg flex-col items-center justify-center gap-6 px-6 py-16 text-center">
-      <p className="text-sm font-medium uppercase tracking-wide text-[#0040E7]">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="mx-auto flex min-h-[70vh] max-w-lg flex-col items-center justify-center gap-6 px-6 py-16 text-center outline-none"
+    >
+      <p className="text-sm font-semibold uppercase tracking-wide text-primary">
         EHelp
       </p>
       <h1 className="text-3xl font-semibold tracking-tight">
@@ -18,13 +22,13 @@ export default function GetAppPage() {
       <div className="flex flex-wrap items-center justify-center gap-3">
         <Link
           href="/signin"
-          className="rounded-lg bg-[#0040E7] px-4 py-2 text-sm font-medium text-white"
+          className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-[var(--gov-blue-700)] focus-visible:ring-3 focus-visible:ring-ring/45"
         >
           Staff sign in
         </Link>
         <Link
           href="/"
-          className="rounded-lg border px-4 py-2 text-sm font-medium"
+          className="rounded-lg border px-4 py-2.5 text-sm font-semibold hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/45"
         >
           Back to home
         </Link>

@@ -40,7 +40,7 @@ export function Constellation() {
     particles.current = p;
   }, []);
 
-  const draw = useCallback(() => {
+  const draw = useCallback(function drawFrame() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -48,14 +48,22 @@ export function Constellation() {
 
     const { w, h } = size.current;
     ctx.clearRect(0, 0, w, h);
-    const pts = particles.current;
+    const pts = particles.current.map((particle) => {
+      let x = particle.x + particle.vx;
+      let y = particle.y + particle.vy;
+      let vx = particle.vx;
+      let vy = particle.vy;
+
+      if (x < 0 || x > w) vx *= -1;
+      if (y < 0 || y > h) vy *= -1;
+      x = Math.min(Math.max(x, 0), w);
+      y = Math.min(Math.max(y, 0), h);
+
+      return { ...particle, x, y, vx, vy };
+    });
+    particles.current = pts;
 
     for (const p of pts) {
-      p.x += p.vx;
-      p.y += p.vy;
-      if (p.x < 0 || p.x > w) p.vx *= -1;
-      if (p.y < 0 || p.y > h) p.vy *= -1;
-
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
       ctx.fillStyle = `rgba(${R},${G},${B},${p.opacity})`;
@@ -91,7 +99,7 @@ export function Constellation() {
       }
     }
 
-    raf.current = requestAnimationFrame(draw);
+    raf.current = requestAnimationFrame(drawFrame);
   }, []);
 
   useEffect(() => {

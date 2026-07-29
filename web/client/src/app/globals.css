@@ -47,6 +47,7 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
   --animate-scan-line: scan-line 1.4s ease-in-out infinite;
+  --breakpoint-xs: 22.5rem;
 }
 
 @keyframes scan-line {
@@ -62,39 +63,51 @@
 }
 
 :root {
-  --background: #ffffff;
-  --foreground: #1a1a2e;
+  --gov-blue: #0040e7;
+  --gov-blue-700: #0035c2;
+  --gov-blue-50: #eef4ff;
+  --gov-red: #ce1126;
+  --gov-yellow: #fcd116;
+  --gov-navy: #10172a;
+  --gov-slate: #475569;
+  --background: #f7faff;
+  --foreground: var(--gov-navy);
   --card: #ffffff;
-  --card-foreground: #1a1a2e;
+  --card-foreground: var(--gov-navy);
   --popover: #ffffff;
-  --popover-foreground: #1a1a2e;
-  --primary: #0040e7;
+  --popover-foreground: var(--gov-navy);
+  --primary: var(--gov-blue);
   --primary-foreground: #ffffff;
-  --secondary: #f0f4ff;
-  --secondary-foreground: #0040e7;
-  --muted: #f5f7fa;
-  --muted-foreground: #64748b;
-  --accent: #fcd116;
-  --accent-foreground: #1a1a2e;
-  --destructive: #ce1126;
+  --secondary: var(--gov-blue-50);
+  --secondary-foreground: var(--gov-blue);
+  --muted: #eef3f9;
+  --muted-foreground: var(--gov-slate);
+  --accent: var(--gov-yellow);
+  --accent-foreground: var(--gov-navy);
+  --destructive: var(--gov-red);
   --destructive-foreground: #ffffff;
-  --border: #0040e71a;
-  --input: #f0f4ff;
-  --ring: #0040e7;
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --border: #cdd9ea;
+  --input: #d8e4f2;
+  --ring: var(--gov-blue);
+  --chart-1: var(--gov-blue);
+  --chart-2: var(--gov-yellow);
+  --chart-3: var(--gov-red);
+  --chart-4: #0f766e;
+  --chart-5: #64748b;
+  --radius: 0.5rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: var(--gov-navy);
+  --sidebar-primary: var(--gov-blue);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--gov-blue-50);
+  --sidebar-accent-foreground: var(--gov-blue);
+  --sidebar-border: #d7e2f0;
+  --sidebar-ring: var(--gov-blue);
+  --shadow-soft: 0 1px 2px rgb(16 23 42 / 0.06), 0 8px 24px rgb(16 23 42 / 0.06);
+  --duration-fast: 120ms;
+  --duration-standard: 180ms;
+  --z-header: 40;
+  --z-overlay: 50;
 }
 
 .dark {
@@ -137,19 +150,90 @@
   }
   body {
     @apply bg-background text-foreground;
+    text-rendering: optimizeLegibility;
   }
   html {
     @apply font-sans;
+    scroll-behavior: smooth;
   }
   h1,
   h2,
   h3,
   h4 {
-    font-weight: 500;
-    line-height: 1.5;
+    font-weight: 650;
+    line-height: 1.2;
+    letter-spacing: 0;
   }
   button,
   label {
     font-weight: 500;
+  }
+  a {
+    text-underline-offset: 0.18em;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--gov-yellow), white 20%);
+    color: var(--gov-navy);
+  }
+}
+
+@layer components {
+  .skip-link {
+    @apply sr-only fixed left-3 top-3 z-50 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-lg focus:not-sr-only;
+  }
+
+  .egov-brand-mark {
+    @apply flex aspect-square size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm;
+  }
+
+  .egov-brand-mark::after {
+    content: "";
+    width: 0.56rem;
+    height: 0.56rem;
+    border-radius: 999px;
+    background: var(--gov-yellow);
+    box-shadow: 0.72rem 0 var(--gov-red), 0.36rem 0.62rem #ffffff;
+  }
+
+  .app-shell-header {
+    @apply sticky top-0 z-40 flex min-h-16 shrink-0 items-center justify-between gap-3 border-b bg-background/92 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/78;
+  }
+
+  .app-content {
+    @apply mx-auto flex w-full max-w-[92rem] flex-1 flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8;
+  }
+
+  .brand-stripe {
+    background: linear-gradient(
+      90deg,
+      var(--gov-blue) 0%,
+      var(--gov-blue) 58%,
+      var(--gov-red) 58%,
+      var(--gov-red) 78%,
+      var(--gov-yellow) 78%,
+      var(--gov-yellow) 100%
+    );
+  }
+
+  .surface-panel {
+    @apply rounded-lg border bg-card shadow-[var(--shadow-soft)];
+  }
+}
+
+@layer utilities {
+  .touch-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
   }
 }

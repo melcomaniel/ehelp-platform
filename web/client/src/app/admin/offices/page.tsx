@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { useAdminAccess } from "@/lib/admin/access-provider";
 import {
@@ -15,6 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DataTable, Td } from "@/components/ehelp/bits";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,6 +28,7 @@ const BADGE_CLASS: Record<OfficeStatus, string> = {
 };
 
 export default function OfficesPage() {
+  const router = useRouter();
   const { profile, loading: accessLoading } = useAdminAccess();
   const isOrgAdmin = profile?.role === "dswd_admin";
   const [searchInput, setSearchInput] = React.useState("");
@@ -178,38 +181,49 @@ export default function OfficesPage() {
         </Card>
       ) : (
         <>
-          <div className="overflow-hidden rounded-xl border">
-            <div className="hidden grid-cols-[1.4fr_.7fr_.8fr_1fr_.5fr_.7fr] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium uppercase text-muted-foreground md:grid">
-              <span>Office</span>
-              <span>Code</span>
-              <span>Type</span>
-              <span>Parent</span>
-              <span>Children</span>
-              <span>Status</span>
-            </div>
+          <DataTable
+            headers={["Office", "Code", "Type", "Parent", "Children", "Status"]}
+            caption="Offices matching the selected filters"
+          >
             {result.data.map((office) => (
-              <Link
+              <tr
                 key={office.id}
-                href={`/admin/offices/${office.id}`}
-                className="grid gap-2 border-b px-4 py-4 transition-colors last:border-0 hover:bg-muted/40 md:grid-cols-[1.4fr_.7fr_.8fr_1fr_.5fr_.7fr] md:items-center md:gap-3"
+                className="cursor-pointer border-b last:border-0 hover:bg-muted/40 focus-within:bg-muted/40"
+                tabIndex={0}
+                role="link"
+                onClick={() => router.push(`/admin/offices/${office.id}`)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    router.push(`/admin/offices/${office.id}`);
+                  }
+                }}
               >
-                <span className="font-medium">{office.name}</span>
-                <span className="text-sm">{office.code}</span>
-                <span className="text-sm">
+                <th scope="row" className="px-4 py-4 text-left font-medium">
+                  <Link
+                    href={`/admin/offices/${office.id}`}
+                    className="rounded-md underline-offset-4 hover:text-primary hover:underline focus-visible:ring-3 focus-visible:ring-ring/45"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    {office.name}
+                  </Link>
+                </th>
+                <Td className="whitespace-nowrap">{office.code}</Td>
+                <Td className="whitespace-nowrap">
                   {OFFICE_LEVEL_LABEL[office.level as OfficeLevel]}
-                </span>
-                <span className="text-sm text-muted-foreground">
+                </Td>
+                <Td className="text-muted-foreground">
                   {office.parent_office_name ?? "None"}
-                </span>
-                <span className="text-sm">{office.direct_child_count}</span>
-                <span>
+                </Td>
+                <Td className="tabular-nums">{office.direct_child_count}</Td>
+                <Td>
                   <Badge className={BADGE_CLASS[office.status]}>
                     {officeStatusLabel(office.status)}
                   </Badge>
-                </span>
-              </Link>
+                </Td>
+              </tr>
             ))}
-          </div>
+          </DataTable>
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
               {result.pagination.total} office

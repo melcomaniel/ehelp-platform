@@ -83,7 +83,9 @@ export default function TemplatesPage() {
   }, [region?.id])
 
   React.useEffect(() => {
-    if (!accessLoading) void reload()
+    if (accessLoading) return
+    const timer = window.setTimeout(() => void reload(), 0)
+    return () => window.clearTimeout(timer)
   }, [accessLoading, reload])
 
   const startEdit = (t: ProgramTemplateRow | null) => {

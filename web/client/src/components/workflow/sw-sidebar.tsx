@@ -51,12 +51,14 @@ export function SocialWorkerSidebar({ ...props }: React.ComponentProps<typeof Si
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" render={<Link href="/social-worker/dashboard" />}>
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-[#0040E7] text-white">
-                <HandHeartIcon className="size-4" />
+              <div className="flex aspect-square size-9 items-center justify-center rounded-lg bg-primary text-white shadow-sm">
+                <HandHeartIcon className="size-4" aria-hidden />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">Social Worker</span>
-                <span className="truncate text-xs">Evaluator</span>
+                <span className="truncate font-semibold">Social Worker</span>
+                <span className="truncate text-xs text-muted-foreground">
+                  Evaluator
+                </span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -91,7 +93,7 @@ export function SocialWorkerSidebar({ ...props }: React.ComponentProps<typeof Si
             <DropdownMenu>
               <DropdownMenuTrigger render={<SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent" />}>
                 <Avatar className="size-8 rounded-lg">
-                  <AvatarFallback className="rounded-lg bg-[#0040E7]/10 text-xs text-[#0040E7]">{initials}</AvatarFallback>
+                  <AvatarFallback className="rounded-lg bg-primary/10 text-xs font-semibold text-primary">{initials}</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{actingUser?.name ?? "…"}</span>
