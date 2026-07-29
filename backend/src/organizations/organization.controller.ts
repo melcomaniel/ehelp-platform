@@ -14,6 +14,7 @@ import { AuthGuard } from '@nestjs/passport';
 import type { Request } from 'express';
 import type { JwtPayload } from '../auth/jwt.strategy';
 import {
+  CreateOrganizationAdminDto,
   CreateOrganizationDto,
   LifecycleReasonDto,
   OrganizationAdminListQueryDto,
@@ -181,6 +182,46 @@ export class OrganizationController {
 @UseGuards(AuthGuard('jwt'))
 export class PlatformOrganizationController {
   constructor(private readonly organizations: OrganizationService) {}
+
+  @Get(':organizationId/admins')
+  admins(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+  ) {
+    return this.organizations.listAdmins(req.user.sub, organizationId);
+  }
+
+  @Post(':organizationId/admins')
+  createAdmin(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+    @Body() body: CreateOrganizationAdminDto,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.organizations.createAdmin(
+      req.user.sub,
+      organizationId,
+      body,
+      this.meta(req, requestId),
+    );
+  }
+
+  @Patch(':organizationId/admins/:adminId')
+  updateAdmin(
+    @Req() req: AuthedRequest,
+    @Param('organizationId') organizationId: string,
+    @Param('adminId') adminId: string,
+    @Body() body: UpdateOrganizationAdminDto,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.organizations.updateAdmin(
+      req.user.sub,
+      organizationId,
+      adminId,
+      body,
+      this.meta(req, requestId),
+    );
+  }
 
   @Patch(':organizationId/suspend')
   suspend(

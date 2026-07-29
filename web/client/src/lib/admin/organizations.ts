@@ -218,8 +218,24 @@ export function updateOrganizationAdmin(
   input: { full_name?: string; email?: string; phone?: string },
 ) {
   return nestFetch<OrganizationDetail>(
-    `/admin/organizations/${organizationId}/admins/${adminId}`,
+    `/platform/organizations/${organizationId}/admins/${adminId}`,
     { method: "PATCH", body: input },
+  )
+}
+
+export function createOrganizationAdmin(
+  organizationId: string,
+  input: { full_name: string; email: string; phone?: string },
+) {
+  return nestFetch<OrganizationAdmin>(
+    `/platform/organizations/${organizationId}/admins`,
+    { method: "POST", body: input },
+  )
+}
+
+export function getOrganizationAdmins(organizationId: string) {
+  return nestFetch<OrganizationAdmin[]>(
+    `/platform/organizations/${organizationId}/admins`,
   )
 }
 
@@ -229,7 +245,21 @@ export function suspendOrganizationAdmin(
   reason: string,
 ) {
   return nestFetch<OrganizationDetail>(
-    `/admin/organizations/${organizationId}/admins/${adminId}/suspend`,
-    { method: "POST", body: { reason } },
+    `/platform/organizations/${organizationId}/admins/${adminId}`,
+    { method: "PATCH", body: { status: "suspended", reason } },
+  )
+}
+
+export function reactivateOrganizationAdmin(
+  organizationId: string,
+  adminId: string,
+  reason?: string,
+) {
+  return nestFetch<OrganizationDetail>(
+    `/platform/organizations/${organizationId}/admins/${adminId}`,
+    {
+      method: "PATCH",
+      body: { status: "active", ...(reason ? { reason } : {}) },
+    },
   )
 }

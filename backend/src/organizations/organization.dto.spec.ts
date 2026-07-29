@@ -1,8 +1,10 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import {
+  CreateOrganizationAdminDto,
   CreateOrganizationDto,
   OrganizationListQueryDto,
+  UpdateOrganizationAdminDto,
 } from './organization.dto';
 
 function validInput() {
@@ -23,25 +25,27 @@ function validInput() {
 }
 
 describe('CreateOrganizationDto', () => {
-  it('accepts a Gmail admin email and baseline-compliant policy', async () => {
+  it('accepts a government admin email and baseline-compliant policy', async () => {
     const input = validInput();
-    input.initial_admin.email = 'admin@gmail.com';
     const errors = await validate(
       plainToInstance(CreateOrganizationDto, input),
     );
     expect(errors).toHaveLength(0);
   });
 
-  it('rejects an invalid initial administrator email', async () => {
-    const input = validInput();
-    input.initial_admin.email = 'not-an-email';
-    const errors = await validate(
-      plainToInstance(CreateOrganizationDto, input),
-    );
-    expect(errors.some((error) => error.property === 'initial_admin')).toBe(
-      true,
-    );
-  });
+  it.each(['not-an-email', 'admin@gmail.com'])(
+    'rejects invalid initial administrator email %s',
+    async (email) => {
+      const input = validInput();
+      input.initial_admin.email = email;
+      const errors = await validate(
+        plainToInstance(CreateOrganizationDto, input),
+      );
+      expect(errors.some((error) => error.property === 'initial_admin')).toBe(
+        true,
+      );
+    },
+  );
 
   it('rejects policy settings weaker than the platform baseline', async () => {
     const input = validInput();
@@ -66,6 +70,57 @@ describe('CreateOrganizationDto', () => {
     expect(errors.map((error) => error.property)).toEqual(
       expect.arrayContaining(['policy_config', 'initial_admin']),
     );
+  });
+});
+
+describe('Organization Administrator DTOs', () => {
+  it('normalizes and accepts an additional administrator government email', async () => {
+    const dto = plainToInstance(CreateOrganizationAdminDto, {
+      full_name: ' Additional Administrator ',
+      email: 'ADMIN@AGENCY.GOV.PH ',
+    });
+    expect(await validate(dto)).toHaveLength(0);
+    expect(dto.full_name).toBe('Additional Administrator');
+    expect(dto.email).toBe('admin@agency.gov.ph');
+  });
+
+  it('rejects a non-government additional administrator email', async () => {
+    const dto = plainToInstance(CreateOrganizationAdminDto, {
+      full_name: 'Additional Administrator',
+      email: 'admin@example.com',
+    });
+    expect(
+      (await validate(dto)).some((error) => error.property === 'email'),
+    ).toBe(true);
+  });
+
+  it.each(['active', 'suspended'] as const)(
+    'accepts supported PATCH status %s',
+    async (status) => {
+      const dto = plainToInstance(UpdateOrganizationAdminDto, {
+        status,
+        ...(status === 'suspended' ? { reason: 'Policy review' } : {}),
+      });
+      expect(await validate(dto)).toHaveLength(0);
+    },
+  );
+
+  it('rejects an unsupported PATCH status', async () => {
+    const dto = plainToInstance(UpdateOrganizationAdminDto, {
+      status: 'archived',
+    });
+    expect(
+      (await validate(dto)).some((error) => error.property === 'status'),
+    ).toBe(true);
+  });
+
+  it('requires a reason when suspending an administrator', async () => {
+    const dto = plainToInstance(UpdateOrganizationAdminDto, {
+      status: 'suspended',
+    });
+    expect(
+      (await validate(dto)).some((error) => error.property === 'reason'),
+    ).toBe(true);
   });
 });
 

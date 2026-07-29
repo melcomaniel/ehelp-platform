@@ -18,7 +18,16 @@ type OrganizationResponse = {
     action: string;
     before_state: { status?: string } | null;
     after_state: { status?: string } | null;
+    reason?: string | null;
   }>;
+};
+
+type OrganizationAdminResponse = {
+  id: string;
+  email: string;
+  status: string;
+  is_active: boolean;
+  invitation_status: string | null;
 };
 
 function responseBody<T>(response: { body: unknown }): T {
@@ -123,6 +132,125 @@ describe('EHELP API (e2e)', () => {
     expect(repeatedOrganization.id).toBe(organizationId);
     expect(repeatedOrganization.admins).toHaveLength(1);
 
+    const additionalSuffix = randomUUID().replaceAll('-', '').slice(-6);
+    const additionalEmail = `citizen.${additionalSuffix}@mock.gov.ph`;
+    const additionalCreated = await request(app.getHttpServer())
+      .post(`/platform/organizations/${organizationId}/admins`)
+      .set('Authorization', `Bearer ${platformToken}`)
+      .send({
+        full_name: 'Additional Organization Administrator',
+        email: additionalEmail,
+        phone: '+639171234567',
+      })
+      .expect(201);
+    const additionalAdmin =
+      responseBody<OrganizationAdminResponse>(additionalCreated);
+    expect(additionalAdmin).toMatchObject({
+      email: additionalEmail,
+      status: 'active',
+      is_active: true,
+      invitation_status: 'pending',
+    });
+
+    await request(app.getHttpServer())
+      .post(`/platform/organizations/${organizationId}/admins`)
+      .set('Authorization', `Bearer ${platformToken}`)
+      .send({
+        full_name: 'Duplicate Organization Administrator',
+        email: additionalEmail,
+      })
+      .expect(409);
+
+    await request(app.getHttpServer())
+      .get(`/platform/organizations/${organizationId}/admins`)
+      .set('Authorization', `Bearer ${platformToken}`)
+      .expect(200)
+      .expect((response) => {
+        const admins = responseBody<OrganizationAdminResponse[]>(response);
+        expect(admins).toHaveLength(2);
+        expect(admins.some((admin) => admin.id === additionalAdmin.id)).toBe(
+          true,
+        );
+      });
+
+    await request(app.getHttpServer())
+      .get(`/platform/organizations/${organizationId}/admins`)
+      .set('Authorization', `Bearer ${seededOrgAdmin.access_token}`)
+      .expect(403);
+
+    await request(app.getHttpServer())
+      .patch(
+        `/platform/organizations/${randomUUID()}/admins/${additionalAdmin.id}`,
+      )
+      .set('Authorization', `Bearer ${platformToken}`)
+      .send({ status: 'suspended', reason: 'Cross-tenant test' })
+      .expect(404);
+
+    await request(app.getHttpServer())
+      .post('/auth/sso/exchange')
+      .set('X-Client-Platform', 'web')
+      .send({
+        exchange_code: `mock-${additionalSuffix}`,
+        client_platform: 'web',
+      })
+      .expect(403)
+      .expect((response) => {
+        expect(responseBody<{ code: string }>(response).code).toBe(
+          'device_registration_required',
+        );
+      });
+
+    const additionalSso = await request(app.getHttpServer())
+      .post('/auth/sso/exchange')
+      .set('X-Client-Platform', 'web')
+      .send({
+        exchange_code: `mock-${additionalSuffix}`,
+        client_platform: 'web',
+        device_fingerprint: `e2e:${additionalSuffix}`,
+      })
+      .expect(201);
+    const additionalAdminToken =
+      responseBody<AuthResponse>(additionalSso).access_token;
+
+    await request(app.getHttpServer())
+      .patch(
+        `/platform/organizations/${organizationId}/admins/${additionalAdmin.id}`,
+      )
+      .set('Authorization', `Bearer ${platformToken}`)
+      .send({ status: 'suspended', reason: 'E2E individual suspension' })
+      .expect(200)
+      .expect((response) => {
+        expect(responseBody<OrganizationResponse>(response).status).toBe(
+          'active',
+        );
+      });
+    await request(app.getHttpServer())
+      .get('/auth/me')
+      .set('X-Client-Platform', 'web')
+      .set('Authorization', `Bearer ${additionalAdminToken}`)
+      .expect(401);
+
+    await request(app.getHttpServer())
+      .patch(
+        `/platform/organizations/${organizationId}/admins/${additionalAdmin.id}`,
+      )
+      .set('Authorization', `Bearer ${platformToken}`)
+      .send({ status: 'active', reason: 'E2E individual reactivation' })
+      .expect(200)
+      .expect((response) => {
+        const body = responseBody<OrganizationResponse>(response);
+        expect(body.status).toBe('active');
+        expect(body.audit_history[0]).toMatchObject({
+          action: 'organization_admin_reactivated',
+          reason: 'E2E individual reactivation',
+        });
+      });
+    await request(app.getHttpServer())
+      .get('/auth/me')
+      .set('X-Client-Platform', 'web')
+      .set('Authorization', `Bearer ${additionalAdminToken}`)
+      .expect(200);
+
     await request(app.getHttpServer())
       .post('/auth/sso/exchange')
       .set('X-Client-Platform', 'web')
@@ -163,6 +291,14 @@ describe('EHELP API (e2e)', () => {
       after_state: { status: 'suspended' },
     });
     await request(app.getHttpServer())
+      .post(`/platform/organizations/${organizationId}/admins`)
+      .set('Authorization', `Bearer ${platformToken}`)
+      .send({
+        full_name: 'Blocked Administrator',
+        email: `blocked.${suffix}@mock.gov.ph`,
+      })
+      .expect(409);
+    await request(app.getHttpServer())
       .get('/auth/me')
       .set('X-Client-Platform', 'web')
       .set('Authorization', `Bearer ${organizationAdminToken}`)
@@ -202,6 +338,14 @@ describe('EHELP API (e2e)', () => {
       before_state: { status: 'active' },
       after_state: { status: 'archived' },
     });
+    await request(app.getHttpServer())
+      .post(`/platform/organizations/${organizationId}/admins`)
+      .set('Authorization', `Bearer ${platformToken}`)
+      .send({
+        full_name: 'Archived Organization Administrator',
+        email: `archived.${suffix}@mock.gov.ph`,
+      })
+      .expect(409);
 
     await request(app.getHttpServer())
       .post(`/admin/organizations/${organizationId}/archive`)

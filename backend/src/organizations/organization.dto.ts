@@ -14,6 +14,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { OFFICE_LEVELS, type OfficeLevel } from '../offices/office.policy';
@@ -45,6 +46,9 @@ export class InitialOrganizationAdminDto {
 
   @Transform(lower)
   @IsEmail()
+  @Matches(/@(?:[a-z0-9-]+\.)*gov\.ph$/i, {
+    message: 'email must be a Philippine government email address (.gov.ph)',
+  })
   @MaxLength(254)
   email!: string;
 
@@ -54,6 +58,8 @@ export class InitialOrganizationAdminDto {
   @MaxLength(40)
   phone?: string;
 }
+
+export class CreateOrganizationAdminDto extends InitialOrganizationAdminDto {}
 
 export class InitialPolicyConfigDto {
   @IsBoolean()
@@ -229,6 +235,9 @@ export class UpdateOrganizationAdminDto {
   @IsOptional()
   @Transform(lower)
   @IsEmail()
+  @Matches(/@(?:[a-z0-9-]+\.)*gov\.ph$/i, {
+    message: 'email must be a Philippine government email address (.gov.ph)',
+  })
   @MaxLength(254)
   email?: string;
 
@@ -237,4 +246,18 @@ export class UpdateOrganizationAdminDto {
   @IsString()
   @MaxLength(40)
   phone?: string;
+
+  @IsOptional()
+  @IsIn(['active', 'suspended'])
+  status?: 'active' | 'suspended';
+
+  @ValidateIf(
+    (input: UpdateOrganizationAdminDto) =>
+      input.status === 'suspended' || input.reason !== undefined,
+  )
+  @Transform(trim)
+  @IsString()
+  @MinLength(3)
+  @MaxLength(500)
+  reason?: string;
 }

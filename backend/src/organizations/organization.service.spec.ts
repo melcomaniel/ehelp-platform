@@ -70,4 +70,57 @@ describe('OrganizationService listing', () => {
     expect(statements[1]).not.toContain(`o.status <> 'archived'`);
     expect(statements[2]).not.toContain(`o.status <> 'archived'`);
   });
+
+  it('lists only Organization Administrators for the requested organization', async () => {
+    const statements: string[] = [];
+    const query = jest.fn((sql: string) => {
+      statements.push(sql);
+      if (statements.length === 1) {
+        return Promise.resolve([
+          {
+            id: 'actor-id',
+            organization_id: null,
+            office_id: null,
+            account_type: 'platform_admin',
+            status: 'active',
+            is_active: true,
+          },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+    const dataSource = { query } as unknown as DataSource;
+    const organizations = {
+      findOne: jest.fn().mockResolvedValue({ id: 'organization-id' }),
+    } as unknown as Repository<OrganizationEntity>;
+    const service = new OrganizationService(dataSource, organizations);
+
+    await service.listAdmins('actor-id', 'organization-id');
+
+    expect(statements[1]).toContain(`r.code = 'ORG_ADMIN'`);
+    expect(statements[1]).toContain('WHERE u.organization_id = $1');
+    expect(query.mock.calls[1][1]).toEqual(['organization-id']);
+  });
+
+  it('rejects an empty administrator PATCH before opening a transaction', async () => {
+    const query = jest.fn().mockResolvedValue([
+      {
+        id: 'actor-id',
+        organization_id: null,
+        office_id: null,
+        account_type: 'platform_admin',
+        status: 'active',
+        is_active: true,
+      },
+    ]);
+    const transaction = jest.fn();
+    const dataSource = { query, transaction } as unknown as DataSource;
+    const organizations = {} as Repository<OrganizationEntity>;
+    const service = new OrganizationService(dataSource, organizations);
+
+    await expect(
+      service.updateAdmin('actor-id', 'organization-id', 'admin-id', {}),
+    ).rejects.toThrow('At least one administrator field must be provided');
+    expect(transaction).not.toHaveBeenCalled();
+  });
 });

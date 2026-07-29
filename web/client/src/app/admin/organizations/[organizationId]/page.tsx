@@ -7,9 +7,11 @@ import { useParams, useSearchParams } from "next/navigation"
 import { useAdminAccess } from "@/lib/admin/access-provider"
 import {
   canArchiveOrganization,
+  createOrganizationAdmin,
   getOrganization,
   listOrganizationOffices,
   organizationStatusLabel,
+  reactivateOrganizationAdmin,
   suspendOrganizationAdmin,
   transitionOrganization,
   updateOrganization,
@@ -325,6 +327,19 @@ function AdminEditor({
     }
   }
 
+  async function reactivate() {
+    setBusy(true)
+    setError(null)
+    try {
+      onUpdated(await reactivateOrganizationAdmin(organizationId, admin.id))
+      setEditing(false)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to reactivate administrator")
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="rounded-lg border p-4">
       <div className="flex flex-col justify-between gap-3 sm:flex-row">
@@ -339,11 +354,9 @@ function AdminEditor({
           <p className="text-sm text-muted-foreground">{admin.email}</p>
           {admin.phone && <p className="text-sm text-muted-foreground">{admin.phone}</p>}
         </div>
-        {admin.is_active && (
-          <Button variant="outline" onClick={() => setEditing((value) => !value)}>
-            {editing ? "Close" : "Manage"}
-          </Button>
-        )}
+        <Button variant="outline" onClick={() => setEditing((value) => !value)}>
+          {editing ? "Close" : "Manage"}
+        </Button>
       </div>
       {editing && (
         <div className="mt-4 grid gap-5 border-t pt-4 lg:grid-cols-2">
@@ -363,21 +376,116 @@ function AdminEditor({
             </div>
             <Button type="submit" disabled={busy}>Save administrator</Button>
           </form>
-          <form className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3" onSubmit={suspend}>
-            <p className="text-sm font-medium text-amber-950">Suspend administrator account</p>
-            <p className="text-xs text-amber-900">
-              This blocks the account but does not suspend the organization.
-            </p>
-            <Label htmlFor={`reason-${admin.id}`}>Reason</Label>
-            <Input id={`reason-${admin.id}`} name="reason" required minLength={3} />
-            <Button type="submit" variant="destructive" disabled={busy}>
-              Confirm account suspension
-            </Button>
-          </form>
+          {admin.is_active ? (
+            <form className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3" onSubmit={suspend}>
+              <p className="text-sm font-medium text-amber-950">Suspend administrator account</p>
+              <p className="text-xs text-amber-900">
+                This blocks the account but does not suspend the organization.
+              </p>
+              <Label htmlFor={`reason-${admin.id}`}>Reason</Label>
+              <Input id={`reason-${admin.id}`} name="reason" required minLength={3} />
+              <Button type="submit" variant="destructive" disabled={busy}>
+                Confirm account suspension
+              </Button>
+            </form>
+          ) : (
+            <div className="space-y-3 rounded-md border border-emerald-300 bg-emerald-50 p-3">
+              <p className="text-sm font-medium text-emerald-950">Reactivate administrator account</p>
+              <p className="text-xs text-emerald-900">
+                This restores only this account. The organization is not changed.
+              </p>
+              <Button type="button" onClick={() => void reactivate()} disabled={busy}>
+                Confirm account reactivation
+              </Button>
+            </div>
+          )}
         </div>
       )}
       {error && <p className="mt-3 text-sm text-destructive" role="alert">{error}</p>}
     </div>
+  )
+}
+
+function CreateAdminForm({
+  organization,
+  onCreated,
+}: {
+  organization: OrganizationDetail
+  onCreated: (detail: OrganizationDetail) => void
+}) {
+  const [open, setOpen] = React.useState(false)
+  const [busy, setBusy] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+
+  async function create(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setBusy(true)
+    setError(null)
+    const form = event.currentTarget
+    const data = new FormData(form)
+    try {
+      await createOrganizationAdmin(organization.id, {
+        full_name: String(data.get("full_name") ?? ""),
+        email: String(data.get("email") ?? ""),
+        phone: String(data.get("phone") ?? "") || undefined,
+      })
+      onCreated(await getOrganization(organization.id))
+      form.reset()
+      setOpen(false)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to add administrator")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <Button
+        type="button"
+        disabled={organization.status !== "active"}
+        onClick={() => setOpen(true)}
+      >
+        Add administrator
+      </Button>
+    )
+  }
+
+  return (
+    <form className="grid gap-4 rounded-lg border p-4 sm:grid-cols-2" onSubmit={create}>
+      <div className="space-y-2">
+        <Label htmlFor="new-admin-name">Full name</Label>
+        <Input id="new-admin-name" name="full_name" required minLength={2} maxLength={160} />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="new-admin-email">Government email</Label>
+        <Input
+          id="new-admin-email"
+          name="email"
+          type="email"
+          required
+          pattern=".+@(?:[A-Za-z0-9-]+\.)*gov\.ph"
+          placeholder="admin@agency.gov.ph"
+        />
+      </div>
+      <div className="space-y-2 sm:col-span-2">
+        <Label htmlFor="new-admin-phone">Phone (optional)</Label>
+        <Input id="new-admin-phone" name="phone" maxLength={40} />
+      </div>
+      <p className="text-sm text-muted-foreground sm:col-span-2">
+        The account is approved when provisioned. The administrator must sign in
+        through eGov SSO and register this device before the first session is issued.
+      </p>
+      {error && <p className="text-sm text-destructive sm:col-span-2" role="alert">{error}</p>}
+      <div className="flex gap-2 sm:col-span-2 sm:justify-end">
+        <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={busy}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={busy}>
+          {busy ? "Adding…" : "Add administrator"}
+        </Button>
+      </div>
+    </form>
   )
 }
 
@@ -559,7 +667,17 @@ export default function OrganizationDetailPage() {
       {activeTab === "admins" && (
         <div id="organization-tab-admins" role="tabpanel">
           <Card id="admins">
-            <CardHeader><CardTitle>Organization Administrators</CardTitle></CardHeader>
+            <CardHeader>
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                <div>
+                  <CardTitle>Organization Administrators</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Manage independently scoped administrator accounts for this organization.
+                  </p>
+                </div>
+                <CreateAdminForm organization={organization} onCreated={setOrganization} />
+              </div>
+            </CardHeader>
             <CardContent className="space-y-3">
               {organization.admins.map((admin) => (
                 <AdminEditor key={admin.id} admin={admin} organizationId={organization.id} onUpdated={setOrganization} />
