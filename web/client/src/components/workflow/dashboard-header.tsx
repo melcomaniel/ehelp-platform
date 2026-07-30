@@ -30,8 +30,8 @@ export function DashboardHeader() {
   const current = CRUMB.find((c) => pathname.startsWith(c.prefix))?.label ?? "Overview"
 
   return (
-    <header className="flex h-16 shrink-0 items-center gap-2">
-      <div className="flex items-center gap-2 px-4">
+    <header className="app-shell-header">
+      <div className="flex min-w-0 items-center gap-2">
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="mr-2 data-vertical:h-4 data-vertical:self-auto" />
         <Breadcrumb>
@@ -45,6 +45,10 @@ export function DashboardHeader() {
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
+      </div>
+      <div className="hidden items-center gap-2 text-xs font-medium text-muted-foreground sm:flex">
+        <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden />
+        Workflow workspace
       </div>
     </header>
   )

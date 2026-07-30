@@ -10,7 +10,8 @@ export function Hero() {
         className="pointer-events-none absolute inset-0"
         style={{
           backgroundImage:
-            "radial-gradient(circle at 12% 20%, rgba(0,64,231,0.06), transparent 42%), radial-gradient(circle at 90% 35%, rgba(242,197,0,0.10), transparent 45%)",
+            "linear-gradient(180deg, rgba(0,64,231,0.05), transparent 44%), linear-gradient(90deg, rgba(0,64,231,0.035) 1px, transparent 1px), linear-gradient(180deg, rgba(0,64,231,0.035) 1px, transparent 1px)",
+          backgroundSize: "auto, 48px 48px, 48px 48px",
         }}
       />
 
@@ -34,13 +35,13 @@ export function Hero() {
             <div className="mt-9 flex flex-col sm:flex-row gap-4">
               <Link
                 href="/signin"
-                className="w-full sm:w-auto text-center bg-[#0040E7] text-white font-medium rounded-full px-8 py-3.5 shadow-lg shadow-[#0040E7]/20 hover:bg-[#0035c2] transition-all"
+              className="w-full rounded-lg bg-primary px-8 py-3.5 text-center font-semibold text-white shadow-sm transition-colors hover:bg-[var(--gov-blue-700)] focus-visible:ring-3 focus-visible:ring-ring/45 sm:w-auto"
               >
                 Staff sign in
               </Link>
               <Link
                 href="/get-app"
-                className="w-full sm:w-auto text-center rounded-full border border-[#1a1a2e]/15 px-8 py-3.5 font-medium text-[#1a1a2e] hover:border-[#0040E7] hover:text-[#0040E7] transition-colors"
+              className="w-full rounded-lg border border-border px-8 py-3.5 text-center font-semibold text-foreground transition-colors hover:border-primary hover:text-primary focus-visible:ring-3 focus-visible:ring-ring/45 sm:w-auto"
               >
                 Beneficiaries: get the app
               </Link>
@@ -63,14 +64,6 @@ export function Hero() {
           </div>
 
           <div className="relative hidden lg:block self-end animate-in fade-in duration-1000">
-            <div
-              aria-hidden
-              className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[85%] w-[85%] rounded-full blur-3xl"
-              style={{
-                background:
-                  "radial-gradient(circle, rgba(0,64,231,0.10) 0%, rgba(242,197,0,0.12) 60%, transparent 75%)",
-              }}
-            />
             <img
               src="/egov/hero-woman.png"
               alt="EHelp government assistance"
@@ -82,11 +75,7 @@ export function Hero() {
 
       <div
         aria-hidden
-        className="relative h-1 w-full"
-        style={{
-          background:
-            "linear-gradient(90deg, #0040E7 0%, #0040E7 60%, #A60C0C 60%, #A60C0C 80%, #F2C500 80%, #F2C500 100%)",
-        }}
+        className="brand-stripe relative h-1 w-full"
       />
     </section>
   );

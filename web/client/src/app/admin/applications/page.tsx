@@ -1,9 +1,9 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 
 import { useEhelp } from "@/lib/ehelp/store"
-import type { Application } from "@/lib/ehelp/types"
 import {
   DataTable,
   MenuSelect,
@@ -13,6 +13,8 @@ import {
 } from "@/components/ehelp/bits"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Sheet,
   SheetContent,
@@ -21,20 +23,51 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { PlusIcon } from "lucide-react"
+import { PlusIcon, SearchIcon, XIcon } from "lucide-react"
 
 const PRIORITIES = ["High", "Medium", "Low"] as const
+const STATUSES = [
+  "Submitted",
+  "In Evaluation",
+  "For Approval",
+  "Approved",
+  "Declined",
+  "Disbursed",
+] as const
 
 export default function ApplicationsPage() {
-  const { state, can, cooldownBlock, fileApplication, moveApplication } =
-    useEhelp()
+  const router = useRouter()
+  const { state, can, fileApplication } = useEhelp()
   const { role, region } = state.session
   const regional = role === "approver" || role === "evaluator"
 
-  const rows = state.applications.filter(
-    (a) => !regional || a.region === region
-  )
+  const [searchInput, setSearchInput] = React.useState("")
+  const [search, setSearch] = React.useState("")
+  const [status, setStatus] = React.useState("")
+  const [regionFilter, setRegionFilter] = React.useState("")
+
+  const customerName = (id: string) =>
+    state.customers.find((c) => c.id === id)?.name ?? id
+  const templateName = (id: string) =>
+    state.templates.find((t) => t.id === id)?.name ?? id
+
+  const rows = state.applications
+    .filter((a) => !regional || a.region === region)
+    .filter((a) => !status || a.status === status)
+    .filter((a) => !regionFilter || a.region === regionFilter)
+    .filter((a) => {
+      const term = search.toLowerCase()
+      if (!term) return true
+      return [
+        a.id,
+        customerName(a.customerId),
+        templateName(a.templateId),
+        a.region,
+        a.priority,
+        a.filedBy,
+        a.status,
+      ].some((value) => value.toLowerCase().includes(term))
+    })
 
   const [open, setOpen] = React.useState(false)
   const eligibleCustomers = state.customers.filter((c) => c.region === region)
@@ -43,11 +76,6 @@ export default function ApplicationsPage() {
   const [templateId, setTemplateId] = React.useState("")
   const [priority, setPriority] =
     React.useState<(typeof PRIORITIES)[number]>("Medium")
-
-  const customerName = (id: string) =>
-    state.customers.find((c) => c.id === id)?.name ?? id
-  const templateName = (id: string) =>
-    state.templates.find((t) => t.id === id)?.name ?? id
 
   const submit = () => {
     if (!customerId || !templateId) return
@@ -61,74 +89,6 @@ export default function ApplicationsPage() {
     setOpen(false)
     setCustomerId("")
     setTemplateId("")
-  }
-
-  const actions = (a: Application) => {
-    const out: React.ReactNode[] = []
-    if (can("evaluate-applications") && a.region === region) {
-      if (a.status === "Submitted")
-        out.push(
-          <Button
-            key="eval"
-            size="xs"
-            variant="outline"
-            onClick={() => moveApplication(a.id, "In Evaluation")}
-          >
-            Start evaluation
-          </Button>
-        )
-      if (a.status === "In Evaluation")
-        out.push(
-          <Button
-            key="send"
-            size="xs"
-            onClick={() => moveApplication(a.id, "For Approval")}
-          >
-            Send for approval
-          </Button>
-        )
-    }
-    if (can("approve-applications") && a.region === region && a.status === "For Approval") {
-      out.push(
-        <Button key="ok" size="xs" onClick={() => moveApplication(a.id, "Approved")}>
-          Approve
-        </Button>,
-        <Button
-          key="no"
-          size="xs"
-          variant="destructive"
-          onClick={() => moveApplication(a.id, "Declined", "Declined by approver")}
-        >
-          Decline
-        </Button>
-      )
-    }
-    if (can("release-disbursements") && a.region === region && a.status === "Approved") {
-      const block = cooldownBlock(a)
-      out.push(
-        block ? (
-          <Tooltip key="pay">
-            <TooltipTrigger
-              render={
-                <Button size="xs" variant="outline" className="opacity-50" />
-              }
-            >
-              Release payout
-            </TooltipTrigger>
-            <TooltipContent>{block}</TooltipContent>
-          </Tooltip>
-        ) : (
-          <Button
-            key="pay"
-            size="xs"
-            onClick={() => moveApplication(a.id, "Disbursed")}
-          >
-            Release payout
-          </Button>
-        )
-      )
-    }
-    return out.length ? out : <span className="text-xs text-muted-foreground">—</span>
   }
 
   return (
@@ -150,6 +110,80 @@ export default function ApplicationsPage() {
 
       <Card>
         <CardContent>
+          <form
+            className="grid gap-4 lg:grid-cols-[minmax(16rem,1fr)_180px_180px_auto_auto]"
+            onSubmit={(event) => {
+              event.preventDefault()
+              setSearch(searchInput.trim())
+            }}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="application-search">Search</Label>
+              <Input
+                id="application-search"
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder="Case no., customer, template"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="application-region">Region</Label>
+              <select
+                id="application-region"
+                className="min-h-10 w-full rounded-lg border border-input bg-white px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/45"
+                value={regionFilter}
+                onChange={(event) => setRegionFilter(event.target.value)}
+                disabled={regional}
+              >
+                <option value="">All regions</option>
+                {state.customers
+                  .map((customer) => customer.region)
+                  .filter((value, index, values) => values.indexOf(value) === index)
+                  .map((regionOption) => (
+                    <option key={regionOption} value={regionOption}>
+                      {regionOption}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="application-status">Status</Label>
+              <select
+                id="application-status"
+                className="min-h-10 w-full rounded-lg border border-input bg-white px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/45"
+                value={status}
+                onChange={(event) => setStatus(event.target.value)}
+              >
+                <option value="">All statuses</option>
+                {STATUSES.map((statusOption) => (
+                  <option key={statusOption} value={statusOption}>
+                    {statusOption}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button className="self-end" type="submit" variant="outline">
+              <SearchIcon /> Search
+            </Button>
+            <Button
+              className="self-end"
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setSearchInput("")
+                setSearch("")
+                setStatus("")
+                setRegionFilter("")
+              }}
+            >
+              <XIcon /> Clear
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
           <DataTable
             headers={[
               "Case No.",
@@ -159,12 +193,23 @@ export default function ApplicationsPage() {
               "Priority",
               "Filed by",
               "Status",
-              "Actions",
             ]}
             empty={rows.length === 0}
           >
             {rows.map((a) => (
-              <tr key={a.id} className="border-b last:border-0">
+              <tr
+                key={a.id}
+                className="cursor-pointer border-b last:border-0 hover:bg-muted/40 focus-within:bg-muted/40"
+                tabIndex={0}
+                role="link"
+                onClick={() => router.push(`/admin/applications/${a.id}`)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault()
+                    router.push(`/admin/applications/${a.id}`)
+                  }
+                }}
+              >
                 <Td className="font-mono text-xs">{a.id}</Td>
                 <Td>{customerName(a.customerId)}</Td>
                 <Td className="text-muted-foreground">
@@ -177,9 +222,6 @@ export default function ApplicationsPage() {
                 <Td className="text-muted-foreground">{a.filedBy}</Td>
                 <Td>
                   <StatusPill value={a.status} />
-                </Td>
-                <Td>
-                  <div className="flex flex-wrap gap-1.5">{actions(a)}</div>
                 </Td>
               </tr>
             ))}

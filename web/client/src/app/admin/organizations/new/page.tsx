@@ -6,11 +6,24 @@ import { useRouter } from "next/navigation"
 
 import { useAdminAccess } from "@/lib/admin/access-provider"
 import { createOrganization } from "@/lib/admin/organizations"
+import { PageHeader } from "@/components/ehelp/bits"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeftIcon, Building2Icon } from "lucide-react"
+import {
+  ArrowLeftIcon,
+  Building2Icon,
+  CheckCircle2Icon,
+  ShieldCheckIcon,
+  UserRoundPlusIcon,
+} from "lucide-react"
 
 export default function NewOrganizationPage() {
   const router = useRouter()
@@ -42,8 +55,8 @@ export default function NewOrganizationPage() {
         },
       })
       router.push(`/admin/organizations/${organization.id}?created=1`)
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to create organization")
+    } catch {
+      setError("We could not create the organization. Check the highlighted fields and try again.")
     } finally {
       setSubmitting(false)
     }
@@ -59,37 +72,50 @@ export default function NewOrganizationPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-5">
+    <div className="mx-auto w-full max-w-5xl space-y-5">
       <div>
         <Button variant="ghost" render={<Link href="/admin/organizations" />}>
           <ArrowLeftIcon /> Organizations
         </Button>
-        <div className="mt-3 flex items-start gap-3">
-          <div className="rounded-lg bg-blue-50 p-2 text-blue-700">
-            <Building2Icon />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold">Create organization</h1>
-            <p className="text-sm text-muted-foreground">
-              The tenant, initial Organization Administrator, role assignment,
-              SSO activation, and audit history are created atomically.
-            </p>
-          </div>
+        <div className="mt-4">
+          <PageHeader
+            title="Create Organization"
+            description="Create the tenant, initial Organization Administrator, role assignment, SSO activation record, and audit history in one controlled action."
+          />
         </div>
       </div>
 
-      <form onSubmit={submit} className="space-y-5">
+      <form onSubmit={submit} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="space-y-5">
         <Card>
           <CardHeader>
-            <CardTitle>Organization details</CardTitle>
+            <div className="flex items-start gap-3">
+              <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Building2Icon className="size-5" aria-hidden />
+              </div>
+              <div>
+                <CardTitle>Organization details</CardTitle>
+                <CardDescription>
+                  Use the official agency or government office name and a short unique code.
+                </CardDescription>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="name">Organization name</Label>
-              <Input id="name" name="name" required minLength={2} maxLength={160} placeholder="Department of Social Welfare and Development" />
+              <Label htmlFor="name">Organization name <span className="text-destructive">*</span></Label>
+              <Input
+                id="name"
+                name="name"
+                required
+                minLength={2}
+                maxLength={160}
+                placeholder="Department of Social Welfare and Development"
+                autoComplete="organization"
+              />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="code">Organization code</Label>
+              <Label htmlFor="code">Organization code <span className="text-destructive">*</span></Label>
               <Input
                 id="code"
                 name="code"
@@ -116,12 +142,22 @@ export default function NewOrganizationPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Initial security policy</CardTitle>
+            <div className="flex items-start gap-3">
+              <div className="flex size-10 items-center justify-center rounded-lg bg-amber-50 text-amber-800">
+                <ShieldCheckIcon className="size-5" aria-hidden />
+              </div>
+              <div>
+                <CardTitle>Initial security policy</CardTitle>
+                <CardDescription>
+                  Platform security controls are enforced for every new tenant.
+                </CardDescription>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="session_timeout_minutes">
-                Session timeout (minutes)
+                Session timeout (minutes) <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="session_timeout_minutes"
@@ -148,15 +184,25 @@ export default function NewOrganizationPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Initial Organization Administrator</CardTitle>
+            <div className="flex items-start gap-3">
+              <div className="flex size-10 items-center justify-center rounded-lg bg-red-50 text-red-700">
+                <UserRoundPlusIcon className="size-5" aria-hidden />
+              </div>
+              <div>
+                <CardTitle>Initial Organization Administrator</CardTitle>
+                <CardDescription>
+                  This account becomes the first administrator for the organization.
+                </CardDescription>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="admin_name">Full name</Label>
+              <Label htmlFor="admin_name">Full name <span className="text-destructive">*</span></Label>
               <Input id="admin_name" name="admin_name" required minLength={2} maxLength={160} autoComplete="name" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="admin_email">Email address</Label>
+              <Label htmlFor="admin_email">Email address <span className="text-destructive">*</span></Label>
               <Input id="admin_email" name="admin_email" required type="email" maxLength={254} autoComplete="email" />
             </div>
             <div className="space-y-2">
@@ -172,19 +218,45 @@ export default function NewOrganizationPage() {
         </Card>
 
         {error && (
-          <p className="rounded-md border border-destructive bg-destructive/5 p-3 text-sm" role="alert">
+          <p className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" role="alert">
             {error}
           </p>
         )}
+        </div>
 
-        <div className="flex justify-end gap-3">
+        <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Creation checklist</CardTitle>
+              <CardDescription>
+                These controls are preserved by the backend contract.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              {[
+                "Unique tenant code",
+                "MFA required",
+                "Device registration required",
+                "30-minute maximum session",
+                "Initial admin activation through SSO",
+              ].map((item) => (
+                <div key={item} className="flex items-start gap-2">
+                  <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <div className="flex flex-col gap-3 rounded-lg border bg-card p-4 shadow-[var(--shadow-soft)]">
           <Button variant="outline" render={<Link href="/admin/organizations" />}>
             Cancel
           </Button>
           <Button type="submit" disabled={submitting || accessLoading}>
-            {submitting ? "Creating…" : "Create organization"}
+            {submitting ? "Creating organization..." : "Create organization"}
           </Button>
-        </div>
+          </div>
+        </aside>
       </form>
     </div>
   )

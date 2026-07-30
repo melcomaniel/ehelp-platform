@@ -15,7 +15,7 @@ export function SignupForm() {
         </p>
       </div>
 
-      <ul className="space-y-3 rounded-xl border bg-muted/30 px-4 py-4 text-sm text-muted-foreground">
+      <ul className="space-y-3 rounded-lg border bg-muted/30 px-4 py-4 text-sm leading-6 text-muted-foreground">
         <li>
           <strong className="text-foreground">Beneficiaries</strong> — install the
           EHelp mobile app and sign in with eGov SSO.
@@ -32,14 +32,14 @@ export function SignupForm() {
 
       <Link
         href="/signin"
-        className="inline-flex h-9 w-full items-center justify-center rounded-lg bg-[#0040E7] px-2.5 text-sm font-medium text-white hover:bg-[#0035c2]"
+        className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-[var(--gov-blue-700)] focus-visible:ring-3 focus-visible:ring-ring/45"
       >
         Go to sign in
       </Link>
 
       <p className="text-center text-sm text-muted-foreground">
         Applying for aid?{" "}
-        <Link href="/get-app" className="font-medium text-[#0040E7] hover:underline">
+        <Link href="/get-app" className="font-medium text-primary hover:underline">
           Use the mobile app
         </Link>
       </p>

@@ -37,12 +37,12 @@ import {
   UsersIcon,
   ShieldCheckIcon,
   ScrollTextIcon,
-  HandHeartIcon,
   ChevronRightIcon,
   WorkflowIcon,
   FolderKanbanIcon,
   Building2Icon,
   LandmarkIcon,
+  HandHeartIcon,
 } from "lucide-react";
 
 interface NavLeaf {
@@ -70,16 +70,42 @@ function isNavGroup(entry: NavEntry): entry is NavGroup {
 /** Admin console nav — Platform / Org / Office Admin only (not Evaluator/Approver). */
 const NAV: NavEntry[] = [
   {
+    title: "Overview",
+    url: "/admin",
+    icon: <LayoutDashboardIcon />,
+    adminRoles: ["platform_admin", "dswd_admin", "satellite_admin"],
+  },
+  {
     title: "Organizations",
     url: "/admin/organizations",
     icon: <Building2Icon />,
     adminRoles: ["platform_admin"],
   },
   {
-    title: "Overview",
-    url: "/admin",
-    icon: <LayoutDashboardIcon />,
-    adminRoles: ["platform_admin", "dswd_admin", "satellite_admin"],
+    title: "Users",
+    icon: <UsersIcon />,
+    items: [
+      {
+        title: "Organization Admins",
+        url: "/admin/organization-admins",
+        icon: <UsersIcon />,
+        adminRoles: ["platform_admin"],
+      },
+      {
+        title: "RBAC",
+        url: "/admin/rbac",
+        icon: <ShieldCheckIcon />,
+        adminRoles: ["platform_admin", "dswd_admin", "satellite_admin"],
+        needsAny: ["manage-rbac", "manage-region-rbac"],
+      },
+      {
+        title: "Accounts",
+        url: "/admin/accounts",
+        icon: <UsersIcon />,
+        adminRoles: ["dswd_admin", "satellite_admin"],
+        needsAny: ["approve-accounts", "register-accounts"],
+      },
+    ],
   },
   {
     title: "Offices",
@@ -134,32 +160,6 @@ const NAV: NavEntry[] = [
     icon: <MegaphoneIcon />,
     adminRoles: ["dswd_admin", "satellite_admin"],
     needsAny: ["submit-recommendations", "act-recommendations"],
-  },
-  {
-    title: "Users",
-    icon: <UsersIcon />,
-    items: [
-      {
-        title: "Organization Admins",
-        url: "/admin/organization-admins",
-        icon: <UsersIcon />,
-        adminRoles: ["platform_admin"],
-      },
-      {
-        title: "RBAC",
-        url: "/admin/rbac",
-        icon: <ShieldCheckIcon />,
-        adminRoles: ["platform_admin", "dswd_admin", "satellite_admin"],
-        needsAny: ["manage-rbac", "manage-region-rbac"],
-      },
-      {
-        title: "Accounts",
-        url: "/admin/accounts",
-        icon: <UsersIcon />,
-        adminRoles: ["dswd_admin", "satellite_admin"],
-        needsAny: ["approve-accounts", "register-accounts"],
-      },
-    ],
   },
   {
     title: "Audit Log",
@@ -274,12 +274,14 @@ export function AdminSidebar({
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" render={<Link href="/admin" />}>
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-[#0040E7] text-white">
-                <HandHeartIcon className="size-4" />
+              <div className="flex aspect-square size-9 items-center justify-center rounded-lg bg-primary text-white shadow-sm">
+                <HandHeartIcon className="size-4" aria-hidden />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">EHELP</span>
-                <span className="truncate text-xs">Admin Console</span>
+                <span className="truncate font-semibold">EHelp</span>
+                <span className="truncate text-xs text-muted-foreground">
+                  Admin Console
+                </span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -333,7 +335,7 @@ export function AdminSidebar({
           <SidebarMenuItem>
             <div className="flex items-center gap-2 rounded-lg p-2">
               <Avatar className="size-8 rounded-lg">
-                <AvatarFallback className="rounded-lg bg-[#0040E7]/10 text-xs text-[#0040E7]">
+                <AvatarFallback className="rounded-lg bg-primary/10 text-xs font-semibold text-primary">
                   {initials}
                 </AvatarFallback>
               </Avatar>

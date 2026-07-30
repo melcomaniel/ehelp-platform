@@ -63,9 +63,9 @@ export default function AdminLayout({
           <PromptsProvider>
             <SidebarProvider>
               <AdminSidebar />
-              <SidebarInset>
-                <header className="flex h-16 shrink-0 items-center gap-2">
-                  <div className="flex items-center gap-2 px-4">
+              <SidebarInset id="main-content" tabIndex={-1}>
+                <header className="app-shell-header">
+                  <div className="flex min-w-0 items-center gap-2">
                     <SidebarTrigger className="-ml-1" />
                     <Separator
                       orientation="vertical"
@@ -87,8 +87,12 @@ export default function AdminLayout({
                       </BreadcrumbList>
                     </Breadcrumb>
                   </div>
+                  <div className="hidden items-center gap-2 text-xs font-medium text-muted-foreground sm:flex">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden />
+                    Secure web console
+                  </div>
                 </header>
-                <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+                <div className="app-content">
                   {children}
                 </div>
               </SidebarInset>

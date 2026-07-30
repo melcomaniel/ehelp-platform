@@ -28,9 +28,9 @@ export default function SocialWorkerLayout({
       <PromptsProvider>
         <SidebarProvider>
           <SocialWorkerSidebar />
-          <SidebarInset>
-            <header className="flex h-16 shrink-0 items-center gap-2">
-              <div className="flex items-center gap-2 px-4">
+          <SidebarInset id="main-content" tabIndex={-1}>
+            <header className="app-shell-header">
+              <div className="flex min-w-0 items-center gap-2">
                 <SidebarTrigger className="-ml-1" />
                 <Separator orientation="vertical" className="mr-2 data-vertical:h-4 data-vertical:self-auto" />
                 <Breadcrumb>
@@ -44,7 +44,7 @@ export default function SocialWorkerLayout({
                 </Breadcrumb>
               </div>
             </header>
-            <div className="flex flex-1 flex-col gap-4 p-4 pt-0">{children}</div>
+            <div className="app-content">{children}</div>
           </SidebarInset>
         </SidebarProvider>
       </PromptsProvider>

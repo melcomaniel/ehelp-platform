@@ -24,6 +24,7 @@ export function SignInForm() {
   const [exchangeCode, setExchangeCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const errorId = "signin-error";
 
   async function finish(user: { role?: string }) {
     const next = safeNextPath(searchParams.get("next"));
@@ -76,21 +77,27 @@ export function SignInForm() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1.5 text-center">
         <h1 className="text-2xl font-semibold">Staff &amp; admin sign in</h1>
-        <p className="text-sm text-muted-foreground">
-          Nest-backed portal for evaluators, approvers, and admins. Beneficiaries
-          use the mobile app.
+        <p className="text-sm leading-6 text-muted-foreground">
+          Access the secure web portal for evaluation, approval, and
+          administration work. Beneficiaries use the mobile app.
         </p>
       </div>
 
-      <form onSubmit={onSubmit} className="flex flex-col gap-4">
+      <form
+        onSubmit={onSubmit}
+        className="flex flex-col gap-4"
+        aria-describedby={error ? errorId : undefined}
+      >
         {mode === "password" ? (
           <>
             <div className="grid gap-2">
-              <Label htmlFor="email">Work email</Label>
+              <Label htmlFor="email">
+                Work email <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="email"
                 type="email"
-              placeholder="you@example.com"
+                placeholder="name@agency.gov.ph"
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -98,7 +105,9 @@ export function SignInForm() {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">
+                Password <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="password"
                 type="password"
@@ -112,24 +121,29 @@ export function SignInForm() {
           </>
         ) : (
           <div className="grid gap-2">
-            <Label htmlFor="exchange">eGov SSO exchange code</Label>
+            <Label htmlFor="exchange">
+              eGov SSO exchange code <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="exchange"
-              placeholder="Paste exchange_code"
+              placeholder="Paste the exchange code"
+              autoComplete="one-time-code"
               value={exchangeCode}
               onChange={(e) => setExchangeCode(e.target.value)}
               required
             />
-            <p className="text-xs text-muted-foreground">
-              Your account must already be provisioned by an admin. Partner
-              callback can use{" "}
-              <code className="text-[11px]">/auth/egovph/sso?client=web</code>.
+            <p className="text-xs leading-5 text-muted-foreground">
+              Your account must already be provisioned by an administrator.
             </p>
           </div>
         )}
 
         {error && (
-          <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          <p
+            id={errorId}
+            role="alert"
+            className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          >
             {error}
           </p>
         )}
@@ -138,10 +152,13 @@ export function SignInForm() {
           type="submit"
           size="lg"
           disabled={loading}
-          className="w-full bg-[#0040E7] text-white hover:bg-[#0035c2]"
+          aria-busy={loading}
+          className="w-full"
         >
           {loading
-            ? "Please wait…"
+            ? mode === "sso"
+              ? "Checking SSO code..."
+              : "Signing you in..."
             : mode === "sso"
               ? "Continue with SSO"
               : "Sign in"}
@@ -162,11 +179,11 @@ export function SignInForm() {
 
       <p className="text-center text-sm text-muted-foreground">
         Need an account?{" "}
-        <Link href="/signup" className="font-medium text-[#0040E7] hover:underline">
+        <Link href="/signup" className="font-medium text-primary hover:underline">
           Ask your admin
         </Link>
         {" · "}
-        <Link href="/get-app" className="font-medium text-[#0040E7] hover:underline">
+        <Link href="/get-app" className="font-medium text-primary hover:underline">
           Get the mobile app
         </Link>
       </p>

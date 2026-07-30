@@ -71,7 +71,7 @@ export function OtpForm({
         </p>
         <Link
           href="/signin"
-          className="font-medium text-[#0040E7] hover:underline"
+          className="font-medium text-primary hover:underline"
         >
           Back to sign in
         </Link>
@@ -113,16 +113,17 @@ export function OtpForm({
           type="submit"
           size="lg"
           disabled={loading}
-          className="w-full bg-[#0040E7] text-white hover:bg-[#0035c2]"
+          aria-busy={loading}
+          className="w-full"
         >
-          {loading ? "Verifying…" : "Verify"}
+          {loading ? "Verifying code..." : "Verify"}
         </Button>
       </form>
 
       <p className="text-center text-sm text-muted-foreground">
         <Link
           href="/signin"
-          className="font-medium text-[#0040E7] hover:underline"
+          className="font-medium text-primary hover:underline"
         >
           Back to sign in
         </Link>

@@ -72,8 +72,8 @@ export async function registerStaffAccount(input: {
 }
 
 /** Nest staff are active on create — keep API for UI compatibility. */
-export async function approveStaffAccount(
-  _id: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function approveStaffAccount(): Promise<
+  { ok: true } | { ok: false; error: string }
+> {
   return { ok: true };
 }

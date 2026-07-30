@@ -54,7 +54,8 @@ export default function StaffConsolePage() {
   }, [roleHint]);
 
   useEffect(() => {
-    void load();
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
   }, [load]);
 
   async function recommend(id: string) {
@@ -77,10 +78,14 @@ export default function StaffConsolePage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 px-6 py-10">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="mx-auto max-w-3xl space-y-6 px-6 py-10 outline-none"
+    >
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-[#0040E7]">EHelp · Staff</p>
+          <p className="text-sm font-semibold text-primary">EHelp · Staff</p>
           <h1 className="text-2xl font-semibold tracking-tight">
             Case queue
           </h1>
@@ -109,21 +114,26 @@ export default function StaffConsolePage() {
             Approver view
           </Button>
           <Button size="sm" variant="outline" onClick={() => void load()} disabled={loading}>
-            {loading ? "Loading…" : "Refresh"}
+            {loading ? "Loading..." : "Refresh"}
           </Button>
           <SignOutButton className="rounded-lg border px-3 py-1.5 text-sm" />
         </div>
       </div>
 
       {error ? (
-        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
+        <p
+          role="alert"
+          className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
+          We could not load the case queue. Please try again.
         </p>
       ) : null}
 
       <ul className="space-y-3">
         {queue.length === 0 && !loading ? (
-          <li className="text-sm text-muted-foreground">No cases in queue.</li>
+          <li className="rounded-lg border bg-card px-4 py-8 text-center text-sm text-muted-foreground">
+            No cases in queue.
+          </li>
         ) : null}
         {queue.map((app) => (
           <li key={app.id}>

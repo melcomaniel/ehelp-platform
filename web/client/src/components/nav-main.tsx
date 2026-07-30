@@ -35,7 +35,9 @@ function NavCollapsibleItem({ item }: { item: NavItem }) {
   const [open, setOpen] = React.useState(Boolean(item.isActive))
 
   React.useEffect(() => {
-    if (item.isActive) setOpen(true)
+    if (!item.isActive) return
+    const timer = window.setTimeout(() => setOpen(true), 0)
+    return () => window.clearTimeout(timer)
   }, [item.isActive])
 
   return (

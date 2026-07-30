@@ -30,6 +30,14 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -279,6 +287,86 @@ function AuditHistoryTable({
   )
 }
 
+function LifecycleActionDialog({
+  action,
+  organization,
+  busy,
+  onOpenChange,
+  onSubmit,
+}: {
+  action: LifecycleAction | null
+  organization: OrganizationDetail
+  busy: boolean
+  onOpenChange: (open: boolean) => void
+  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void
+}) {
+  const title =
+    action === "suspend"
+      ? "Suspend organization"
+      : action === "reactivate"
+        ? "Reactivate organization"
+        : "Archive organization"
+  const description =
+    action === "suspend"
+      ? "Suspension temporarily blocks tenant operations while preserving organization data."
+      : action === "reactivate"
+        ? "Reactivation restores tenant operations for this organization."
+        : "Archival is a permanent offboarding action in this UI and preserves historical data."
+
+  return (
+    <Dialog open={Boolean(action)} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <form onSubmit={onSubmit}>
+          <DialogHeader>
+            <DialogTitle>{title}</DialogTitle>
+            <DialogDescription>
+              {description} This action applies to {organization.name}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 p-5">
+            {action !== "reactivate" ? (
+              <div className="space-y-2">
+                <Label htmlFor="lifecycle-reason">
+                  Reason <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="lifecycle-reason"
+                  name="reason"
+                  required
+                  minLength={3}
+                  autoFocus
+                  placeholder="Enter an approved lifecycle reason"
+                />
+              </div>
+            ) : (
+              <p className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+                No reason is required to reactivate this organization.
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={busy}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant={action === "archive" ? "destructive" : "default"}
+              disabled={busy}
+            >
+              {busy ? "Updating status..." : `Confirm ${action}`}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function AdminEditor({
   admin,
   organizationId,
@@ -498,7 +586,9 @@ export default function OrganizationDetailPage() {
   const [error, setError] = React.useState<string | null>(null)
   const [editing, setEditing] = React.useState(false)
   const [action, setAction] = React.useState<LifecycleAction | null>(null)
-  const [activeTab, setActiveTab] = React.useState<"offices" | "admins" | "audit">("offices")
+  const [activeTab, setActiveTab] = React.useState<
+    "offices" | "admins" | "lifecycle" | "audit"
+  >("offices")
   const [busy, setBusy] = React.useState(false)
 
   const load = React.useCallback(async () => {
@@ -637,6 +727,16 @@ export default function OrganizationDetailPage() {
         >
           Audit history
         </Button>
+        <Button
+          size="sm"
+          variant={activeTab === "lifecycle" ? "default" : "outline"}
+          role="tab"
+          aria-selected={activeTab === "lifecycle"}
+          aria-controls="organization-tab-lifecycle"
+          onClick={() => setActiveTab("lifecycle")}
+        >
+          Lifecycle
+        </Button>
       </div>
 
       {editing && (
@@ -690,51 +790,66 @@ export default function OrganizationDetailPage() {
       {activeTab === "audit" && (
         <div id="organization-tab-audit" role="tabpanel" className="space-y-5">
           <AuditHistoryTable audits={organization.audit_history} />
+        </div>
+      )}
+
+      {activeTab === "lifecycle" && (
+        <div id="organization-tab-lifecycle" role="tabpanel">
           <Card>
-            <CardContent className="pt-6">
-              <details className="group rounded-md border border-amber-200 bg-amber-50/40 p-4">
-                <summary className="cursor-pointer text-sm font-medium text-amber-950">
-                  Organization lifecycle controls
-                </summary>
-                <div className="mt-4 space-y-4">
-                  <p className="text-sm text-amber-950/80">
-                    Suspension temporarily blocks tenant operations. Archival is
-                    a separate permanent offboarding action that preserves
-                    historical data and cannot be reversed here.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" disabled={organization.status !== "active"} onClick={() => setAction("suspend")}>Suspend</Button>
-                    <Button variant="outline" disabled={organization.status !== "suspended"} onClick={() => setAction("reactivate")}>Reactivate</Button>
-                    <Button variant="destructive" disabled={!canArchiveOrganization(organization.status)} onClick={() => setAction("archive")}>Archive</Button>
-                  </div>
-                  {action && (
-                    <form className="space-y-3 rounded-lg border bg-background p-4" onSubmit={applyLifecycle} role="dialog" aria-labelledby="lifecycle-confirm-title">
-                      <p id="lifecycle-confirm-title" className="font-medium">
-                        Confirm {action} for {organization.name}
-                      </p>
-                      {action !== "reactivate" && (
-                        <div className="space-y-2">
-                          <Label htmlFor="lifecycle-reason">Reason</Label>
-                          <Input id="lifecycle-reason" name="reason" required minLength={3} autoFocus />
-                        </div>
-                      )}
-                      <div className="flex gap-2">
-                        <Button type="button" variant="outline" onClick={() => setAction(null)}>Cancel</Button>
-                        <Button type="submit" variant={action === "archive" ? "destructive" : "default"} disabled={busy}>
-                          Confirm {action}
-                        </Button>
-                      </div>
-                    </form>
-                  )}
-                  {organization.lifecycle_reason && (
-                    <p className="text-sm text-amber-950">Latest lifecycle reason: {organization.lifecycle_reason}</p>
-                  )}
-                </div>
-              </details>
+            <CardHeader>
+              <CardTitle>Organization lifecycle controls</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Suspend, reactivate, or archive this tenant through a confirmed action.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+                Suspension temporarily blocks tenant operations. Archival is a
+                separate permanent offboarding action that preserves historical
+                data and cannot be reversed here.
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Button
+                  variant="outline"
+                  disabled={organization.status !== "active"}
+                  onClick={() => setAction("suspend")}
+                >
+                  Suspend
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={organization.status !== "suspended"}
+                  onClick={() => setAction("reactivate")}
+                >
+                  Reactivate
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={!canArchiveOrganization(organization.status)}
+                  onClick={() => setAction("archive")}
+                >
+                  Archive
+                </Button>
+              </div>
+              {organization.lifecycle_reason && (
+                <p className="text-sm text-muted-foreground">
+                  Latest lifecycle reason: {organization.lifecycle_reason}
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>
       )}
+
+      <LifecycleActionDialog
+        action={action}
+        organization={organization}
+        busy={busy}
+        onOpenChange={(open) => {
+          if (!open) setAction(null)
+        }}
+        onSubmit={applyLifecycle}
+      />
     </div>
   )
 }

@@ -25,6 +25,14 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,6 +42,13 @@ const BADGE_CLASS: Record<OfficeStatus, string> = {
   active: "bg-emerald-100 text-emerald-800",
   archived: "bg-slate-200 text-slate-700",
 };
+
+type OfficeTab =
+  | "regional-admin"
+  | "staff-requests"
+  | "children"
+  | "lifecycle"
+  | "audit";
 
 export default function OfficeDetailPage() {
   const params = useParams<{ officeId: string }>();
@@ -45,6 +60,9 @@ export default function OfficeDetailPage() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [editing, setEditing] = React.useState(false);
+  const [activeTab, setActiveTab] = React.useState<OfficeTab>(
+    "regional-admin",
+  );
   const [action, setAction] = React.useState<"archive" | "reactivate" | null>(
     null,
   );
@@ -69,9 +87,9 @@ export default function OfficeDetailPage() {
   }, [isOrgAdmin, params.officeId]);
 
   React.useEffect(() => {
-    if (!accessLoading) {
-      const timer = window.setTimeout(() => void load(), 0);
-      return () => window.clearTimeout(timer);
+      if (!accessLoading) {
+        const timer = window.setTimeout(() => void load(), 0);
+        return () => window.clearTimeout(timer);
     }
   }, [accessLoading, load]);
 
@@ -185,6 +203,10 @@ export default function OfficeDetailPage() {
       </Card>
     );
   }
+  const currentTab =
+    office.level === "regional" || activeTab !== "regional-admin"
+      ? activeTab
+      : "staff-requests";
 
   return (
     <div className="space-y-5">
@@ -226,47 +248,23 @@ export default function OfficeDetailPage() {
         {office.status === "active" && (
           <Button
             variant="outline"
-            onClick={() => setEditing((value) => !value)}
+            onClick={() => setEditing(true)}
           >
-            {editing ? "Cancel editing" : "Edit office"}
+            Edit office
           </Button>
         )}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Parent office</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm">
-            {office.parent_office_name ?? "None"}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Direct child offices</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            {office.direct_child_count}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Last updated</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm">
-            {new Date(office.updated_at).toLocaleString()}
-          </CardContent>
-        </Card>
-      </div>
-
-      {editing && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Edit office</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form className="grid gap-4 sm:grid-cols-2" onSubmit={saveOffice}>
+      <Dialog open={editing} onOpenChange={setEditing}>
+        <DialogContent>
+          <form onSubmit={saveOffice}>
+            <DialogHeader>
+              <DialogTitle>Edit office</DialogTitle>
+              <DialogDescription>
+                Update office details for {office.name}.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 p-5 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="office-name">Name</Label>
                 <Input
@@ -320,99 +318,216 @@ export default function OfficeDetailPage() {
                   ))}
                 </select>
               </div>
+            </div>
+            <DialogFooter>
               <Button
-                className="sm:col-span-2 sm:justify-self-end"
-                type="submit"
+                type="button"
+                variant="outline"
+                onClick={() => setEditing(false)}
                 disabled={busy}
               >
-                Save changes
+                Cancel
               </Button>
-            </form>
+              <Button type="submit" disabled={busy}>
+                {busy ? "Saving..." : "Save changes"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Parent office</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm">
+            {office.parent_office_name ?? "None"}
           </CardContent>
         </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Direct child offices</CardTitle>
+          </CardHeader>
+          <CardContent className="text-2xl font-semibold">
+            {office.direct_child_count}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Last updated</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm">
+            {new Date(office.updated_at).toLocaleString()}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Office detail sections">
+        {office.level === "regional" && (
+          <Button
+            size="sm"
+            variant={currentTab === "regional-admin" ? "default" : "outline"}
+            role="tab"
+            aria-selected={currentTab === "regional-admin"}
+            aria-controls="office-tab-regional-admin"
+            onClick={() => setActiveTab("regional-admin")}
+          >
+            Regional Administrator
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant={currentTab === "staff-requests" ? "default" : "outline"}
+          role="tab"
+          aria-selected={currentTab === "staff-requests"}
+          aria-controls="office-tab-staff-requests"
+          onClick={() => setActiveTab("staff-requests")}
+        >
+          Officer account requests
+        </Button>
+        <Button
+          size="sm"
+          variant={currentTab === "children" ? "default" : "outline"}
+          role="tab"
+          aria-selected={currentTab === "children"}
+          aria-controls="office-tab-children"
+          onClick={() => setActiveTab("children")}
+        >
+          Direct child offices
+        </Button>
+        <Button
+          size="sm"
+          variant={currentTab === "lifecycle" ? "default" : "outline"}
+          role="tab"
+          aria-selected={currentTab === "lifecycle"}
+          aria-controls="office-tab-lifecycle"
+          onClick={() => setActiveTab("lifecycle")}
+        >
+          Lifecycle
+        </Button>
+        <Button
+          size="sm"
+          variant={currentTab === "audit" ? "default" : "outline"}
+          role="tab"
+          aria-selected={currentTab === "audit"}
+          aria-controls="office-tab-audit"
+          onClick={() => setActiveTab("audit")}
+        >
+          Audit history
+        </Button>
+      </div>
+
+      {currentTab === "lifecycle" && (
+        <div id="office-tab-lifecycle" role="tabpanel">
+          <Card>
+            <CardHeader>
+              <CardTitle>Office lifecycle</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="destructive"
+                  disabled={!canArchiveOffice(office)}
+                  onClick={() => setAction("archive")}
+                >
+                  {office.level === "regional"
+                    ? "Archive Regional Office"
+                    : "Archive Office"}
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={office.status !== "archived"}
+                  onClick={() => setAction("reactivate")}
+                >
+                  Reactivate
+                </Button>
+              </div>
+              {office.status === "active" && office.direct_child_count > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  Archive child offices before archiving this office.
+                </p>
+              )}
+              {office.lifecycle_reason && (
+                <p className="text-sm">
+                  Latest lifecycle reason: {office.lifecycle_reason}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Office lifecycle</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="destructive"
-              disabled={!canArchiveOffice(office)}
-              onClick={() => setAction("archive")}
-            >
-              {office.level === "regional"
-                ? "Archive Regional Office"
-                : "Archive Office"}
-            </Button>
-            <Button
-              variant="outline"
-              disabled={office.status !== "archived"}
-              onClick={() => setAction("reactivate")}
-            >
-              Reactivate
-            </Button>
-          </div>
-          {office.status === "active" && office.direct_child_count > 0 && (
-            <p className="text-sm text-muted-foreground">
-              Archive child offices before archiving this office.
-            </p>
-          )}
-          {action && (
-            <form
-              className="space-y-3 rounded-lg border p-4"
-              onSubmit={applyLifecycle}
-              role="dialog"
-              aria-labelledby="office-lifecycle-title"
-            >
-              <p id="office-lifecycle-title" className="font-medium">
+      <Dialog
+        open={Boolean(action)}
+        onOpenChange={(open) => {
+          if (!open) setAction(null);
+        }}
+      >
+        <DialogContent>
+          <form onSubmit={applyLifecycle}>
+            <DialogHeader>
+              <DialogTitle>
                 {action === "archive" && office.level === "regional"
-                  ? `Confirm Archive Regional Office for ${office.name}`
-                  : `Confirm ${action} for ${office.name}`}
-              </p>
-              {action === "archive" && (
+                  ? "Archive Regional Office"
+                  : action === "archive"
+                    ? "Archive Office"
+                    : "Reactivate Office"}
+              </DialogTitle>
+              <DialogDescription>
+                {action === "archive"
+                  ? `Archiving ${office.name} preserves historical records and prevents new work from being assigned to this office.`
+                  : `Reactivation restores ${office.name} for office workflows.`}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 p-5">
+              {action === "archive" ? (
                 <div className="space-y-2">
-                  <Label htmlFor="office-lifecycle-reason">Reason</Label>
+                  <Label htmlFor="office-lifecycle-reason">
+                    Reason <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     id="office-lifecycle-reason"
                     name="reason"
                     required
                     minLength={3}
                     autoFocus
+                    placeholder="Enter an approved lifecycle reason"
                   />
                 </div>
+              ) : (
+                <p className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+                  No reason is required to reactivate this office.
+                </p>
               )}
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setAction(null)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  variant={action === "archive" ? "destructive" : "default"}
-                  disabled={busy}
-                >
-                  {action === "archive" && office.level === "regional"
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAction(null)}
+                disabled={busy}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant={action === "archive" ? "destructive" : "default"}
+                disabled={busy}
+              >
+                {busy
+                  ? "Updating status..."
+                  : action === "archive" && office.level === "regional"
                     ? "Archive Regional Office"
                     : `Confirm ${action}`}
-                </Button>
-              </div>
-            </form>
-          )}
-          {office.lifecycle_reason && (
-            <p className="text-sm">
-              Latest lifecycle reason: {office.lifecycle_reason}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
-      {office.level === "regional" && (
+      {currentTab === "regional-admin" && office.level === "regional" && (
+        <div id="office-tab-regional-admin" role="tabpanel">
         <Card>
           <CardHeader>
             <CardTitle>Regional Administrator</CardTitle>
@@ -443,8 +558,11 @@ export default function OfficeDetailPage() {
             </p>
           </CardContent>
         </Card>
+        </div>
       )}
 
+      {currentTab === "staff-requests" && (
+        <div id="office-tab-staff-requests" role="tabpanel">
       <Card>
         <CardHeader>
           <CardTitle>Officer account requests</CardTitle>
@@ -494,7 +612,11 @@ export default function OfficeDetailPage() {
           </p>
         </CardContent>
       </Card>
+        </div>
+      )}
 
+      {currentTab === "children" && (
+        <div id="office-tab-children" role="tabpanel">
       <Card>
         <CardHeader>
           <CardTitle>Direct child offices</CardTitle>
@@ -522,7 +644,11 @@ export default function OfficeDetailPage() {
           )}
         </CardContent>
       </Card>
+        </div>
+      )}
 
+      {currentTab === "audit" && (
+        <div id="office-tab-audit" role="tabpanel">
       <Card>
         <CardHeader>
           <CardTitle>Office audit history</CardTitle>
@@ -558,6 +684,8 @@ export default function OfficeDetailPage() {
           )}
         </CardContent>
       </Card>
+        </div>
+      )}
     </div>
   );
 }

@@ -16,9 +16,9 @@ export default function DashboardLayout({
       <PromptsProvider>
         <SidebarProvider>
           <WorkflowSidebar />
-          <SidebarInset>
+          <SidebarInset id="main-content" tabIndex={-1}>
             <DashboardHeader />
-            <div className="flex flex-1 flex-col gap-4 p-4 pt-0">{children}</div>
+            <div className="app-content">{children}</div>
           </SidebarInset>
         </SidebarProvider>
       </PromptsProvider>
