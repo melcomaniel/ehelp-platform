@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { nestFetch } from "@/lib/api/nest";
 import type { PeriodWindows } from "@/lib/admin/template-actions";
+import { listOffices } from "@/lib/admin/offices";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -54,6 +55,12 @@ type ProgramOption = {
   id: string;
   name: string;
   period_windows?: PeriodWindows | null;
+};
+
+type OfficeOption = {
+  id: string;
+  name: string;
+  code: string;
 };
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -109,7 +116,9 @@ function formatWindow(iso?: string | null) {
 export default function DisbursementSlotsPage() {
   const [slots, setSlots] = useState<DisbursementSlot[]>([]);
   const [programs, setPrograms] = useState<ProgramOption[]>([]);
+  const [offices, setOffices] = useState<OfficeOption[]>([]);
   const [programId, setProgramId] = useState("");
+  const [officeId, setOfficeId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
@@ -174,15 +183,26 @@ export default function DisbursementSlotsPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [slotData, tplData] = await Promise.all([
+      const [slotData, tplData, officePage] = await Promise.all([
         nestFetch<DisbursementSlot[]>("/admin/disbursement-slots"),
         nestFetch<ProgramOption[]>("/admin/program-templates"),
+        listOffices({ status: "active", pageSize: 100 }),
       ]);
       setSlots(slotData);
       setPrograms(tplData);
       setProgramId((prev) => {
         if (prev && tplData.some((p) => p.id === prev)) return prev;
         return tplData[0]?.id ?? "";
+      });
+      const officeOpts = officePage.data.map((o) => ({
+        id: o.id,
+        name: o.name,
+        code: o.code,
+      }));
+      setOffices(officeOpts);
+      setOfficeId((prev) => {
+        if (prev && officeOpts.some((o) => o.id === prev)) return prev;
+        return officeOpts[0]?.id ?? "";
       });
     } catch (e) {
       setSlots([]);
@@ -475,6 +495,10 @@ export default function DisbursementSlotsPage() {
       setError("Select a program first (uses that program’s disbursement window).");
       return;
     }
+    if (!officeId) {
+      setError("Select an office for this slot.");
+      return;
+    }
     if (!windowStart && !windowEnd) {
       setError(
         "This program has no disbursement window. Edit the program under Programs → Program periods and set Disbursement scheduling opens/closes.",
@@ -500,6 +524,7 @@ export default function DisbursementSlotsPage() {
         method: "POST",
         body: {
           program_template_id: programId,
+          office_id: officeId,
           starts_at: starts.toISOString(),
           ends_at: ends.toISOString(),
           capacity: Number(capacity) || 10,
@@ -570,6 +595,25 @@ export default function DisbursementSlotsPage() {
                 programs.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+          <div className="min-w-[14rem] flex-1 space-y-1.5">
+            <Label htmlFor="office">Office</Label>
+            <select
+              id="office"
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={officeId}
+              onChange={(e) => setOfficeId(e.target.value)}
+            >
+              {offices.length === 0 ? (
+                <option value="">No offices</option>
+              ) : (
+                offices.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
                   </option>
                 ))
               )}
@@ -937,7 +981,9 @@ export default function DisbursementSlotsPage() {
 
             <div className="flex flex-wrap gap-2">
               <Button
-                disabled={busy || !programId || !dayAllowed(selectedDate)}
+                disabled={
+                  busy || !programId || !officeId || !dayAllowed(selectedDate)
+                }
                 onClick={() => void saveSlot()}
               >
                 {busy

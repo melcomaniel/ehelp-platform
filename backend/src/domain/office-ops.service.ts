@@ -859,14 +859,20 @@ export class OfficeOpsService {
     sets.push('profile_locked = true');
     sets.push('updated_at = now()');
 
-    const updated = await this.dataSource.query<Array<{ id: string }>>(
+    // TypeORM + pg may return either rows[] or [rows, rowCount].
+    const raw = await this.dataSource.query(
       `UPDATE beneficiaries
        SET ${sets.join(', ')}
        WHERE id = $1
        RETURNING id`,
       params,
     );
-    if (!updated[0]?.id) {
+    const rows: Array<{ id: string }> = Array.isArray(raw?.[0])
+      ? (raw[0] as Array<{ id: string }>)
+      : Array.isArray(raw)
+        ? (raw as Array<{ id: string }>)
+        : [];
+    if (!rows[0]?.id) {
       throw new NotFoundException('Beneficiary not found');
     }
   }
@@ -939,12 +945,47 @@ export class OfficeOpsService {
     },
   ) {
     const actor = await this.requireUser(actorUserId);
-    const officeId = input.office_id ?? actor.officeId;
-    if (!officeId || !actor.organizationId) {
-      throw new ForbiddenException(
-        'Office scope required to create slots (pass office_id if needed)',
-      );
+    if (!actor.organizationId) {
+      throw new ForbiddenException('Organization scope required');
     }
+
+    let officeId = input.office_id?.trim() || actor.officeId || null;
+    if (!officeId) {
+      // Organization Admin has no personal office — use the sole active office,
+      // or require an explicit office_id when multiple offices exist.
+      const orgOffices = await this.dataSource.query<Array<{ id: string }>>(
+        `SELECT id FROM offices
+         WHERE organization_id = $1 AND status = 'active'
+         ORDER BY name ASC`,
+        [actor.organizationId],
+      );
+      if (orgOffices.length === 1) {
+        officeId = orgOffices[0].id;
+      } else if (orgOffices.length === 0) {
+        throw new BadRequestException(
+          'No active office in your organization. Create an office first.',
+        );
+      } else {
+        throw new BadRequestException(
+          'Select an office (office_id) — Organization Admins manage slots per office.',
+        );
+      }
+    }
+
+    // Ensure the office belongs to this organization.
+    const officeRow = await this.dataSource.query<
+      Array<{ id: string; organization_id: string; status: string }>
+    >(
+      `SELECT id, organization_id, status FROM offices WHERE id = $1`,
+      [officeId],
+    );
+    if (!officeRow[0] || officeRow[0].status !== 'active') {
+      throw new BadRequestException('Office is not available');
+    }
+    if (officeRow[0].organization_id !== actor.organizationId) {
+      throw new ForbiddenException('Office is outside your organization');
+    }
+
     await this.rbac.assertPermission(actorUserId, 'disbursement_slot.manage', {
       organizationId: actor.organizationId,
       officeId,

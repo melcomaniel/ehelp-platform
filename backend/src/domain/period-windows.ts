@@ -165,16 +165,17 @@ export function assertDisbursementPeriodOpen(
       'Disbursement scheduling window is not configured for this program. Set it under Programs → Program periods.',
     );
   }
-  if (!inRange(now, p.disbursement_start, p.disbursement_end)) {
-    const start = p.disbursement_start
-      ? new Date(p.disbursement_start).toISOString()
-      : '(unset)';
-    const end = p.disbursement_end
-      ? new Date(p.disbursement_end).toISOString()
-      : '(unset)';
-    throw new Error(
-      `Disbursement scheduling period is closed for this program. Window: ${start} → ${end}.`,
-    );
+
+  // Only block after the window ends. Beneficiaries may book ahead of
+  // disbursement_start for slots that still fall inside the window
+  // (list/book still enforce slot dates + lead time).
+  if (p.disbursement_end) {
+    const end = new Date(p.disbursement_end).getTime();
+    if (!Number.isNaN(end) && now.getTime() > end) {
+      throw new Error(
+        `Disbursement scheduling period has ended for this program (closed ${p.disbursement_end}). Ask the office to extend Program periods or publish a new window.`,
+      );
+    }
   }
 }
 
