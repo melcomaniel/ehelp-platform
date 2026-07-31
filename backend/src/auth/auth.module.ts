@@ -12,6 +12,7 @@ import {
   UserRoleAssignmentEntity,
 } from '../users/user.entity';
 import { OrganizationInvitationEntity } from '../organizations/organization.entities';
+import { isLiveAdapter } from './auth-provider-mode';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtPendingStrategy } from './jwt-pending.strategy';
@@ -32,14 +33,6 @@ import {
   EVERIFY_PROVIDER,
   LIVENESS_PROVIDER,
 } from './providers/tokens';
-
-function isLiveAuth(config: ConfigService): boolean {
-  return (
-    (config.get<string>('AUTH_PROVIDER_MODE') ?? 'mock')
-      .trim()
-      .toLowerCase() === 'live'
-  );
-}
 
 @Module({
   imports: [
@@ -85,7 +78,7 @@ function isLiveAuth(config: ConfigService): boolean {
         config: ConfigService,
         live: LiveEgovSsoProvider,
         mock: MockEgovSsoProvider,
-      ) => (isLiveAuth(config) ? live : mock),
+      ) => (isLiveAdapter(config, 'AUTH_SSO_MODE') ? live : mock),
     },
     {
       provide: EVERIFY_PROVIDER,
@@ -94,7 +87,7 @@ function isLiveAuth(config: ConfigService): boolean {
         config: ConfigService,
         live: LiveEverifyProvider,
         mock: MockEverifyProvider,
-      ) => (isLiveAuth(config) ? live : mock),
+      ) => (isLiveAdapter(config, 'AUTH_EVERIFY_MODE') ? live : mock),
     },
     {
       provide: LIVENESS_PROVIDER,
@@ -103,7 +96,7 @@ function isLiveAuth(config: ConfigService): boolean {
         config: ConfigService,
         live: LiveLivenessProvider,
         mock: MockLivenessProvider,
-      ) => (isLiveAuth(config) ? live : mock),
+      ) => (isLiveAdapter(config, 'AUTH_LIVENESS_MODE') ? live : mock),
     },
   ],
   exports: [AuthService, RbacAccessService],

@@ -10,6 +10,10 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { Request, Response } from 'express';
+import {
+  authAdapterMode,
+  baseAuthProviderMode,
+} from './auth-provider-mode';
 import { AuthService } from './auth.service';
 import {
   CreateStaffAccountDto,
@@ -206,15 +210,18 @@ export class AuthController {
 
   @Get('provider-mode')
   providerMode() {
-    const mode =
-      (process.env.AUTH_PROVIDER_MODE ?? 'mock').trim().toLowerCase() === 'live'
-        ? 'live'
-        : 'mock';
+    const base = baseAuthProviderMode(process.env);
+    const sso = authAdapterMode(process.env, 'AUTH_SSO_MODE');
+    const everify = authAdapterMode(process.env, 'AUTH_EVERIFY_MODE');
+    const liveness = authAdapterMode(process.env, 'AUTH_LIVENESS_MODE');
     return {
-      mode,
+      mode: base,
+      sso,
+      everify,
+      liveness,
       note:
-        mode === 'live'
-          ? 'Live eGov SSO, Face Liveness, and NationalID eVerify'
+        liveness === 'live'
+          ? 'Face Liveness uses the real camera SDK; SSO/eVerify follow their own modes (defaults = AUTH_PROVIDER_MODE).'
           : 'Mock adapters — no real camera or PhilSys check; flows auto-succeed for local MVP',
     };
   }
