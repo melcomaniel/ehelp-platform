@@ -138,10 +138,18 @@ export default function ProgramDetailPage() {
         templateId: fromTemplateId,
       });
       linkingRef.current = false;
-      if (!result.ok || !("id" in result) || !result.id) {
+      if (!result.ok) {
         toast({
           title: "Could not open workflow builder",
-          description: result.error ?? "Unknown error",
+          description: result.error,
+          variant: "error",
+        });
+        return null;
+      }
+      if (!result.id) {
+        toast({
+          title: "Could not open workflow builder",
+          description: "Unknown error",
           variant: "error",
         });
         return null;
@@ -202,7 +210,7 @@ export default function ProgramDetailPage() {
     if (!result.ok || !result.id) {
       toast({
         title: "Could not apply workflow",
-        description: result.error,
+        description: !result.ok ? result.error : "Missing program id",
         variant: "error",
       });
       return;
@@ -285,7 +293,7 @@ export default function ProgramDetailPage() {
     if (!result.ok || !version) {
       toast({
         title: "Could not publish",
-        description: result.error,
+        description: !result.ok ? result.error : "Version not found",
         variant: "error",
       });
       return;

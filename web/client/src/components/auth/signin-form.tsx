@@ -71,9 +71,14 @@ export function SignInForm() {
             required
           />
           <p className="text-xs leading-5 text-muted-foreground">
-            With Nest in mock mode, any code works for provisioned staff. In live
-            mode, use a freshly minted partner exchange code. Face liveness is
-            required next (human check only).
+            Mock SSO codes (Nest <code className="text-[11px]">AUTH_PROVIDER_MODE=mock</code>
+            ): <code className="text-[11px]">platform</code>,{' '}
+            <code className="text-[11px]">orgadmin</code>,{' '}
+            <code className="text-[11px]">officeadmin</code>,{' '}
+            <code className="text-[11px]">evaluator</code>,{' '}
+            <code className="text-[11px]">approver</code>
+            {' '}— then complete face liveness. Live mode: paste a minted eGov
+            exchange code.
           </p>
         </div>
 

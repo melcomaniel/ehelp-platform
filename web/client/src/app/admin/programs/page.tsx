@@ -207,7 +207,8 @@ export default function ProgramsPage() {
               "Actions",
             ]}
             empty={programs.length === 0}
-            emptyText="No programs yet — create one to publish to mobile."
+            emptyTitle="No programs yet"
+            emptyDescription="Create one to publish to mobile."
           >
             {programs.map((p) => {
               const el = eligibilityOf(p);
