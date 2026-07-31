@@ -18,6 +18,8 @@ import {
   LivenessBindEverifyDto,
   LivenessCreateDto,
   LivenessVerifyDto,
+  LoginCompleteDto,
+  LoginLivenessSessionDto,
   SsoExchangeDto,
 } from './dto/auth.dto';
 import type { JwtPayload } from './jwt.strategy';
@@ -67,6 +69,16 @@ export class AuthController {
     return this.auth.ssoExchange(
       body.exchange_code,
       platform,
+      body.device_fingerprint,
+    );
+  }
+
+  /** Finish SSO login after face liveness (human check). */
+  @Post('login/complete')
+  completeLogin(@Body() body: LoginCompleteDto) {
+    return this.auth.completeLogin(
+      body.pending_login_token,
+      body.liveness_session_token,
       body.device_fingerprint,
     );
   }
@@ -126,6 +138,20 @@ export class AuthController {
     return this.auth.createLivenessSession({
       purpose: body.purpose,
       userId: body.user_id ?? req.user.sub,
+      callbackUrl: body.callback_url,
+      action: body.action,
+      publicBaseUrl: this.publicBaseFromReq(req),
+    });
+  }
+
+  /** Login flow: create liveness from pending SSO token (no full session yet). */
+  @Post('liveness/session/login')
+  createLoginLiveness(
+    @Body() body: LoginLivenessSessionDto,
+    @Req() req: Request,
+  ) {
+    return this.auth.createLoginLivenessSession({
+      pendingLoginToken: body.pending_login_token,
       callbackUrl: body.callback_url,
       action: body.action,
       publicBaseUrl: this.publicBaseFromReq(req),

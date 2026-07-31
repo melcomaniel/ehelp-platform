@@ -43,6 +43,7 @@ class FaceLivenessScreen extends ConsumerStatefulWidget {
     required this.purpose,
     this.userId,
     this.applicationId,
+    this.pendingLoginToken,
     this.title,
     this.subtitle,
   });
@@ -50,6 +51,8 @@ class FaceLivenessScreen extends ConsumerStatefulWidget {
   final LivenessPurpose purpose;
   final String? userId;
   final String? applicationId;
+  /// Required when [purpose] is [LivenessPurpose.login].
+  final String? pendingLoginToken;
   final String? title;
   final String? subtitle;
 
@@ -58,6 +61,7 @@ class FaceLivenessScreen extends ConsumerStatefulWidget {
     required LivenessPurpose purpose,
     String? userId,
     String? applicationId,
+    String? pendingLoginToken,
     String? title,
     String? subtitle,
   }) {
@@ -68,6 +72,7 @@ class FaceLivenessScreen extends ConsumerStatefulWidget {
           purpose: purpose,
           userId: userId,
           applicationId: applicationId,
+          pendingLoginToken: pendingLoginToken,
           title: title,
           subtitle: subtitle,
         ),
@@ -123,6 +128,7 @@ class _FaceLivenessScreenState extends ConsumerState<FaceLivenessScreen> {
             purpose: widget.purpose,
             userId: widget.userId,
             applicationId: widget.applicationId,
+            pendingLoginToken: widget.pendingLoginToken,
           );
       if (!mounted) return;
 
@@ -290,6 +296,20 @@ class _FaceLivenessScreenState extends ConsumerState<FaceLivenessScreen> {
             everifySessionId: everifySessionId,
             referenceImageUrl: payload['photo_url'] as String?,
           );
+      // Login gate has no full JWT yet — Nest login/complete verifies liveness.
+      if (widget.purpose == LivenessPurpose.login) {
+        if (!mounted) return;
+        Navigator.of(context).pop(
+          FaceLivenessOutcome(
+            passed: true,
+            sessionToken: session.token,
+            confidenceScore: 99,
+            referenceImageUrl: payload['photo_url'] as String?,
+            faceLivenessSessionId: everifySessionId,
+          ),
+        );
+        return;
+      }
       final result = await ref.read(livenessServiceProvider).verifyResult(
             sessionToken: session.token,
             applicationId: widget.applicationId,
@@ -356,6 +376,19 @@ class _FaceLivenessScreenState extends ConsumerState<FaceLivenessScreen> {
 
     setState(() => _verifying = true);
     try {
+      // Login gate: mock/live UI already ran; Nest login/complete verifies.
+      if (widget.purpose == LivenessPurpose.login) {
+        if (!mounted) return;
+        Navigator.of(context).pop(
+          FaceLivenessOutcome(
+            passed: true,
+            sessionToken: session.token,
+            confidenceScore: 99,
+          ),
+        );
+        return;
+      }
+
       final result = await ref.read(livenessServiceProvider).verifyResult(
             sessionToken: session.token,
             applicationId: widget.applicationId,

@@ -11,9 +11,11 @@ import {
   type OrganizationStatus,
   type OrganizationSummary,
 } from "@/lib/admin/organizations"
-import { useEhelp } from "@/lib/ehelp/store"
-import type { ApplicationStatus } from "@/lib/ehelp/types"
-import { REGIONS } from "@/lib/ehelp/types"
+import {
+  nestFetch,
+  type NestDashboardSummary,
+} from "@/lib/api/nest"
+import { APP_ROLE_LABEL } from "@/lib/auth/types"
 import { PageHeader, StatusPill } from "@/components/ehelp/bits"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -39,13 +41,16 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
-const PIPELINE: ApplicationStatus[] = [
-  "Submitted",
-  "In Evaluation",
-  "For Approval",
-  "Approved",
-  "Disbursed",
-  "Declined",
+const PIPELINE_STAGES: Array<{
+  key: keyof NestDashboardSummary["pipeline"]
+  label: string
+}> = [
+  { key: "submitted", label: "Submitted" },
+  { key: "under_review", label: "Under review" },
+  { key: "recommended", label: "For approval" },
+  { key: "approved", label: "Approved" },
+  { key: "claimed", label: "Claimed" },
+  { key: "declined", label: "Declined" },
 ]
 
 const ORGANIZATION_STATUS_CLASS: Record<OrganizationStatus, string> = {
@@ -395,72 +400,163 @@ function PlatformDashboard() {
   )
 }
 
-export default function OverviewPage() {
-  const { isPlatformAdmin } = useAdminAccess()
-  const { state, can, actorLabel } = useEhelp()
-  const apps = state.applications
-
-  if (isPlatformAdmin) {
-    return <PlatformDashboard />
+function statusLabel(status: string): string {
+  const map: Record<string, string> = {
+    draft: "Draft",
+    submitted: "Submitted",
+    under_review: "Under review",
+    in_evaluation: "Under review",
+    recommended: "For approval",
+    in_approval: "For approval",
+    approved: "Approved",
+    claimed: "Claimed",
+    disbursed: "Disbursed",
+    declined: "Declined",
+    rejected: "Declined",
+    cancelled: "Cancelled",
   }
+  return map[status] ?? status
+}
+
+function activityDetail(
+  app: NestDashboardSummary["recent_applications"][number],
+) {
+  const who = app.customer_name ?? "Beneficiary"
+  const program = app.template_name ?? "program"
+  const place = app.municipality ? ` (${app.municipality})` : ""
+  switch (app.status) {
+    case "submitted":
+      return `${app.reference_no} filed for ${program}${place}`
+    case "under_review":
+      return `${app.reference_no} under review — ${who}`
+    case "recommended":
+      return `${app.reference_no} endorsed to approver queue`
+    case "approved":
+      return `${app.reference_no} approved for disbursement`
+    case "claimed":
+    case "disbursed":
+      return `${app.reference_no} claim completed — ${who}`
+    case "declined":
+      return `${app.reference_no} declined`
+    default:
+      return `${app.reference_no} · ${statusLabel(app.status)} — ${who}`
+  }
+}
+
+function OrgOfficeDashboard() {
+  const { profile } = useAdminAccess()
+  const [summary, setSummary] = React.useState<NestDashboardSummary | null>(null)
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
+
+  const load = React.useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await nestFetch<NestDashboardSummary>(
+        "/admin/dashboard-summary",
+      )
+      setSummary(data)
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Unable to load dashboard",
+      )
+      setSummary(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => void load(), 0)
+    return () => window.clearTimeout(timer)
+  }, [load])
+
+  const roleLabel = profile
+    ? (APP_ROLE_LABEL[profile.role] ?? profile.role)
+    : "Admin"
+  const signedIn =
+    profile?.fullName?.trim() || profile?.email || roleLabel
+
+  const pipeline = summary?.pipeline
+  const total = summary?.total_applications ?? 0
+  const locations = summary?.by_location ?? []
+  const maxLocation = Math.max(1, ...locations.map((l) => l.count))
 
   const kpis = [
     {
       label: "Total Applications",
-      value: apps.length,
+      value: summary?.total_applications ?? 0,
       icon: FolderOpenIcon,
-      hint: "all regions, all programs",
+      hint:
+        summary?.scope === "office"
+          ? "this office, all programs"
+          : "organization-wide, all programs",
     },
     {
       label: "Awaiting Approval",
-      value: apps.filter((a) => a.status === "For Approval").length,
+      value: summary?.awaiting_approval ?? 0,
       icon: HourglassIcon,
       hint: "in approver queues",
     },
     {
       label: "Registered Customers",
-      value: state.customers.length,
+      value: summary?.registered_customers ?? 0,
       icon: UsersIcon,
-      hint: `${state.customers.filter((c) => c.faceScan === "Verified").length} face-verified`,
+      hint: `${summary?.face_verified_customers ?? 0} face-verified`,
     },
     {
-      label: "Disbursed",
-      value: apps.filter((a) => a.status === "Disbursed").length,
+      label: "Claimed",
+      value: summary?.claimed_or_disbursed ?? 0,
       icon: WalletIcon,
-      hint: "cooldown-gated releases",
+      hint: "cash-window releases completed",
     },
   ]
-
-  const maxRegion = Math.max(
-    1,
-    ...REGIONS.map((r) => apps.filter((a) => a.region === r).length)
-  )
 
   return (
     <>
       <PageHeader
         title="Overview"
-        description={`Signed in as ${actorLabel()} — switch role top-right to walk the full flow.`}
+        description={`Signed in as ${signedIn}${profile?.fullName ? ` (${roleLabel})` : ""}.`}
       />
 
+      {error ? (
+        <Card className="border-destructive">
+          <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
+            <p role="alert" className="text-sm">
+              {error}
+            </p>
+            <Button variant="outline" onClick={() => void load()}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="grid auto-rows-min gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {kpis.map((k) => {
-          const Icon = k.icon
-          return (
-            <Card key={k.label}>
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-                <CardDescription>{k.label}</CardDescription>
-                <div className="flex size-8 items-center justify-center rounded-lg bg-[#0040E7]/10 text-[#0040E7]">
-                  <Icon className="size-4" />
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-1">
-                <div className="text-2xl font-semibold">{k.value}</div>
-                <div className="text-xs text-muted-foreground">{k.hint}</div>
-              </CardContent>
-            </Card>
-          )
-        })}
+        {loading
+          ? Array.from({ length: 4 }).map((_, index) => (
+              <Skeleton key={index} className="h-32 rounded-xl" />
+            ))
+          : kpis.map((k) => {
+              const Icon = k.icon
+              return (
+                <Card key={k.label}>
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+                    <CardDescription>{k.label}</CardDescription>
+                    <div className="flex size-8 items-center justify-center rounded-lg bg-[#0040E7]/10 text-[#0040E7]">
+                      <Icon className="size-4" />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-1">
+                    <div className="text-2xl font-semibold tabular-nums">
+                      {k.value}
+                    </div>
+                    <div className="text-xs text-muted-foreground">{k.hint}</div>
+                  </CardContent>
+                </Card>
+              )
+            })}
       </div>
 
       <div className="grid flex-1 gap-4 lg:grid-cols-3">
@@ -468,91 +564,146 @@ export default function OverviewPage() {
           <CardHeader>
             <CardTitle>Pipeline by Stage</CardTitle>
             <CardDescription>
-              Application lifecycle — Submitted → Evaluation → Approval →
-              Disbursement
+              Live application lifecycle — Submitted → Review → Approval → Claim
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {PIPELINE.map((s) => {
-              const count = apps.filter((a) => a.status === s).length
-              const pct = apps.length ? (count / apps.length) * 100 : 0
-              return (
-                <div key={s} className="flex items-center gap-3">
-                  <div className="w-28 shrink-0">
-                    <StatusPill value={s} />
+            {loading || !pipeline ? (
+              <>
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
+              </>
+            ) : (
+              PIPELINE_STAGES.map(({ key, label }) => {
+                const count = pipeline[key] ?? 0
+                const pct = total ? (count / total) * 100 : 0
+                return (
+                  <div key={key} className="flex items-center gap-3">
+                    <div className="w-28 shrink-0">
+                      <StatusPill value={label} />
+                    </div>
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-[#0040E7]"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <div className="w-6 text-right text-sm tabular-nums">
+                      {count}
+                    </div>
                   </div>
-                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full rounded-full bg-[#0040E7]"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <div className="w-6 text-right text-sm tabular-nums">
-                    {count}
-                  </div>
-                </div>
-              )
-            })}
+                )
+              })
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>By Region</CardTitle>
+            <CardTitle>By Location</CardTitle>
             <CardDescription>
-              {can("view-analytics")
-                ? "National analytics view"
-                : "Analytics permission not granted for this role — counts only"}
+              Applications grouped by beneficiary municipality
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {REGIONS.map((r) => {
-              const count = apps.filter((a) => a.region === r).length
-              return (
-                <div key={r} className="flex items-center gap-3">
-                  <div className="w-24 shrink-0 text-sm">{r}</div>
+            {loading ? (
+              <>
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
+              </>
+            ) : locations.length ? (
+              locations.map((row) => (
+                <div key={row.location} className="flex items-center gap-3">
+                  <div
+                    className="w-28 shrink-0 truncate text-sm"
+                    title={row.location}
+                  >
+                    {row.location}
+                  </div>
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
                     <div
                       className="h-full rounded-full bg-[#FCD116]"
-                      style={{ width: `${(count / maxRegion) * 100}%` }}
+                      style={{
+                        width: `${(row.count / maxLocation) * 100}%`,
+                      }}
                     />
                   </div>
                   <div className="w-6 text-right text-sm tabular-nums">
-                    {count}
+                    {row.count}
                   </div>
                 </div>
-              )
-            })}
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No applications in scope yet.
+              </p>
+            )}
             <p className="border-t pt-3 text-xs text-muted-foreground">
-              Open recommendations:{" "}
-              {state.recommendations.filter((r) => r.status === "Open").length} ·
-              Accounts pending approval:{" "}
-              {state.accounts.filter((a) => a.status === "Pending Approval").length}
+              Profile changes pending: {summary?.pending_profile_changes ?? 0}
             </p>
           </CardContent>
         </Card>
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
-          <CardDescription>Last five audit events</CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <div>
+            <CardTitle>Recent Activity</CardTitle>
+            <CardDescription>
+              Latest application updates in your scope
+            </CardDescription>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            render={<Link href="/admin/applications" />}
+          >
+            View all <ArrowRightIcon />
+          </Button>
         </CardHeader>
         <CardContent className="space-y-2">
-          {state.audit.slice(0, 5).map((e) => (
-            <div key={e.id} className="flex items-baseline gap-3 text-sm">
-              <span className="w-40 shrink-0 font-mono text-xs text-muted-foreground">
-                {new Date(e.ts).toLocaleString()}
-              </span>
-              <span className="w-48 shrink-0 truncate text-muted-foreground">
-                {e.actor}
-              </span>
-              <span className="font-mono text-xs">{e.action}</span>
-              <span className="truncate text-muted-foreground">{e.detail}</span>
-            </div>
-          ))}
+          {loading ? (
+            <>
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-full" />
+            </>
+          ) : summary?.recent_applications.length ? (
+            summary.recent_applications.slice(0, 5).map((app) => (
+              <Link
+                key={app.id}
+                href={`/admin/applications/${app.id}`}
+                className="flex items-baseline gap-3 rounded-md px-1 py-1.5 text-sm hover:bg-muted/40"
+              >
+                <span className="w-40 shrink-0 font-mono text-xs text-muted-foreground">
+                  {new Date(app.updated_at).toLocaleString()}
+                </span>
+                <span className="w-40 shrink-0 truncate text-muted-foreground">
+                  {app.customer_name ?? "—"}
+                </span>
+                <span className="font-mono text-xs">{app.status}</span>
+                <span className="truncate text-muted-foreground">
+                  {activityDetail(app)}
+                </span>
+              </Link>
+            ))
+          ) : (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No recent application activity.
+            </p>
+          )}
         </CardContent>
       </Card>
     </>
   )
+}
+
+export default function OverviewPage() {
+  const { isPlatformAdmin } = useAdminAccess()
+
+  if (isPlatformAdmin) {
+    return <PlatformDashboard />
+  }
+
+  return <OrgOfficeDashboard />
 }

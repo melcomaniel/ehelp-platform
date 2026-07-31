@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { randomUUID } from 'crypto';
+import { resolveMockSsoFixture } from './mock-sso-fixtures';
 import type {
   EgovSsoProfile,
   EgovSsoProvider,
@@ -24,6 +25,15 @@ export class LiveEgovSsoProvider implements EgovSsoProvider {
   constructor(private readonly config: ConfigService) {}
 
   async exchangeCode(exchangeCode: string): Promise<EgovSsoProfile> {
+    // Local mobile fixtures (beneficiary / dependent) — no eGov mint needed.
+    const fixture = resolveMockSsoFixture(exchangeCode);
+    if (fixture) {
+      this.log.log(
+        `SSO mock fixture code=${exchangeCode.trim()} email=${fixture.email}`,
+      );
+      return fixture;
+    }
+
     const base = this.config.getOrThrow<string>('EGOV_SSO_BASE_URL');
     const partnerCode = this.config.getOrThrow<string>('EGOV_PARTNER_CODE');
     const partnerSecret = this.config.getOrThrow<string>('EGOV_PARTNER_SECRET');
@@ -284,23 +294,49 @@ export class LiveLivenessProvider implements LivenessProvider {
       this.config.get<string>('EVERIFY_LIVENESS_HOST') ||
       'https://hackathon-everify-face-liveness.e.gov.ph'
     ).replace(/\/$/, '');
+    const callback = input.callbackUrl || '';
+    const publicBase = (input.publicBaseUrl || '').replace(/\/$/, '');
+    const webCallback = /^https?:\/\//i.test(callback);
 
-    // PhilSys eVerify requires a completed Web SDK session_id.
-    // Open the official HTTPS liveness app TOP-LEVEL (not nested under Nest HTTP).
-    // Mobile WebView loads this URL and injects a bridge to capture session_id.
+    // Web login gate: Face Liveness API redirects back to callback_url with token.
+    // Direct eVerify host URLs leave the browser stuck on "Capture Success".
+    if (webCallback) {
+      try {
+        return await this.createFaceLivenessApiSession(input);
+      } catch {
+        // Fall through to Nest-hosted eVerify UI if Face Liveness API is unavailable.
+      }
+      if (pubKey && publicBase) {
+        const correlation = randomUUID();
+        const url =
+          `${publicBase}/auth/liveness/everify-ui` +
+          `?correlation=${encodeURIComponent(correlation)}` +
+          `&callback=${encodeURIComponent(callback)}`;
+        return { token: correlation, url, source: 'everify_sdk' };
+      }
+    }
+
+    // Mobile / PhilSys path: top-level HTTPS eVerify liveness (WebView bridge).
     if (pubKey) {
       const correlation = randomUUID();
-      // Match official SDK query shape (awst = public API key).
       const url = `${host}/?t=basic&liveness=0&awst=${encodeURIComponent(pubKey)}`;
       return { token: correlation, url, source: 'everify_sdk' };
     }
 
+    return this.createFaceLivenessApiSession(input);
+  }
+
+  private async createFaceLivenessApiSession(input: {
+    action: string;
+    callbackUrl: string;
+    delay?: number;
+  }): Promise<LivenessCreateResult> {
     const base = this.config.getOrThrow<string>('FACE_LIVENESS_BASE_URL');
     const apiKey = this.config.getOrThrow<string>('FACE_LIVENESS_API_KEY');
     const res = await axios.post(
       `${base.replace(/\/$/, '')}/v1/liveness/session`,
       {
-        action: input.action,
+        action: input.action || 'redirect',
         callback_url: input.callbackUrl,
         delay: input.delay ?? 3000,
       },

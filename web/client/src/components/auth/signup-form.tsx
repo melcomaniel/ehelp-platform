@@ -10,8 +10,9 @@ export function SignupForm() {
         <h1 className="text-2xl font-semibold">Accounts are provisioned</h1>
         <p className="text-sm text-muted-foreground">
           Evaluators, approvers, and admins are created by Platform, Organization,
-          or Office Admins in the portal — then you sign in with eGov SSO (or
-          mock password in local dev).
+          or Office Admins in the portal — then you sign in with eGov SSO and
+          complete face liveness. Beneficiaries use the mobile app (same SSO →
+          face check; PhilSys eVerify on first use).
         </p>
       </div>
 

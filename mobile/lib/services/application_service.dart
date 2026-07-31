@@ -56,6 +56,13 @@ class ApplicationService {
         .toList();
   }
 
+  /// Full program detail including applicant stages + form fields from Nest.
+  Future<ProgramDetail> getProgram(String id) async {
+    final res = await http.get(_uri('/templates/$id'), headers: _headers);
+    final data = await _json(res, fallback: 'Program not found');
+    return ProgramDetail.fromJson(data);
+  }
+
   Future<List<Region>> listRegions() async {
     final res = await http.get(_uri('/regions'), headers: _headers);
     final list = await _jsonList(res);
@@ -264,7 +271,26 @@ class ApplicationService {
     required String relationship,
     bool isNotarized = false,
     String? notes,
+    String? proofDocumentType,
+    String? proofStorageUri,
   }) async {
+    final docs = <Map<String, String>>[];
+    final uri = proofStorageUri?.trim();
+    if (uri != null && uri.isNotEmpty) {
+      docs.add({
+        'document_type':
+            (proofDocumentType?.trim().isNotEmpty ?? false)
+                ? proofDocumentType!.trim()
+                : 'authorization_letter',
+        'storage_uri': uri,
+      });
+    } else if (isNotarized) {
+      // Local checkbox alone is not enough — Nest requires a real proof URI.
+      docs.add({
+        'document_type': 'authorization_letter',
+        'storage_uri': 'pending://notarized-proof',
+      });
+    }
     final res = await http.post(
       _uri('/relationships'),
       headers: _headers,
@@ -273,6 +299,7 @@ class ApplicationService {
         'dependent_user_id': dependentId,
         'relationship': relationship,
         if (notes != null) 'notes': notes,
+        'documents': docs,
       }),
     );
     final json = await _json(res, fallback: 'Register dependent failed');
@@ -289,5 +316,145 @@ class ApplicationService {
       dependentId: dependentId,
       relationship: relationship,
     );
+  }
+
+  Future<Map<String, dynamic>> uploadFile({
+    required String filePath,
+    required String fileName,
+  }) async {
+    final token = _auth.currentSession?.accessToken;
+    final req = http.MultipartRequest('POST', _uri('/uploads'));
+    req.headers['X-Client-Platform'] = 'mobile';
+    if (token != null) req.headers['Authorization'] = 'Bearer $token';
+    req.files.add(
+      await http.MultipartFile.fromPath('file', filePath, filename: fileName),
+    );
+    final streamed = await req.send();
+    final res = await http.Response.fromStream(streamed);
+    return _json(res, fallback: 'Upload failed');
+  }
+
+  Future<Map<String, dynamic>> requestProfileChange({
+    required String description,
+    required Map<String, dynamic> proposedChanges,
+    required String proofDocumentType,
+    required String proofStorageUri,
+  }) async {
+    final res = await http.post(
+      _uri('/profile-change-requests'),
+      headers: _headers,
+      body: jsonEncode({
+        'description': description,
+        'proposed_changes': proposedChanges,
+        'documents': [
+          {
+            'document_type': proofDocumentType,
+            'storage_uri': proofStorageUri,
+          },
+        ],
+      }),
+    );
+    return _json(res, fallback: 'Profile change request failed');
+  }
+
+  Future<List<Map<String, dynamic>>> listMyProfileChangeRequests() async {
+    final res = await http.get(
+      _uri('/profile-change-requests/me'),
+      headers: _headers,
+    );
+    final list = await _jsonList(res);
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> listMyNotifications() async {
+    final res = await http.get(_uri('/notifications/me'), headers: _headers);
+    final list = await _jsonList(res);
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<void> markNotificationRead(String id) async {
+    final res = await http.post(
+      _uri('/notifications/$id/read'),
+      headers: _headers,
+      body: '{}',
+    );
+    await _json(res, fallback: 'Mark read failed');
+  }
+
+  Future<List<Map<String, dynamic>>> listBookableSlots({
+    String? officeId,
+    String? applicationId,
+  }) async {
+    final res = await http.get(
+      _uri('/disbursement-slots', {
+        if (officeId != null && officeId.isNotEmpty) 'office_id': officeId,
+        if (applicationId != null && applicationId.isNotEmpty)
+          'application_id': applicationId,
+      }),
+      headers: _headers,
+    );
+    final list = await _jsonList(res);
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> bookDisbursementSlot({
+    required String slotId,
+    required String applicationId,
+  }) async {
+    final res = await http.post(
+      _uri('/disbursement-bookings'),
+      headers: _headers,
+      body: jsonEncode({
+        'slot_id': slotId,
+        'application_id': applicationId,
+      }),
+    );
+    return _json(res, fallback: 'Booking failed');
+  }
+
+  Future<List<Map<String, dynamic>>> listMyBookings() async {
+    final res = await http.get(
+      _uri('/disbursement-bookings/me'),
+      headers: _headers,
+    );
+    final list = await _jsonList(res);
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> listVaultDocuments() async {
+    final res = await http.get(
+      _uri('/beneficiary-documents'),
+      headers: _headers,
+    );
+    final list = await _jsonList(res);
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> addVaultDocument({
+    required String documentType,
+    required String storageUri,
+    String? label,
+    String? notes,
+  }) async {
+    final res = await http.post(
+      _uri('/beneficiary-documents'),
+      headers: _headers,
+      body: jsonEncode({
+        'document_type': documentType,
+        'storage_uri': storageUri,
+        if (label != null) 'label': label,
+        if (notes != null) 'notes': notes,
+      }),
+    );
+    return _json(res, fallback: 'Add document failed');
+  }
+
+  Future<void> deleteVaultDocument(String id) async {
+    final res = await http.post(
+      _uri('/beneficiary-documents/$id/delete'),
+      headers: _headers,
+      body: '{}',
+    );
+    await _json(res, fallback: 'Delete failed');
   }
 }

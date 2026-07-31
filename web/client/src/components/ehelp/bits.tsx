@@ -17,10 +17,13 @@ import { ChevronDownIcon, InboxIcon } from "lucide-react"
 const STATUS_TONE: Record<string, string> = {
   Submitted: "text-blue-700 bg-blue-50 ring-blue-200",
   "In Evaluation": "text-indigo-700 bg-indigo-50 ring-indigo-200",
+  "Under review": "text-indigo-700 bg-indigo-50 ring-indigo-200",
   "For Approval": "text-amber-800 bg-amber-50 ring-amber-200",
+  "For approval": "text-amber-800 bg-amber-50 ring-amber-200",
   Approved: "text-green-700 bg-green-50 ring-green-200",
   Declined: "text-red-700 bg-red-50 ring-red-200",
   Disbursed: "text-emerald-800 bg-emerald-50 ring-emerald-200",
+  Claimed: "text-emerald-800 bg-emerald-50 ring-emerald-200",
   Verified: "text-green-700 bg-green-50 ring-green-200",
   Pending: "text-amber-800 bg-amber-50 ring-amber-200",
   "Pending Validation": "text-amber-800 bg-amber-50 ring-amber-200",

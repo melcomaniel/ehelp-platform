@@ -8,11 +8,12 @@ import '../../../theme/app_theme.dart';
 import '../../liveness/screens/face_liveness_screen.dart';
 import 'national_id_qr_scan_screen.dart';
 
-/// First-time citizen path after eGov SSO:
-/// Face Liveness → National ID QR eVerify → home.
+/// First-time citizen path after eGov SSO (live PhilSys identities only):
+/// PhilSys Face Liveness → National ID QR eVerify → home.
 ///
-/// Hackathon SSO usually returns a test persona (e.g. Josie). PhilSys eVerify
-/// therefore uses QR + face session instead of SSO name/DOB.
+/// Sign-in already did a human presence check. This screen is for National ID
+/// match (eVerify session_id). Mock fixture codes (`beneficiary`, etc.) skip
+/// this route — Nest marks them eVerified at SSO time.
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -45,8 +46,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         context,
         purpose: LivenessPurpose.registration,
         userId: profile?.id,
-        title: 'Face verification',
-        subtitle: 'Required once to register your PhilSys identity.',
+        title: 'PhilSys face check',
+        subtitle:
+            'Required for National ID eVerify (separate from the sign-in face check).',
       );
       if (!mounted) return;
       if (outcome == null || !outcome.passed) {
@@ -107,7 +109,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     });
 
     try {
-      // Prefer PhilSys eVerify session_id; fall back to Nest correlation (server resolves).
       final faceSessionId =
           liveness.faceLivenessSessionId ?? liveness.sessionToken;
       await ref.read(authServiceProvider).completeFirstTimeEverify(
@@ -141,9 +142,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Complete registration'),
+        title: const Text('National ID registration'),
         actions: [
-          TextButton(onPressed: _busy ? null : _signOut, child: const Text('Sign out')),
+          TextButton(
+            onPressed: _busy ? null : _signOut,
+            child: const Text('Sign out'),
+          ),
         ],
       ),
       body: SafeArea(
@@ -152,87 +156,96 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                profile?.fullName.isNotEmpty == true
-                    ? 'Welcome, ${profile!.fullName}'
-                    : 'Welcome',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'SSO signs you in. PhilSys eVerify uses your National ID QR + Face Liveness '
-                '(not the SSO test name).',
-                style: TextStyle(color: AppColors.muted, height: 1.4),
-              ),
-              const SizedBox(height: 16),
-              Material(
-                color: const Color(0xFFE8F0FE),
-                borderRadius: BorderRadius.circular(12),
-                child: const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Text(
-                    '1) Mint a fresh exchange code in the eGov SSO portal (not mock-exchange). '
-                    '2) Face Liveness. '
-                    '3) Scan your PhilSys / ePhilID QR — Nest calls POST /api/query/qr with that value + session_id.',
-                    style: TextStyle(
-                      color: Color(0xFF1A365D),
-                      height: 1.35,
-                      fontSize: 13,
-                    ),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        profile?.fullName.isNotEmpty == true
+                            ? 'Welcome, ${profile!.fullName}'
+                            : 'Welcome',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Sign-in already confirmed you are present. This step '
+                        'links your PhilSys National ID (face + QR) — required '
+                        'once for live eGov identities.',
+                        style: TextStyle(color: AppColors.muted, height: 1.4),
+                      ),
+                      const SizedBox(height: 16),
+                      Material(
+                        color: const Color(0xFFE8F0FE),
+                        borderRadius: BorderRadius.circular(12),
+                        child: const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Text(
+                            'Local test codes (beneficiary / beneficiary2 / dependent) '
+                            'skip this screen. Live eGov identities need PhilSys face + QR.',
+                            style: TextStyle(
+                              color: Color(0xFF1A365D),
+                              height: 1.35,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      const _StepTile(
+                        index: 1,
+                        title: 'Signed in',
+                        subtitle: 'SSO + sign-in face check done',
+                        done: true,
+                      ),
+                      _StepTile(
+                        index: 2,
+                        title: 'PhilSys Face Liveness',
+                        subtitle: livenessDone
+                            ? 'Passed (${_liveness!.confidenceScore.toStringAsFixed(1)}) — scan QR next'
+                            : 'Camera check for National ID match',
+                        done: livenessDone,
+                        active: _step == 0,
+                      ),
+                      _StepTile(
+                        index: 3,
+                        title: 'National ID QR eVerify',
+                        subtitle: _qrController.text.trim().isEmpty
+                            ? 'Scan or paste PhilSys QR'
+                            : 'QR ready (${_qrController.text.trim().length} chars)',
+                        done: false,
+                        active: livenessDone,
+                      ),
+                      if (livenessDone) ...[
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _qrController,
+                          minLines: 2,
+                          maxLines: 4,
+                          enabled: !_busy,
+                          onChanged: (_) => setState(() {}),
+                          decoration: const InputDecoration(
+                            labelText: 'National ID QR value',
+                            hintText: 'Paste raw QR string, or use Scan',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: _busy ? null : _scanQr,
+                          icon: const Icon(Icons.qr_code_scanner),
+                          label: const Text('Scan National ID QR'),
+                        ),
+                      ],
+                      if (_error != null) ...[
+                        const SizedBox(height: 16),
+                        Text(_error!, style: const TextStyle(color: Colors.red)),
+                      ],
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
-              _StepTile(
-                index: 1,
-                title: 'eGov SSO',
-                subtitle: 'Signed in (minted exchange code)',
-                done: true,
-              ),
-              _StepTile(
-                index: 2,
-                title: 'Face Liveness',
-                subtitle: livenessDone
-                    ? 'Passed (${_liveness!.confidenceScore.toStringAsFixed(1)}) — scan QR next'
-                    : 'Complete camera check (same person as the ID)',
-                done: livenessDone,
-                active: _step == 0,
-              ),
-              _StepTile(
-                index: 3,
-                title: 'National ID QR eVerify',
-                subtitle: _qrController.text.trim().isEmpty
-                    ? 'Scan or paste PhilSys QR'
-                    : 'QR ready (${_qrController.text.trim().length} chars)',
-                done: false,
-                active: livenessDone,
-              ),
-              if (livenessDone) ...[
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _qrController,
-                  minLines: 2,
-                  maxLines: 4,
-                  enabled: !_busy,
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
-                    labelText: 'National ID QR value',
-                    hintText: 'Paste raw QR string, or use Scan',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: _busy ? null : _scanQr,
-                  icon: const Icon(Icons.qr_code_scanner),
-                  label: const Text('Scan National ID QR'),
-                ),
-              ],
-              if (_error != null) ...[
-                const SizedBox(height: 16),
-                Text(_error!, style: const TextStyle(color: Colors.red)),
-              ],
-              const Spacer(),
+              const SizedBox(height: 12),
               if (!livenessDone)
                 FilledButton(
                   onPressed: _busy ? null : _runLiveness,
@@ -242,7 +255,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                           width: 22,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Start face verification'),
+                      : const Text('Start PhilSys face check'),
                 )
               else
                 FilledButton(
@@ -292,7 +305,10 @@ class _StepTile extends StatelessWidget {
         foregroundColor: color,
         child: done ? const Icon(Icons.check) : Text('$index'),
       ),
-      title: Text(title, style: TextStyle(fontWeight: FontWeight.w600, color: color)),
+      title: Text(
+        title,
+        style: TextStyle(fontWeight: FontWeight.w600, color: color),
+      ),
       subtitle: Text(subtitle),
     );
   }

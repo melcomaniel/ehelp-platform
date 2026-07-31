@@ -18,6 +18,7 @@ import {
   UserAccountEntity,
   UserRoleAssignmentEntity,
 } from '../users/user.entity';
+import { RbacAccessService } from '../auth/rbac-access.service';
 import {
   CreateOfficeAdminDto,
   CreateOfficeDto,
@@ -111,7 +112,10 @@ type StaffRequestRow = {
 
 @Injectable()
 export class OfficeService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly rbac: RbacAccessService,
+  ) {}
 
   async list(actorId: string, query: OfficeListQueryDto) {
     const actor = await this.requireOrgAdmin(actorId);
@@ -910,6 +914,9 @@ export class OfficeService {
     if (!actor.organization_name || actor.organization_status !== 'active') {
       throw new ForbiddenException('Organization is suspended or archived');
     }
+    await this.rbac.assertPermission(actorId, 'office.create', {
+      organizationId: actor.organization_id,
+    });
     return {
       id: actor.id,
       organization_id: actor.organization_id,
@@ -954,6 +961,10 @@ export class OfficeService {
     if (actor.organization_status !== 'active') {
       throw new ForbiddenException('Organization is suspended or archived');
     }
+    await this.rbac.assertPermission(actorId, 'office_staff.assign', {
+      organizationId: actor.organization_id,
+      officeId: actor.office_id,
+    });
     return {
       id: actor.id,
       organization_id: actor.organization_id,

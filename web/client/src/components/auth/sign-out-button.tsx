@@ -1,15 +1,20 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { LogOutIcon } from "lucide-react";
 
-import { signOut } from "@/lib/auth/actions";
-
 export function SignOutButton({ className }: { className?: string }) {
+  const router = useRouter();
+
   return (
     <button
       type="button"
       onClick={() => {
-        void signOut();
+        void (async () => {
+          await fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
+          router.replace("/signin");
+          router.refresh();
+        })();
       }}
       className={
         className ??

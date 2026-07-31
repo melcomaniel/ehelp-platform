@@ -4,8 +4,11 @@ import 'package:go_router/go_router.dart';
 
 import '../features/auth/screens/login_screen.dart';
 import '../features/auth/screens/onboarding_screen.dart';
+import '../features/customer/screens/ai_assistant_screen.dart';
 import '../features/customer/screens/customer_screens.dart';
+import '../features/customer/screens/document_vault_screen.dart';
 import '../features/customer/screens/program_apply_screen.dart';
+import '../features/customer/screens/schedule_screens.dart';
 import '../features/shared/screens/application_detail_screen.dart';
 import '../providers/auth_provider.dart';
 
@@ -95,8 +98,24 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const DisbursementScreen(),
       ),
       GoRoute(
+        path: '/customer/messages',
+        builder: (_, __) => const CustomerNotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/customer/schedule',
+        builder: (_, __) => const ScheduleDisbursementScreen(),
+      ),
+      GoRoute(
+        path: '/customer/documents',
+        builder: (_, __) => const DocumentVaultScreen(),
+      ),
+      GoRoute(
         path: '/customer/dependents',
         builder: (_, __) => const DependentsScreen(),
+      ),
+      GoRoute(
+        path: '/customer/assistant',
+        builder: (_, __) => const AiAssistantScreen(),
       ),
       GoRoute(
         path: '/customer/profile',

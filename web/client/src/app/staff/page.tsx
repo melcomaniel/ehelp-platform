@@ -14,16 +14,17 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
+type StaffMode = "evaluator" | "approver";
+
 /**
  * Staff console (Evaluator / Approver) — Nest queue via session JWT cookie proxy.
+ * Mode is derived from Nest session role (no free toggle — backend is source of truth).
  */
 export default function StaffConsolePage() {
   const [queue, setQueue] = useState<NestApplication[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [roleHint, setRoleHint] = useState<"evaluator" | "approver">(
-    "evaluator",
-  );
+  const [mode, setMode] = useState<StaffMode | null>(null);
   const [profileName, setProfileName] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -31,51 +32,36 @@ export default function StaffConsolePage() {
     setError(null);
     try {
       const session = await fetch("/api/auth/session", { cache: "no-store" });
-      if (session.ok) {
-        const data = await session.json();
-        setProfileName(data.user?.fullName ?? data.user?.email ?? null);
-        if (data.user?.role === "approver") setRoleHint("approver");
-        if (data.user?.role === "evaluator") setRoleHint("evaluator");
+      if (!session.ok) {
+        throw new Error("Session expired");
       }
+      const data = await session.json();
+      setProfileName(data.user?.fullName ?? data.user?.email ?? null);
+      const role = data.user?.role as string | undefined;
+      const nextMode: StaffMode =
+        role === "approver" ? "approver" : "evaluator";
+      setMode(nextMode);
+
       const statuses =
-        roleHint === "approver"
+        nextMode === "approver"
           ? "recommended,in_approval"
           : "submitted,under_review,in_evaluation";
-      const data = await nestFetch<NestApplication[]>(
+      const apps = await nestFetch<NestApplication[]>(
         `/applications/queue?statuses=${encodeURIComponent(statuses)}`,
       );
-      setQueue(Array.isArray(data) ? data : []);
+      setQueue(Array.isArray(apps) ? apps : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setQueue([]);
     } finally {
       setLoading(false);
     }
-  }, [roleHint]);
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
-
-  async function recommend(id: string) {
-    const notes = window.prompt("Evaluation notes (endorse)") ?? "";
-    await nestFetch(`/applications/${id}/recommend`, {
-      method: "POST",
-      body: { notes, priority: "medium" },
-    });
-    await load();
-  }
-
-  async function decide(id: string, approve: boolean) {
-    const notes =
-      window.prompt(approve ? "Approval notes" : "Rejection notes") ?? "";
-    await nestFetch(`/applications/${id}/decide`, {
-      method: "POST",
-      body: { approve, notes },
-    });
-    await load();
-  }
 
   return (
     <main
@@ -91,7 +77,12 @@ export default function StaffConsolePage() {
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {profileName ? `Signed in as ${profileName}. ` : null}
-            Evaluators endorse; approvers decide. Admins manage programs at{" "}
+            {mode === "approver"
+              ? "Approver queue — open a case to review the full application, then decide."
+              : mode === "evaluator"
+                ? "Evaluator queue — open a case to review answers, then endorse."
+                : "Loading role…"}{" "}
+            Admins manage programs at{" "}
             <Link href="/admin" className="underline">
               /admin
             </Link>
@@ -99,21 +90,17 @@ export default function StaffConsolePage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {mode ? (
+            <span className="rounded-md border px-2.5 py-1 text-xs font-medium capitalize text-muted-foreground">
+              {mode}
+            </span>
+          ) : null}
           <Button
-            variant={roleHint === "evaluator" ? "default" : "outline"}
             size="sm"
-            onClick={() => setRoleHint("evaluator")}
+            variant="outline"
+            onClick={() => void load()}
+            disabled={loading}
           >
-            Evaluator view
-          </Button>
-          <Button
-            variant={roleHint === "approver" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setRoleHint("approver")}
-          >
-            Approver view
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => void load()} disabled={loading}>
             {loading ? "Loading..." : "Refresh"}
           </Button>
           <SignOutButton className="rounded-lg border px-3 py-1.5 text-sm" />
@@ -143,29 +130,18 @@ export default function StaffConsolePage() {
                   {app.reference_no || app.id.slice(0, 8)}
                 </CardTitle>
                 <CardDescription>
-                  {app.template_name ?? "Program"} · {app.customer_name ?? "—"} ·{" "}
+                  {app.template_name ?? "Program"} ·{" "}
+                  {app.customer_name ?? "—"} ·{" "}
                   <span className="font-medium">{app.status}</span>
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-wrap gap-2">
-                {roleHint === "evaluator" ? (
-                  <Button size="sm" onClick={() => recommend(app.id)}>
-                    Endorse
-                  </Button>
-                ) : (
-                  <>
-                    <Button size="sm" onClick={() => decide(app.id, true)}>
-                      Approve
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => decide(app.id, false)}
-                    >
-                      Reject
-                    </Button>
-                  </>
-                )}
+                <Button
+                  size="sm"
+                  render={<Link href={`/staff/applications/${app.id}`} />}
+                >
+                  Open application
+                </Button>
               </CardContent>
             </Card>
           </li>

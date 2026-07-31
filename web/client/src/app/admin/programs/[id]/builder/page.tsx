@@ -8,6 +8,11 @@ import { EmptyState, PageHeader, StatusPill } from "@/components/workflow/bits"
 import { StepSetBuilder } from "@/components/workflow/builder"
 import { usePrompts } from "@/components/workflow/prompts"
 import { Button } from "@/components/ui/button"
+import { getNestProgramIdForBuilder } from "@/lib/workflow/nest-program-link"
+import {
+  exportApplicantWorkflow,
+  syncApplicantWorkflowToNest,
+} from "@/lib/workflow/sync-applicant-workflow"
 import { useWorkflow } from "@/lib/workflow/store"
 import { ArrowLeftIcon, UploadIcon } from "lucide-react"
 
@@ -29,6 +34,11 @@ function ProgramBuilder() {
   if (!program) {
     return <EmptyState title="Program not found" hint="It may have been removed." />
   }
+
+  const nestProgramId = getNestProgramIdForBuilder(program.id)
+  const backHref = nestProgramId
+    ? `/admin/programs/${nestProgramId}`
+    : `/admin/programs/${program.id}`
 
   const versions = state.versions
     .filter((v) => v.programId === program.id)
@@ -57,11 +67,39 @@ function ProgramBuilder() {
     })
     if (!ok) return
     const result = publishVersion(version.id)
-    toast(
-      result.ok
-        ? { title: `Version ${version.versionNo} published`, description: "The program is open for applications.", variant: "success" }
-        : { title: "Could not publish", description: result.error, variant: "error" }
-    )
+    if (!result.ok) {
+      toast({
+        title: "Could not publish",
+        description: result.error,
+        variant: "error",
+      })
+      return
+    }
+
+    if (nestProgramId) {
+      const payload = exportApplicantWorkflow(state, version.stepSetId)
+      const sync = await syncApplicantWorkflowToNest(nestProgramId, payload)
+      toast(
+        sync.ok
+          ? {
+              title: `Version ${version.versionNo} published`,
+              description: "Synced Form → Verify → Review → Disbursement to mobile.",
+              variant: "success",
+            }
+          : {
+              title: `Version ${version.versionNo} published`,
+              description: `Local publish ok, mobile sync failed: ${sync.error}`,
+              variant: "error",
+            },
+      )
+      return
+    }
+
+    toast({
+      title: `Version ${version.versionNo} published`,
+      description: "The program is open for applications.",
+      variant: "success",
+    })
   }
 
   return (
@@ -73,11 +111,11 @@ function ProgramBuilder() {
         <div className="flex items-center gap-2">
           <StatusPill value={version.status} />
           {version.status === "draft" && (
-            <Button size="sm" variant="outline" onClick={onPublish}>
+            <Button size="sm" variant="outline" onClick={() => void onPublish()}>
               <UploadIcon /> Publish
             </Button>
           )}
-          <Button size="sm" variant="ghost" render={<Link href={`/admin/programs/${program.id}`} />}>
+          <Button size="sm" variant="ghost" render={<Link href={backHref} />}>
             <ArrowLeftIcon /> Program
           </Button>
         </div>

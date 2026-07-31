@@ -121,15 +121,14 @@ export const PRD_ROLE_GRANTS: Record<PrdRole, PrdGrant[]> = {
     { permission: "office_staff.assign", scope: "office" },
     { permission: "analytics.view_office", scope: "office" },
     { permission: "audit.view_office", scope: "office" },
+    { permission: "relationship.approve", scope: "office" },
   ],
   evaluator: [
     { permission: "beneficiary.register", scope: "office" },
     { permission: "beneficiary.verify_identity", scope: "office" },
-    { permission: "relationship.validate", scope: "assigned_task" },
     { permission: "application.evaluate", scope: "assigned_task" },
   ],
   approver: [
-    { permission: "relationship.approve", scope: "assigned_task" },
     { permission: "application.approve", scope: "assigned_task" },
     { permission: "disbursement.authorize", scope: "assigned_task" },
   ],
@@ -166,6 +165,12 @@ export const PRD_EXPLICIT_DENIES: Record<PrdRole, string[]> = {
 };
 
 export function toPrdRole(role: AppRole): PrdRole | null {
+  // Dependent is beneficiary-class for grants (own_account + relationship link).
   if (role === "dependent") return "customer";
   return Object.hasOwn(PRD_ROLE_GRANTS, role) ? (role as PrdRole) : null;
+}
+
+/** True when the app role is a mobile beneficiary-class persona. */
+export function isBeneficiaryClassRole(role: AppRole): boolean {
+  return role === "customer" || role === "dependent";
 }

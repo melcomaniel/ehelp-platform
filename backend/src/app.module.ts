@@ -20,6 +20,7 @@ import { StaffProfileEntity } from './users/staff-profile.entity';
 import { OrganizationModule } from './organizations/organization.module';
 import { OfficeModule } from './offices/office.module';
 import { RbacModule } from './rbac/rbac.module';
+import { EgovAiModule } from './egov-ai/egov-ai.module';
 import {
   AuditLogEntity,
   OrganizationEntity,
@@ -72,6 +73,7 @@ import {
     OrganizationModule,
     OfficeModule,
     RbacModule,
+    EgovAiModule,
   ],
 })
 export class AppModule {}

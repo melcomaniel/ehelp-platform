@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AuthModule } from '../auth/auth.module';
 import { OfficeEntity } from '../domain/domain.entities';
 import {
   AuditLogEntity,
@@ -14,6 +15,7 @@ import { OfficeService } from './office.service';
 
 @Module({
   imports: [
+    AuthModule,
     TypeOrmModule.forFeature([
       OfficeEntity,
       OrganizationEntity,

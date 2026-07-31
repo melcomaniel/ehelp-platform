@@ -1,27 +1,73 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { useParams } from "next/navigation"
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 
-import { EmptyState, PageHeader, StatusPill } from "@/components/ehelp/bits"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { useEhelp } from "@/lib/ehelp/store"
-import { ArrowLeftIcon, FileTextIcon } from "lucide-react"
+import { EmptyState, PageHeader, StatusPill } from "@/components/ehelp/bits";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { nestFetch, type NestApplication } from "@/lib/api/nest";
+import { ArrowLeftIcon, FileTextIcon } from "lucide-react";
+
+function statusLabel(status: string): string {
+  const map: Record<string, string> = {
+    draft: "Draft",
+    submitted: "Submitted",
+    under_review: "Under review",
+    recommended: "For approval",
+    approved: "Approved",
+    claimed: "Claimed",
+    disbursed: "Disbursed",
+    declined: "Declined",
+    cancelled: "Cancelled",
+  };
+  return map[status] ?? status;
+}
 
 export default function AdminApplicationDetailPage() {
-  const { id } = useParams<{ id: string }>()
-  const { state } = useEhelp()
+  const { id } = useParams<{ id: string }>();
+  const [app, setApp] = useState<NestApplication | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const application = state.applications.find((item) => item.id === id)
+  const load = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const row = await nestFetch<NestApplication>(`/applications/${id}`);
+      setApp(row);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setApp(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
 
-  if (!application) {
+  useEffect(() => {
+    const t = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(t);
+  }, [load]);
+
+  if (loading && !app) {
+    return (
+      <Card>
+        <CardContent className="py-10 text-sm text-muted-foreground">
+          Loading application…
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error || !app) {
     return (
       <Card>
         <CardContent>
           <EmptyState
             title="Application not found"
-            description="The selected application may have been removed."
+            description={error || "The selected application may have been removed."}
             icon={<FileTextIcon className="size-5" aria-hidden />}
           >
             <Button variant="outline" render={<Link href="/admin/applications" />}>
@@ -30,29 +76,26 @@ export default function AdminApplicationDetailPage() {
           </EmptyState>
         </CardContent>
       </Card>
-    )
+    );
   }
 
-  const customer = state.customers.find((item) => item.id === application.customerId)
-  const template = state.templates.find((item) => item.id === application.templateId)
-  const dependents = state.dependents.filter(
-    (item) => item.customerId === application.customerId,
-  )
-  const recommendations = state.recommendations.filter(
-    (item) => item.subject === application.id,
-  )
-  const audits = state.audit.filter((item) => item.detail.includes(application.id))
+  const claim = app.disbursement_claim;
+  const booking = app.disbursement_booking;
+  const complete =
+    app.status === "claimed" ||
+    app.status === "disbursed" ||
+    Boolean(claim);
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title={`Application ${application.id}`}
-        description={`${customer?.name ?? application.customerId} · ${
-          template?.name ?? application.templateId
+        title={app.reference_no}
+        description={`${app.customer_name ?? "Beneficiary"} · ${
+          app.template_name ?? app.template_code ?? "Program"
         }`}
       >
         <div className="flex items-center gap-2">
-          <StatusPill value={application.status} />
+          <StatusPill value={statusLabel(app.status)} />
           <Button size="sm" variant="ghost" render={<Link href="/admin/applications" />}>
             <ArrowLeftIcon /> Applications
           </Button>
@@ -61,13 +104,22 @@ export default function AdminApplicationDetailPage() {
 
       <Card>
         <CardContent className="grid gap-x-6 gap-y-3 py-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-          <DetailItem label="Region" value={application.region} />
-          <DetailItem label="Priority" value={<StatusPill value={application.priority} />} />
-          <DetailItem label="Filed by" value={application.filedBy} />
+          <DetailItem label="Status" value={<StatusPill value={statusLabel(app.status)} />} />
           <DetailItem
-            label="Last updated"
-            value={new Date(application.updatedAt).toLocaleString()}
+            label="Submitted"
+            value={
+              app.submitted_at
+                ? new Date(app.submitted_at).toLocaleString()
+                : "—"
+            }
           />
+          <DetailItem
+            label="Decided"
+            value={
+              app.decided_at ? new Date(app.decided_at).toLocaleString() : "—"
+            }
+          />
+          <DetailItem label="Stage" value={app.current_stage_type ?? "—"} />
         </CardContent>
       </Card>
 
@@ -77,14 +129,33 @@ export default function AdminApplicationDetailPage() {
             <CardTitle>Application details</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-            <DetailItem label="Case number" value={application.id} mono />
-            <DetailItem label="Status" value={<StatusPill value={application.status} />} />
-            <DetailItem label="Program template" value={template?.name ?? application.templateId} />
-            <DetailItem label="Program" value={template?.program ?? "—"} />
-            <DetailItem label="Requirements" value={template?.requirements ?? "—"} wide />
+            <DetailItem label="Case number" value={app.reference_no} mono />
+            <DetailItem label="Program" value={app.template_name ?? "—"} />
+            <DetailItem label="Program code" value={app.template_code ?? "—"} mono />
             <DetailItem
-              label="Case note"
-              value={application.note ?? "No case note recorded."}
+              label="Amount requested"
+              value={
+                app.amount_requested != null
+                  ? `₱${Number(app.amount_requested).toLocaleString()}`
+                  : "—"
+              }
+            />
+            <DetailItem
+              label="Amount approved"
+              value={
+                app.amount_approved != null
+                  ? `₱${Number(app.amount_approved).toLocaleString()}`
+                  : "—"
+              }
+            />
+            <DetailItem
+              label="Evaluator notes"
+              value={app.evaluator_notes || "—"}
+              wide
+            />
+            <DetailItem
+              label="Approver notes"
+              value={app.approver_notes || "—"}
               wide
             />
           </CardContent>
@@ -92,95 +163,89 @@ export default function AdminApplicationDetailPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Customer profile</CardTitle>
+            <CardTitle>Beneficiary</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-1">
-            <DetailItem label="Customer" value={customer?.name ?? application.customerId} />
-            <DetailItem label="Customer ID" value={application.customerId} mono />
-            <DetailItem label="PhilSys ID" value={customer?.philsysId ?? "—"} mono />
-            <DetailItem label="Face scan" value={customer?.faceScan ?? "—"} />
-            <DetailItem label="ID records" value={customer?.idRecords ? "Complete" : "Missing"} />
+            <DetailItem label="Name" value={app.customer_name ?? "—"} />
+            <DetailItem label="Phone" value={app.customer_phone ?? "—"} />
+            <DetailItem label="Email" value={app.customer_email ?? "—"} />
             <DetailItem
-              label="Disbursement preference"
-              value={customer?.disbursementPref ?? "—"}
+              label="Municipality"
+              value={app.customer_municipality ?? "—"}
+            />
+            <DetailItem label="Barangay" value={app.customer_barangay ?? "—"} />
+            <DetailItem
+              label="Address"
+              value={app.customer_address ?? "—"}
+              wide
             />
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      {complete ? (
         <Card>
           <CardHeader>
-            <CardTitle>Related dependents</CardTitle>
+            <CardTitle>Disbursement completed</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
-            {dependents.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No dependents recorded.</p>
-            ) : (
-              dependents.map((dependent) => (
-                <div key={dependent.id} className="rounded-md border px-3 py-2 text-sm">
-                  <p className="font-medium">{dependent.name}</p>
-                  <p className="text-muted-foreground">
-                    {dependent.kind} · {dependent.status}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Relationship record: {dependent.relationshipRecord ? "Yes" : "No"} ·
-                    Notarized letter: {dependent.notarizedLetter ? "Yes" : "No"}
-                  </p>
-                </div>
-              ))
-            )}
+          <CardContent className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+            <DetailItem
+              label="Claimed at"
+              value={
+                claim?.claimed_at
+                  ? new Date(claim.claimed_at).toLocaleString()
+                  : booking?.validated_at
+                    ? new Date(booking.validated_at).toLocaleString()
+                    : "—"
+              }
+            />
+            <DetailItem
+              label="Queue #"
+              value={String(
+                claim?.queue_number ?? booking?.queue_number ?? "—",
+              )}
+            />
+            <DetailItem
+              label="Face liveness"
+              value={
+                claim?.face_liveness_passed
+                  ? "Verified at cash window"
+                  : "Recorded"
+              }
+            />
+            <DetailItem
+              label="Slot"
+              value={
+                claim?.slot_starts_at
+                  ? `${new Date(claim.slot_starts_at).toLocaleString()} → ${
+                      claim.slot_ends_at
+                        ? new Date(claim.slot_ends_at).toLocaleString()
+                        : "—"
+                    }`
+                  : booking?.slot_starts_at
+                    ? `${new Date(booking.slot_starts_at).toLocaleString()} → ${
+                        booking.slot_ends_at
+                          ? new Date(booking.slot_ends_at).toLocaleString()
+                          : "—"
+                      }`
+                    : "—"
+              }
+              wide
+            />
+            <DetailItem
+              label="Site"
+              value={
+                [claim?.site_name ?? booking?.site_name, claim?.site_address ?? booking?.site_address]
+                  .filter(Boolean)
+                  .join(" — ") || "—"
+              }
+              wide
+            />
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Recommendations</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {recommendations.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No recommendations recorded.</p>
-            ) : (
-              recommendations.map((recommendation) => (
-                <div key={recommendation.id} className="rounded-md border px-3 py-2 text-sm">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-medium">{recommendation.id}</p>
-                    <StatusPill value={recommendation.status} />
-                    <StatusPill value={recommendation.priority} />
-                  </div>
-                  <p className="mt-2 text-muted-foreground">{recommendation.note}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Submitted by {recommendation.submittedBy}
-                  </p>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Audit history</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {audits.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No audit events recorded.</p>
-            ) : (
-              audits.map((audit) => (
-                <div key={audit.id} className="border-b pb-2 text-sm last:border-0">
-                  <p className="font-medium">{audit.action}</p>
-                  <p className="text-muted-foreground">{audit.detail}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {audit.actor} · {new Date(audit.ts).toLocaleString()}
-                  </p>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      ) : null}
     </div>
-  )
+  );
 }
 
 function DetailItem({
@@ -189,15 +254,15 @@ function DetailItem({
   mono,
   wide,
 }: {
-  label: string
-  value: React.ReactNode
-  mono?: boolean
-  wide?: boolean
+  label: string;
+  value: React.ReactNode;
+  mono?: boolean;
+  wide?: boolean;
 }) {
   return (
     <div className={wide ? "sm:col-span-2" : undefined}>
-      <p className="text-xs font-medium uppercase text-muted-foreground">{label}</p>
-      <div className={mono ? "mt-1 font-mono text-xs" : "mt-1"}>{value}</div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <div className={mono ? "font-mono text-xs" : "font-medium"}>{value}</div>
     </div>
-  )
+  );
 }

@@ -25,12 +25,15 @@ enum AppRole {
       this == AppRole.approver ||
       this == AppRole.evaluator;
 
-  /// Flutter is beneficiary-only (PRD persona platform split).
-  bool get isMobileRole => this == AppRole.customer;
+  /// Flutter is beneficiary-class only (PRD persona platform split).
+  /// Dependent uses the same app; the principal link still needs staff approval.
+  bool get isMobileRole =>
+      this == AppRole.customer || this == AppRole.dependent;
 
   String get homeRoute {
     switch (this) {
       case AppRole.customer:
+      case AppRole.dependent:
         return '/customer';
       default:
         // Staff/admin must use web — no mobile home.

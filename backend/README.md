@@ -79,10 +79,11 @@ PhilSys `/api/query`. Nest HTTP pages / nested iframes will fail the camera.
 
 | Path | Flow |
 |------|------|
-| New citizen | SSO → `/onboarding` → Face Liveness → eVerify → home |
-| Returning (eVerified) | SSO → home |
+| Every sign-in | SSO → Face Liveness (human check) → full JWT |
+| New citizen (`needs_everify`) | After JWT → `/onboarding` PhilSys eVerify → home |
+| Returning (eVerified) | SSO → Face Liveness → home |
 
-Dev email/password login skips PhilSys onboarding.
+`POST /auth/dev/login` (tests only) issues a full JWT and skips the liveness gate.
 
 ## Database (domain ERD)
 
@@ -111,11 +112,13 @@ Auth maps to `user_accounts` + `beneficiaries` / `staff_profiles` (+ `roles` / `
 | Method | Path | Purpose |
 |--------|------|---------|
 | `GET` | `/auth/egovph/sso?exchange_code=` | Partner landing → mobile deep link; `?client=web` → `{WEB_APP_URL}/auth/sso` |
-| `POST` | `/auth/sso/exchange` | `{ exchange_code, client_platform }` → JWT + profile |
+| `POST` | `/auth/sso/exchange` | `{ exchange_code, client_platform }` → `pending_login_token` (not a full session) |
+| `POST` | `/auth/liveness/session/login` | Create login liveness from pending token |
+| `POST` | `/auth/login/complete` | Pending token + passed liveness → full JWT |
 | `POST` | `/auth/staff` | JWT (admin) — provision staff account |
 | `GET` | `/auth/staff` | JWT (admin) — list staff accounts |
 | `POST` | `/auth/liveness/session` | JWT — create liveness session |
-| `POST` | `/auth/liveness/session/public` | First-time before full session |
+| `POST` | `/auth/liveness/session/public` | First-time onboarding before PhilSys |
 | `POST` | `/auth/liveness/verify` | JWT — verify result (≥ 95) |
 | `POST` | `/auth/everify/first-time` | JWT — PhilSys verify after liveness |
 | `GET` | `/auth/me` | JWT — current profile |

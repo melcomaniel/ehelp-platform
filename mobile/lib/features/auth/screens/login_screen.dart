@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../../models/app_role.dart';
 import '../../../providers/auth_provider.dart';
+import '../../../services/liveness_service.dart';
 import '../../../theme/app_theme.dart';
+import '../../liveness/screens/face_liveness_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -14,32 +14,6 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final _email = TextEditingController();
-  final _password = TextEditingController();
-  bool _obscure = true;
-
-  @override
-  void dispose() {
-    _email.dispose();
-    _password.dispose();
-    super.dispose();
-  }
-
-  Future<void> _devSignIn() async {
-    final email = _email.text.trim();
-    if (email.isEmpty) return;
-    await ref
-        .read(authControllerProvider.notifier)
-        .signIn(email, _password.text);
-    if (!mounted) return;
-    final err = ref.read(authControllerProvider).error;
-    if (err != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(err.toString())),
-      );
-    }
-  }
-
   Future<void> _sso() async {
     final code = await showDialog<String>(
       context: context,
@@ -52,9 +26,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                'Paste a freshly minted exchange code. In the eGov portal, set '
-                'Partner code to your real value (same as backend EGOV_PARTNER_CODE) — '
-                'not {{partner_code}}.',
+                'Paste beneficiary (or beneficiary2 / dependent) for local '
+                'mobile test accounts. Or paste a live eGov exchange code. '
+                'Next: face liveness check.',
                 style: TextStyle(fontSize: 13, height: 1.35),
               ),
               const SizedBox(height: 12),
@@ -82,12 +56,49 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       },
     );
     if (code == null || code.isEmpty) return;
-    await ref.read(authControllerProvider.notifier).exchangeSso(code);
+
+    final pendingData =
+        await ref.read(authControllerProvider.notifier).exchangeSso(code);
     if (!mounted) return;
     final err = ref.read(authControllerProvider).error;
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(err.toString())),
+      );
+      return;
+    }
+    final pending = pendingData?['pending_login_token'] as String?;
+    if (pending == null || pending.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('SSO did not return a pending login token')),
+      );
+      return;
+    }
+
+    final outcome = await FaceLivenessScreen.open(
+      context,
+      purpose: LivenessPurpose.login,
+      pendingLoginToken: pending,
+      title: 'Sign-in face check',
+      subtitle: 'Confirm you are present — not PhilSys identity match.',
+    );
+    if (!mounted) return;
+    if (outcome == null || !outcome.passed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Face liveness required to finish sign-in')),
+      );
+      return;
+    }
+
+    await ref.read(authControllerProvider.notifier).completeLogin(
+          pendingLoginToken: pending,
+          livenessSessionToken: outcome.sessionToken,
+        );
+    if (!mounted) return;
+    final completeErr = ref.read(authControllerProvider).error;
+    if (completeErr != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(completeErr.toString())),
       );
     }
   }
@@ -117,7 +128,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Citizen auth via eGov SSO · eVerify · Face Liveness',
+                      'eGov SSO · Face Liveness · PhilSys (first time)',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: AppColors.muted, fontSize: 14),
                     ),
@@ -142,7 +153,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                           const SizedBox(height: 6),
                           const Text(
-                            'New and returning citizens use eGov SSO. First-time users then complete Face Liveness + eVerify.',
+                            'Continue with eGov SSO, then a face liveness check. '
+                            'First-time beneficiaries complete PhilSys eVerify after sign-in.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: AppColors.muted,
@@ -152,49 +164,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           const SizedBox(height: 24),
                           FilledButton(
                             onPressed: loading ? null : _sso,
-                            child: const Text('Continue with eGov SSO'),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'No EHELP account yet? SSO creates one, then asks for face + National ID verification.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: AppColors.muted,
-                              fontSize: 12,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          const Divider(),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: _email,
-                            keyboardType: TextInputType.emailAddress,
-                            decoration: const InputDecoration(
-                              labelText: 'Email (dev)',
-                              prefixIcon: Icon(Icons.mail_outline),
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          TextField(
-                            controller: _password,
-                            obscureText: _obscure,
-                            decoration: InputDecoration(
-                              labelText: 'Password (dev)',
-                              prefixIcon: const Icon(Icons.lock_outline),
-                              suffixIcon: IconButton(
-                                onPressed: () =>
-                                    setState(() => _obscure = !_obscure),
-                                icon: Icon(
-                                  _obscure
-                                      ? Icons.visibility_outlined
-                                      : Icons.visibility_off_outlined,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          OutlinedButton(
-                            onPressed: loading ? null : _devSignIn,
                             child: loading
                                 ? const SizedBox(
                                     height: 20,
@@ -203,13 +172,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       strokeWidth: 2,
                                     ),
                                   )
-                                : const Text('Dev sign in'),
+                                : const Text('Continue with eGov SSO'),
                           ),
-                          TextButton(
-                            onPressed: loading
-                                ? null
-                                : () => context.push('/register'),
-                            child: const Text('Create account (dev)'),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'In the app, paste beneficiary, beneficiary2, or '
+                            'dependent as the exchange code (local mock '
+                            'identities). Staff use the web portal with eGov '
+                            'ssoplatform sample accounts.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AppColors.muted,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
@@ -233,99 +208,15 @@ class RegisterScreen extends ConsumerStatefulWidget {
 }
 
 class _RegisterScreenState extends ConsumerState<RegisterScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _name = TextEditingController();
-  final _email = TextEditingController();
-  final _phone = TextEditingController();
-  final _password = TextEditingController();
-
-  @override
-  void dispose() {
-    _name.dispose();
-    _email.dispose();
-    _phone.dispose();
-    _password.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-    await ref.read(authControllerProvider.notifier).signUp(
-          email: _email.text.trim(),
-          password: _password.text,
-          fullName: _name.text.trim(),
-          roleValue: AppRole.customer.value,
-          phone: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
-        );
-    if (!mounted) return;
-    final err = ref.read(authControllerProvider).error;
-    if (err != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(err.toString())),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final loading = ref.watch(authControllerProvider).isLoading;
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Create account (dev)')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              const Text(
-                'Mobile accounts are beneficiaries only. Staff use the web portal.',
-                style: TextStyle(color: Colors.black54),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _name,
-                decoration: const InputDecoration(labelText: 'Full name'),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Required' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Email'),
-                validator: (v) => (v == null || !v.contains('@'))
-                    ? 'Valid email required'
-                    : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _phone,
-                keyboardType: TextInputType.phone,
-                decoration:
-                    const InputDecoration(labelText: 'Phone (optional)'),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _password,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: 'Password'),
-                validator: (v) =>
-                    (v == null || v.length < 6) ? 'Min 6 characters' : null,
-              ),
-              const SizedBox(height: 24),
-              FilledButton(
-                onPressed: loading ? null : _submit,
-                child: loading
-                    ? const SizedBox(
-                        height: 22,
-                        width: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Register'),
-              ),
-            ],
-          ),
+      appBar: AppBar(title: const Text('Create account')),
+      body: const Padding(
+        padding: EdgeInsets.all(24),
+        child: Text(
+          'Self-registration with password is removed. Use eGov SSO on the '
+          'sign-in screen. Nest POST /auth/dev/login remains for automated tests only.',
         ),
       ),
     );

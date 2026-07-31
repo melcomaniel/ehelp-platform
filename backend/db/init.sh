@@ -27,7 +27,15 @@ for f in \
   "${DB_ROOT}/migrations/015_additional_organization_admins.sql" \
   "${DB_ROOT}/migrations/016_office_admin_assignment.sql" \
   "${DB_ROOT}/migrations/017_allow_office_admin_audit_action.sql" \
-  "${DB_ROOT}/migrations/018_office_staff_requests_audit_actions.sql"
+  "${DB_ROOT}/migrations/018_office_staff_requests_audit_actions.sql" \
+  "${DB_ROOT}/migrations/019_workflow_templates.sql" \
+  "${DB_ROOT}/migrations/020_user_login_liveness.sql" \
+  "${DB_ROOT}/migrations/021_profile_change_and_disbursement_slots.sql" \
+  "${DB_ROOT}/migrations/022_program_periods_sites_vault.sql" \
+  "${DB_ROOT}/migrations/023_disbursement_slot_program.sql" \
+  "${DB_ROOT}/migrations/024_disbursement_claim_token.sql" \
+  "${DB_ROOT}/migrations/025_disbursement_claim_liveness.sql" \
+  "${DB_ROOT}/migrations/026_disbursement_claimed_status.sql"
 do
   echo "[ehelp-db]   $(basename "$f")"
   "${PSQL[@]}" -f "$f"
@@ -36,4 +44,5 @@ done
 echo "[ehelp-db] Seeding..."
 "${PSQL[@]}" -f "${DB_ROOT}/seed/001_bootstrap.sql"
 "${PSQL[@]}" -f "${DB_ROOT}/seed/002_staff_accounts.sql"
+"${PSQL[@]}" -f "${DB_ROOT}/seed/003_egov_sso_hackathon_accounts.sql"
 echo "[ehelp-db] Done."

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
+import { resolveMockSsoFixture } from './mock-sso-fixtures';
 import type {
   EgovSsoProfile,
   EgovSsoProvider,
@@ -15,6 +16,9 @@ import type {
 @Injectable()
 export class MockEgovSsoProvider implements EgovSsoProvider {
   async exchangeCode(exchangeCode: string): Promise<EgovSsoProfile> {
+    const fixture = resolveMockSsoFixture(exchangeCode);
+    if (fixture) return fixture;
+
     const suffix = exchangeCode.slice(-6) || 'DEMO01';
     return {
       uniqid: `MOCK-${suffix.toUpperCase()}`,

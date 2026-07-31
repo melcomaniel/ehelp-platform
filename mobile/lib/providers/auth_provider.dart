@@ -47,10 +47,26 @@ class AuthController extends Notifier<AsyncValue<void>> {
     });
   }
 
-  Future<void> exchangeSso(String exchangeCode) async {
+  /// SSO only — returns pending_login_token; does not open a session.
+  Future<Map<String, dynamic>?> exchangeSso(String exchangeCode) async {
+    state = const AsyncValue.loading();
+    Map<String, dynamic>? result;
+    state = await AsyncValue.guard(() async {
+      result = await _auth.exchangeSsoCode(exchangeCode);
+    });
+    return result;
+  }
+
+  Future<void> completeLogin({
+    required String pendingLoginToken,
+    required String livenessSessionToken,
+  }) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
-      await _auth.exchangeSsoCode(exchangeCode);
+      await _auth.completeLogin(
+        pendingLoginToken: pendingLoginToken,
+        livenessSessionToken: livenessSessionToken,
+      );
       ref.invalidate(currentProfileProvider);
     });
   }

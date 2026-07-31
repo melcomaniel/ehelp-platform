@@ -124,6 +124,32 @@ describe('PRD RBAC policy', () => {
     ).toBe(false);
   });
 
+  it('allows office-pool claim when the workflow task is unassigned', () => {
+    expect(
+      decideRbac(evaluator, 'application.endorse', {
+        organizationId: 'org-1',
+        officeId: 'office-1',
+        assignedUserId: null,
+      }),
+    ).toEqual({ allowed: true, scope: 'assigned_task' });
+  });
+
+  it('denies org and office admins case evaluate/approve grants', () => {
+    expect(
+      decideRbac(orgAdmin, 'application.endorse', {
+        organizationId: 'org-1',
+        officeId: 'office-1',
+      }).allowed,
+    ).toBe(false);
+    expect(
+      decideRbac(officeAdmin, 'application.approve', {
+        organizationId: 'org-1',
+        officeId: 'office-1',
+        assignedUserId: 'office-user',
+      }).allowed,
+    ).toBe(false);
+  });
+
   it('enforces evaluator and approver separation of duties', () => {
     expect(
       decideRbac(approver, 'application.approve', {
@@ -136,6 +162,59 @@ describe('PRD RBAC policy', () => {
       allowed: false,
       reason: 'Evaluator and approver must be different users',
     });
+
+    expect(
+      decideRbac(approver, 'application.reject', {
+        organizationId: 'org-1',
+        officeId: 'office-1',
+        assignedUserId: 'approver-user',
+        evaluatedByUserId: 'approver-user',
+      }).allowed,
+    ).toBe(false);
+  });
+
+  it('gives Office Admin relationship approval at office scope', () => {
+    expect(
+      decideRbac(officeAdmin, 'relationship.approve', {
+        organizationId: 'org-1',
+        officeId: 'office-1',
+      }),
+    ).toEqual({ allowed: true, scope: 'office' });
+
+    expect(
+      decideRbac(approver, 'relationship.approve', {
+        organizationId: 'org-1',
+        officeId: 'office-1',
+      }).allowed,
+    ).toBe(false);
+
+    expect(
+      decideRbac(evaluator, 'relationship.validate' as never, {
+        organizationId: 'org-1',
+        officeId: 'office-1',
+      }).allowed,
+    ).toBe(false);
+  });
+
+  it('treats DEPENDENT as beneficiary-class for own-account grants', () => {
+    const dependent: RbacActor = {
+      userId: 'dependent-user',
+      role: 'DEPENDENT',
+      organizationId: null,
+      officeId: null,
+      beneficiaryId: 'beneficiary-1',
+    };
+    expect(
+      decideRbac(dependent, 'application.submit', {
+        beneficiaryId: 'beneficiary-1',
+      }),
+    ).toEqual({ allowed: true, scope: 'own_account' });
+    expect(
+      decideRbac(dependent, 'application.approve', {
+        organizationId: 'org-1',
+        officeId: 'office-1',
+      }).allowed,
+    ).toBe(false);
   });
 
   it('limits beneficiaries to their own account data', () => {

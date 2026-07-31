@@ -128,9 +128,28 @@ class AuthService {
     return Map<String, dynamic>.from(map as Map);
   }
 
+  /// SSO exchange → pending_login_token (no full session until login liveness).
   Future<Map<String, dynamic>> exchangeSsoCode(String exchangeCode) async {
     final data = await _post('/auth/sso/exchange', {
       'exchange_code': exchangeCode,
+    });
+    if (data['pending_login_token'] is! String) {
+      throw Exception('SSO did not return a pending login token');
+    }
+    return data;
+  }
+
+  /// After SSO pending token + passed face liveness → full session JWT.
+  Future<Map<String, dynamic>> completeLogin({
+    required String pendingLoginToken,
+    required String livenessSessionToken,
+    String? deviceFingerprint,
+  }) async {
+    final data = await _post('/auth/login/complete', {
+      'pending_login_token': pendingLoginToken,
+      'liveness_session_token': livenessSessionToken,
+      if (deviceFingerprint != null && deviceFingerprint.isNotEmpty)
+        'device_fingerprint': deviceFingerprint,
     });
     await _persist(
       AppSession(

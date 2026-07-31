@@ -1,8 +1,12 @@
+import 'dart:async';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/utils/pick_document_file.dart';
 import '../../../models/application.dart';
 import '../../../models/profile.dart';
 import '../../../providers/auth_provider.dart';
@@ -11,7 +15,6 @@ import '../../liveness/screens/face_liveness_screen.dart';
 import '../../shared/widgets/app_confirm_dialog.dart';
 import '../../shared/widgets/common_widgets.dart';
 import '../../../services/liveness_service.dart';
-import '../data/program_catalog.dart';
 
 final myApplicationsProvider = FutureProvider.autoDispose<List<Application>>((ref) async {
   final profile = await ref.watch(currentProfileProvider.future);
@@ -19,6 +22,14 @@ final myApplicationsProvider = FutureProvider.autoDispose<List<Application>>((re
   return ref
       .watch(applicationServiceProvider)
       .listMyApplications(profile.id);
+});
+
+/// Nest published programs filtered by age/location for this beneficiary.
+final availableProgramsProvider =
+    FutureProvider.autoDispose<List<ProgramTemplate>>((ref) async {
+  ref.watch(authStateProvider);
+  if (ref.read(authServiceProvider).currentSession == null) return [];
+  return ref.watch(applicationServiceProvider).listTemplates();
 });
 
 final myDependentsProvider = FutureProvider.autoDispose<List<DependentLink>>((ref) async {
@@ -34,6 +45,7 @@ class CustomerHomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(currentProfileProvider);
     final appsAsync = ref.watch(myApplicationsProvider);
+    final programsAsync = ref.watch(availableProgramsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -74,32 +86,98 @@ class CustomerHomeScreen extends ConsumerWidget {
           return RefreshIndicator(
             onRefresh: () async {
               ref.invalidate(myApplicationsProvider);
+              ref.invalidate(availableProgramsProvider);
               ref.invalidate(currentProfileProvider);
             },
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
                 Text(
-                  // Demo: greet the AKAP applicant persona regardless of the
-                  // signed-in profile name.
-                  'Hello, Mario',
+                  profile.fullName.isNotEmpty
+                      ? 'Hello, ${profile.fullName}'
+                      : 'Hello',
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 const SizedBox(height: 6),
+                if (profile.registeredLocationLabel.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.location_on_outlined,
+                        size: 16,
+                        color: AppColors.muted,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          profile.registeredLocationLabel,
+                          style: const TextStyle(
+                            color: AppColors.muted,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                ],
                 const Text(
-                  'Choose a program to apply, or track your existing applications.',
+                  'Programs for your age and location. Pull to refresh.',
                   style: TextStyle(color: AppColors.muted),
                 ),
                 const SizedBox(height: 24),
                 const SectionHeader(title: 'Programs'),
                 const SizedBox(height: 12),
-                ...kPrograms.map(
-                  (p) => _ProgramCard(
-                    program: p,
-                    onTap: () => context.push('/customer/programs/${p.id}'),
+                programsAsync.when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(child: CircularProgressIndicator()),
                   ),
+                  error: (e, _) => Text('$e'),
+                  data: (programs) {
+                    if (programs.isEmpty) {
+                      return const EmptyState(
+                        icon: Icons.folder_off_outlined,
+                        title: 'No matching programs',
+                        subtitle:
+                            'None published for your age/location yet.',
+                      );
+                    }
+                    return Column(
+                      children: programs
+                          .map(
+                            (p) => _NestProgramCard(
+                              program: p,
+                              onTap: () =>
+                                  context.push('/customer/programs/${p.id}'),
+                            ),
+                          )
+                          .toList(),
+                    );
+                  },
                 ),
                 const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _QuickTile(
+                        icon: Icons.notifications_outlined,
+                        label: 'Messages',
+                        onTap: () => context.push('/customer/messages'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _QuickTile(
+                        icon: Icons.event_available_outlined,
+                        label: 'Schedule',
+                        onTap: () => context.push('/customer/schedule'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
@@ -119,6 +197,26 @@ class CustomerHomeScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _QuickTile(
+                        icon: Icons.folder_outlined,
+                        label: 'Documents',
+                        onTap: () => context.push('/customer/documents'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _QuickTile(
+                        icon: Icons.smart_toy_outlined,
+                        label: 'Ask eGov AI',
+                        onTap: () => context.push('/customer/assistant'),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 28),
                 const SectionHeader(title: 'My applications'),
                 const SizedBox(height: 12),
@@ -133,7 +231,7 @@ class CustomerHomeScreen extends ConsumerWidget {
                       return const EmptyState(
                         icon: Icons.description_outlined,
                         title: 'No applications yet',
-                        subtitle: 'Tap Apply to start a new request.',
+                        subtitle: 'Tap a program above to apply.',
                       );
                     }
                     return Column(
@@ -189,14 +287,23 @@ class _QuickTile extends StatelessWidget {
   }
 }
 
-class _ProgramCard extends StatelessWidget {
-  const _ProgramCard({required this.program, required this.onTap});
+class _NestProgramCard extends StatelessWidget {
+  const _NestProgramCard({required this.program, required this.onTap});
 
-  final Program program;
+  final ProgramTemplate program;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final onCooldown = program.isOnCooldown;
+    final subtitle = onCooldown && program.eligibleAgainAt != null
+        ? 'Available again ${DateFormat.yMMMd().format(program.eligibleAgainAt!.toLocal())}'
+        : program.applyBlockReason == 'in_progress'
+            ? (program.applyBlockMessage ?? 'Application already in progress')
+            : program.description?.isNotEmpty == true
+                ? program.description!
+                : 'Cooldown ${program.disbursementCooldownDays} days';
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
@@ -211,28 +318,28 @@ class _ProgramCard extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: program.color.withValues(alpha: 0.12),
+                  color: (onCooldown ? AppColors.clay : AppColors.primary)
+                      .withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(program.icon, color: program.color),
+                child: Icon(
+                  onCooldown
+                      ? Icons.hourglass_top_rounded
+                      : Icons.volunteer_activism_outlined,
+                  color: onCooldown ? AppColors.clay : AppColors.primary,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            program.code,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                            ),
-                          ),
-                        ),
-                      ],
+                    Text(
+                      program.code ?? program.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -245,13 +352,25 @@ class _ProgramCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      program.tagline,
-                      style: const TextStyle(
-                        color: AppColors.muted,
+                      subtitle,
+                      style: TextStyle(
+                        color: onCooldown ? AppColors.clay : AppColors.muted,
                         fontSize: 12,
                         height: 1.3,
+                        fontWeight:
+                            onCooldown ? FontWeight.w600 : FontWeight.w400,
                       ),
                     ),
+                    if (onCooldown && program.cooldownRemainingDays != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        '${program.cooldownRemainingDays} of ${program.disbursementCooldownDays} days left',
+                        style: const TextStyle(
+                          color: AppColors.muted,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -271,9 +390,16 @@ class _ApplicationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final date = app.createdAt != null
-        ? DateFormat.yMMMd().format(app.createdAt!)
-        : '—';
+    final date = app.submittedAt ?? app.createdAt;
+    final dateLabel = date != null ? DateFormat.yMMMd().format(date) : '—';
+    final claim = app.disbursementClaim;
+    String subtitleExtra = dateLabel;
+    if (app.isDisbursementComplete) {
+      final claimed = claim?.claimedAt;
+      subtitleExtra = claimed != null
+          ? 'Claimed ${DateFormat.yMMMd().format(claimed)}'
+          : 'Disbursement completed';
+    }
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
@@ -288,7 +414,7 @@ class _ApplicationCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(app.referenceNo, style: const TextStyle(color: AppColors.muted)),
-              Text(date, style: const TextStyle(color: AppColors.muted)),
+              Text(subtitleExtra, style: const TextStyle(color: AppColors.muted)),
             ],
           ),
         ),
@@ -593,9 +719,10 @@ class DependentsScreen extends ConsumerStatefulWidget {
 
 class _DependentsScreenState extends ConsumerState<DependentsScreen> {
   final _dependentId = TextEditingController();
-  String _relationship = 'child';
-  bool _notarized = false;
+  String _relationship = 'dependent';
   bool _saving = false;
+  PlatformFile? _proofFile;
+  String? _proofUri;
 
   @override
   void dispose() {
@@ -603,28 +730,77 @@ class _DependentsScreenState extends ConsumerState<DependentsScreen> {
     super.dispose();
   }
 
+  Future<void> _pickProof() async {
+    try {
+      final file = await pickDocumentFile();
+      if (file == null) return;
+      if (file.path == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not read the selected file.')),
+        );
+        return;
+      }
+      setState(() {
+        _proofFile = file;
+        _proofUri = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
+      );
+    }
+  }
+
   Future<void> _add() async {
     final profile = await ref.read(currentProfileProvider.future);
     if (profile == null) return;
     final depId = _dependentId.text.trim();
     if (depId.isEmpty) return;
+    if (_proofFile?.path == null && (_proofUri == null || _proofUri!.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Attach a notarized authorization proof file first.'),
+        ),
+      );
+      return;
+    }
 
     setState(() => _saving = true);
     try {
-      await ref.read(applicationServiceProvider).registerDependent(
-            principalId: profile.id,
-            dependentId: depId,
-            relationship: _relationship,
-            isNotarized: _notarized,
-            notes: 'Pending account validation before activation',
-          );
+      final svc = ref.read(applicationServiceProvider);
+      var uri = _proofUri;
+      if (_proofFile?.path != null) {
+        final uploaded = await svc.uploadFile(
+          filePath: _proofFile!.path!,
+          fileName: _proofFile!.name,
+        );
+        uri = uploaded['storage_uri']?.toString();
+        if (uri == null || uri.isEmpty) {
+          throw Exception('Proof upload failed');
+        }
+      }
+      await svc.registerDependent(
+        principalId: profile.id,
+        dependentId: depId,
+        relationship: _relationship,
+        isNotarized: true,
+        proofDocumentType: 'authorization_letter',
+        proofStorageUri: uri,
+        notes: 'Awaiting Office Admin approval of proof documents',
+      );
       ref.invalidate(myDependentsProvider);
       _dependentId.clear();
+      setState(() {
+        _proofFile = null;
+        _proofUri = null;
+      });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Dependent linked. Must be validated before activation.',
+            'Link requested. Office Admin must approve the proof before activation.',
           ),
         ),
       );
@@ -646,40 +822,66 @@ class _DependentsScreenState extends ConsumerState<DependentsScreen> {
         padding: const EdgeInsets.all(20),
         children: [
           const Text(
-            'Register a dependent or guarantor. Access requires a notarized authorization letter and validated account.',
+            'Link another beneficiary (one-to-many or mutual). Proof must be approved by the Office Admin.',
             style: TextStyle(color: AppColors.muted),
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _dependentId,
             decoration: const InputDecoration(
-              labelText: 'Dependent user ID (UUID)',
-              helperText: 'User must already have an EHELP account',
+              labelText: 'Beneficiary user ID (UUID)',
+              helperText: 'Must already have an EHELP beneficiary account',
             ),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             initialValue: _relationship,
+            isExpanded: true,
             decoration: const InputDecoration(labelText: 'Relationship'),
             items: const [
-              DropdownMenuItem(value: 'spouse', child: Text('Spouse')),
+              DropdownMenuItem(value: 'dependent', child: Text('Dependent')),
               DropdownMenuItem(value: 'child', child: Text('Child')),
               DropdownMenuItem(value: 'parent', child: Text('Parent')),
-              DropdownMenuItem(value: 'sibling', child: Text('Sibling')),
               DropdownMenuItem(value: 'guardian', child: Text('Guardian')),
               DropdownMenuItem(value: 'guarantor', child: Text('Guarantor')),
-              DropdownMenuItem(value: 'other', child: Text('Other')),
+              DropdownMenuItem(
+                value: 'authorized_representative',
+                child: Text('Authorized representative'),
+              ),
             ],
             onChanged: (v) => setState(() => _relationship = v ?? _relationship),
           ),
-          SwitchListTile(
-            title: const Text('Notarized authorization letter on file'),
-            value: _notarized,
-            onChanged: (v) => setState(() => _notarized = v),
+          const SizedBox(height: 12),
+          InputDecorator(
+            decoration: const InputDecoration(
+              labelText: 'Proof document',
+              border: OutlineInputBorder(),
+              helperText: 'Notarized authorization letter (PDF/JPG/PNG)',
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _proofFile?.name ?? 'No file selected',
+                  style: TextStyle(
+                    color: _proofFile != null ? AppColors.ink : AppColors.muted,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: _saving ? null : _pickProof,
+                  icon: const Icon(Icons.attach_file, size: 18),
+                  label: Text(
+                    _proofFile != null ? 'Replace file' : 'Attach proof',
+                  ),
+                ),
+              ],
+            ),
           ),
+          const SizedBox(height: 16),
           FilledButton(
             onPressed: _saving ? null : _add,
-            child: const Text('Link dependent'),
+            child: Text(_saving ? 'Submitting…' : 'Request link'),
           ),
           const SizedBox(height: 28),
           const SectionHeader(title: 'Linked people'),
@@ -733,34 +935,107 @@ class CustomerProfileScreen extends ConsumerStatefulWidget {
 class _CustomerProfileScreenState extends ConsumerState<CustomerProfileScreen> {
   final _name = TextEditingController();
   final _phone = TextEditingController();
-  final _idType = TextEditingController();
-  final _idNumber = TextEditingController();
+  final _address = TextEditingController();
+  final _municipality = TextEditingController();
+  final _barangay = TextEditingController();
+  final _description = TextEditingController();
   bool _loading = false;
   bool _seeded = false;
+  bool _requestMode = false;
+  List<Map<String, dynamic>> _requests = [];
+  PlatformFile? _proofFile;
 
   @override
   void dispose() {
     _name.dispose();
     _phone.dispose();
-    _idType.dispose();
-    _idNumber.dispose();
+    _address.dispose();
+    _municipality.dispose();
+    _barangay.dispose();
+    _description.dispose();
     super.dispose();
   }
 
-  Future<void> _save() async {
-    setState(() => _loading = true);
+  Future<void> _loadRequests() async {
     try {
-      await ref.read(authServiceProvider).updateProfile({
-        'full_name': _name.text.trim(),
-        'phone': _phone.text.trim(),
-        'id_type': _idType.text.trim(),
-        'id_number': _idNumber.text.trim(),
-      });
-      ref.invalidate(currentProfileProvider);
+      final rows =
+          await ref.read(applicationServiceProvider).listMyProfileChangeRequests();
+      if (mounted) setState(() => _requests = rows);
+    } catch (_) {}
+  }
+
+  Future<void> _pickProof() async {
+    try {
+      final file = await pickDocumentFile();
+      if (file == null) return;
+      if (file.path == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not read the selected file.')),
+        );
+        return;
+      }
+      setState(() => _proofFile = file);
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile updated')),
+        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
       );
+    }
+  }
+
+  Future<void> _submitRequest() async {
+    final description = _description.text.trim();
+    if (description.length < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Describe why you need the change (at least 10 characters).'),
+        ),
+      );
+      return;
+    }
+    if (_proofFile?.path == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Attach a proof document file first.')),
+      );
+      return;
+    }
+    setState(() => _loading = true);
+    try {
+      final svc = ref.read(applicationServiceProvider);
+      final uploaded = await svc.uploadFile(
+        filePath: _proofFile!.path!,
+        fileName: _proofFile!.name,
+      );
+      final storageUri = uploaded['storage_uri']?.toString();
+      if (storageUri == null || storageUri.isEmpty) {
+        throw Exception('Proof upload failed');
+      }
+      await svc.requestProfileChange(
+        description: description,
+        proposedChanges: {
+          'full_name': _name.text.trim(),
+          'phone': _phone.text.trim(),
+          'address': _address.text.trim(),
+          'municipality': _municipality.text.trim(),
+          'barangay': _barangay.text.trim(),
+        },
+        proofDocumentType: 'identity_proof',
+        proofStorageUri: storageUri,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Request sent to Office Admin for review.'),
+        ),
+      );
+      setState(() {
+        _requestMode = false;
+        _proofFile = null;
+      });
+      _description.clear();
+      await _loadRequests();
+      ref.invalidate(currentProfileProvider);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
@@ -782,35 +1057,142 @@ class _CustomerProfileScreenState extends ConsumerState<CustomerProfileScreen> {
           if (profile != null && !_seeded) {
             _name.text = profile.fullName;
             _phone.text = profile.phone ?? '';
-            _idType.text = profile.idType ?? '';
-            _idNumber.text = profile.idNumber ?? '';
+            _address.text = profile.address ?? '';
+            _municipality.text = profile.municipality ?? '';
+            _barangay.text = profile.barangay ?? '';
             _seeded = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              unawaited(_loadRequests());
+            });
           }
+          final locked = !_requestMode;
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.secondary,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  'Personal details are locked after eGov verification. '
+                  'To change them, request an update with proof — Office Admin must approve.',
+                  style: TextStyle(height: 1.4, fontSize: 13),
+                ),
+              ),
+              const SizedBox(height: 16),
               TextField(
                 controller: _name,
+                readOnly: locked,
                 decoration: const InputDecoration(labelText: 'Full name'),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: _phone,
+                readOnly: locked,
                 decoration: const InputDecoration(labelText: 'Phone'),
               ),
               const SizedBox(height: 12),
               TextField(
-                controller: _idType,
-                decoration: const InputDecoration(
-                  labelText: 'ID type (e.g. PhilSys, Passport)',
-                ),
+                controller: _address,
+                readOnly: locked,
+                decoration: const InputDecoration(labelText: 'Address'),
               ),
               const SizedBox(height: 12),
               TextField(
-                controller: _idNumber,
-                decoration: const InputDecoration(labelText: 'ID number'),
+                controller: _municipality,
+                readOnly: locked,
+                decoration: const InputDecoration(labelText: 'Municipality / City'),
               ),
               const SizedBox(height: 12),
+              TextField(
+                controller: _barangay,
+                readOnly: locked,
+                decoration: const InputDecoration(labelText: 'Barangay'),
+              ),
+              if (_requestMode) ...[
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _description,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Why do you need this change?',
+                    alignLabelWithHint: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Proof document',
+                    border: OutlineInputBorder(),
+                    helperText: 'PhilSys correction slip, barangay cert, etc.',
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _proofFile?.name ?? 'No file selected',
+                        style: TextStyle(
+                          color: _proofFile != null
+                              ? AppColors.ink
+                              : AppColors.muted,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed: _loading ? null : _pickProof,
+                        icon: const Icon(Icons.attach_file, size: 18),
+                        label: Text(
+                          _proofFile != null ? 'Replace file' : 'Attach proof',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: _loading ? null : _submitRequest,
+                  child: Text(_loading ? 'Submitting…' : 'Submit to Office Admin'),
+                ),
+                TextButton(
+                  onPressed: _loading
+                      ? null
+                      : () => setState(() {
+                            _requestMode = false;
+                            _proofFile = null;
+                          }),
+                  child: const Text('Cancel'),
+                ),
+              ] else ...[
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  onPressed: () => setState(() => _requestMode = true),
+                  icon: const Icon(Icons.edit_note),
+                  label: const Text('Request detail change'),
+                ),
+              ],
+              if (_requests.isNotEmpty) ...[
+                const SizedBox(height: 28),
+                Text(
+                  'Change requests',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                ..._requests.map((r) {
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('${r['status']}'.toUpperCase()),
+                    subtitle: Text(
+                      '${r['description'] ?? ''}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: AppColors.muted),
+                    ),
+                  );
+                }),
+              ],
+              const SizedBox(height: 20),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Face scan'),
@@ -857,11 +1239,6 @@ class _CustomerProfileScreenState extends ConsumerState<CustomerProfileScreen> {
                       ? 'Re-verify face'
                       : 'Start face verification',
                 ),
-              ),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: _loading ? null : _save,
-                child: const Text('Save records'),
               ),
             ],
           );

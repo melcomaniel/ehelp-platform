@@ -101,6 +101,7 @@ Color statusColor(String status) {
   switch (status) {
     case 'approved':
     case 'disbursed':
+    case 'claimed':
       return AppColors.forest;
     case 'declined':
     case 'cancelled':

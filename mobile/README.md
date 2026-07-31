@@ -133,13 +133,27 @@ flutter run --dart-define=API_BASE_URL=http://127.0.0.1:3001
 
 | Mode | How to sign in |
 |------|----------------|
-| `mock` | Dev email/password on the login screen, **or** paste any long enough `exchange_code` (mock SSO synthesizes a profile) |
-| `live` | Real eGov SSO → `exchange_code` → Nest `POST /auth/sso/exchange` with `client_platform=mobile` |
+| Fixed mock codes (works even when Nest is `live`) | Paste `beneficiary`, `beneficiary2`, or `dependent` in the app SSO dialog |
+| `mock` (any code) | Any other string still synthesizes a citizen |
+| `live` + real portal | Real eGov `exchange_code` (staff web uses the five `ssoplatform*@yopmail.com` samples) |
 
 | Path | Flow |
 |------|------|
-| New citizen | SSO → onboarding → Face Liveness → eVerify → home |
-| Returning (eVerified) | SSO → home |
+| Every sign-in | SSO → Face Liveness (human check) → full JWT |
+| New citizen (`needs_everify`) | After full session → onboarding PhilSys eVerify → home |
+| Returning (eVerified) | SSO → Face Liveness → home |
+
+### Mobile sample codes (local)
+
+| Paste as `exchange_code` | Email created | Use for |
+|--------------------------|---------------|---------|
+| `beneficiary` | `beneficiary@mock.gov.ph` | Primary citizen |
+| `beneficiary2` | `beneficiary2@mock.gov.ph` | Second citizen / link partner |
+| `dependent` | `dependent@mock.gov.ph` | Second party for dependent relationship |
+
+Prefix optional: `mock:beneficiary`. Nest auto-creates the beneficiary on first mobile SSO; keep the five `ssoplatform*` identities for **web staff only**.
+
+Password / “Dev sign in” is **not** shown in the product UI. Automated tests may call Nest `POST /auth/dev/login` directly.
 
 Supabase is **not** used by the mobile app.
 

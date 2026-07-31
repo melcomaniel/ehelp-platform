@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AuthModule } from '../auth/auth.module';
 import { StaffProfileEntity } from '../users/staff-profile.entity';
 import {
   RoleEntity,
@@ -19,6 +20,7 @@ import { OrganizationService } from './organization.service';
 
 @Module({
   imports: [
+    AuthModule,
     TypeOrmModule.forFeature([
       OrganizationEntity,
       OrganizationInvitationEntity,

@@ -32,6 +32,18 @@ export class OfficeEntity {
   @Column({ type: 'text', default: 'active' })
   status!: string;
 
+  @Column({ type: 'text', nullable: true })
+  address!: string | null;
+
+  @Column({ type: 'double precision', nullable: true })
+  latitude!: number | null;
+
+  @Column({ type: 'double precision', nullable: true })
+  longitude!: number | null;
+
+  @Column({ name: 'map_label', type: 'text', nullable: true })
+  mapLabel!: string | null;
+
   @Column({ name: 'archived_at', type: 'timestamptz', nullable: true })
   archivedAt!: Date | null;
 

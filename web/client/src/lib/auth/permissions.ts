@@ -83,7 +83,7 @@ export const RBAC_MATRIX_ROLE_LABEL: Record<RbacMatrixRole, string> = {
   evaluator: "Evaluator",
 };
 
-/** Fixed capabilities for Organization (DSWD) Admin. */
+/** Fixed capabilities for Organization (DSWD) Admin — oversight only (PRD §4.2). */
 export const DSWD_ADMIN_PERMISSIONS: DbPermission[] = [
   "view_analytics",
   "manage_templates",
@@ -93,39 +93,41 @@ export const DSWD_ADMIN_PERMISSIONS: DbPermission[] = [
   "customize_templates",
   "manage_region_rbac",
   "register_accounts",
-  "submit_recommendations",
-  "act_recommendations",
-  "evaluate_applications",
-  "approve_applications",
-  "release_disbursements",
-  "register_customers",
 ];
 
-/** Fixed capabilities for Platform Admin. */
+/** Fixed capabilities for Platform Admin (PRD §4.1 — no case PII). */
 export const PLATFORM_ADMIN_PERMISSIONS: DbPermission[] = [
   "manage_rbac",
+  "view_audit",
 ];
 
-/** Fixed capabilities for Office (satellite) Admin. */
+/** Fixed capabilities for Office (satellite) Admin — oversight only (PRD §4.3). */
 export const OFFICE_ADMIN_PERMISSIONS: DbPermission[] = [
   "view_analytics",
   "customize_templates",
   "manage_region_rbac",
   "register_accounts",
   "approve_accounts",
+];
+
+/** Evaluator case-work permissions (PRD §4.4). */
+export const EVALUATOR_PERMISSIONS: DbPermission[] = [
   "evaluate_applications",
-  "approve_applications",
   "submit_recommendations",
-  "act_recommendations",
   "register_customers",
 ];
 
-/** Staff console roles — case work only. */
-export const STAFF_CONSOLE_PERMISSIONS: DbPermission[] = [
-  "evaluate_applications",
+/** Approver case-work permissions (PRD §4.5). */
+export const APPROVER_PERMISSIONS: DbPermission[] = [
   "approve_applications",
-  "submit_recommendations",
   "act_recommendations",
+  "release_disbursements",
+];
+
+/** @deprecated Prefer EVALUATOR_PERMISSIONS / APPROVER_PERMISSIONS by role. */
+export const STAFF_CONSOLE_PERMISSIONS: DbPermission[] = [
+  ...EVALUATOR_PERMISSIONS,
+  ...APPROVER_PERMISSIONS,
 ];
 
 export function toUiPermission(db: DbPermission): UiPermission {
@@ -150,8 +152,9 @@ export function permissionsForRole(
     case "satellite_admin":
       return regional.length ? regional : [...OFFICE_ADMIN_PERMISSIONS];
     case "evaluator":
+      return [...EVALUATOR_PERMISSIONS];
     case "approver":
-      return [...STAFF_CONSOLE_PERMISSIONS];
+      return [...APPROVER_PERMISSIONS];
     default:
       return regional;
   }

@@ -26,7 +26,9 @@ describe('OrganizationService listing', () => {
     });
     const dataSource = { query } as unknown as DataSource;
     const organizations = {} as Repository<OrganizationEntity>;
-    const service = new OrganizationService(dataSource, organizations);
+    const service = new OrganizationService(dataSource, organizations, {
+      assertPermission: jest.fn().mockResolvedValue({ allowed: true, scope: 'platform' }),
+    } as never);
     return { service, statements };
   }
 
@@ -93,7 +95,9 @@ describe('OrganizationService listing', () => {
     const organizations = {
       findOne: jest.fn().mockResolvedValue({ id: 'organization-id' }),
     } as unknown as Repository<OrganizationEntity>;
-    const service = new OrganizationService(dataSource, organizations);
+    const service = new OrganizationService(dataSource, organizations, {
+      assertPermission: jest.fn().mockResolvedValue({ allowed: true, scope: 'platform' }),
+    } as never);
 
     await service.listAdmins('actor-id', 'organization-id');
 
@@ -116,7 +120,9 @@ describe('OrganizationService listing', () => {
     const transaction = jest.fn();
     const dataSource = { query, transaction } as unknown as DataSource;
     const organizations = {} as Repository<OrganizationEntity>;
-    const service = new OrganizationService(dataSource, organizations);
+    const service = new OrganizationService(dataSource, organizations, {
+      assertPermission: jest.fn().mockResolvedValue({ allowed: true, scope: 'platform' }),
+    } as never);
 
     await expect(
       service.updateAdmin('actor-id', 'organization-id', 'admin-id', {}),

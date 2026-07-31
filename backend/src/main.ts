@@ -1,16 +1,25 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import { existsSync, mkdirSync } from 'fs';
+import { join } from 'path';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/http-exception.filter';
 import { RequestLoggingInterceptor } from './common/request-logging.interceptor';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['error', 'warn', 'log', 'debug'],
   });
   const config = app.get(ConfigService);
   const boot = new Logger('Bootstrap');
+
+  const uploadsDir = join(process.cwd(), 'uploads');
+  if (!existsSync(uploadsDir)) {
+    mkdirSync(uploadsDir, { recursive: true });
+  }
+  app.useStaticAssets(uploadsDir, { prefix: '/uploads/' });
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -34,6 +43,7 @@ async function bootstrap() {
     .trim()
     .toLowerCase();
   boot.log(`EHELP Core listening on http://0.0.0.0:${port}`);
+  boot.log(`Uploads served at /uploads/ → ${uploadsDir}`);
   boot.log(
     `AUTH_PROVIDER_MODE=${mode}` +
       (mode === 'live'

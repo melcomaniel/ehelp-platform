@@ -109,7 +109,9 @@ function makeService(options?: {
   } as unknown as DataSource;
 
   return {
-    service: new OfficeService(dataSource),
+    service: new OfficeService(dataSource, {
+      assertPermission: jest.fn().mockResolvedValue({ allowed: true, scope: 'organization' }),
+    } as never),
     dataSource,
     savedOffices,
     auditSaves,
@@ -273,7 +275,9 @@ function makeArchiveService(options?: {
   } as unknown as DataSource;
 
   return {
-    service: new OfficeService(dataSource),
+    service: new OfficeService(dataSource, {
+      assertPermission: jest.fn().mockResolvedValue({ allowed: true, scope: 'organization' }),
+    } as never),
     dataSource,
     office,
     officeSaves,
@@ -677,7 +681,9 @@ function makeOfficeAdminService(options?: {
   } as unknown as DataSource;
 
   return {
-    service: new OfficeService(dataSource),
+    service: new OfficeService(dataSource, {
+      assertPermission: jest.fn().mockResolvedValue({ allowed: true, scope: 'organization' }),
+    } as never),
     dataSource,
     manager,
     auditSaves,
@@ -881,7 +887,9 @@ function makeStaffRequestService(options?: {
   } as unknown as DataSource;
 
   return {
-    service: new OfficeService(dataSource),
+    service: new OfficeService(dataSource, {
+      assertPermission: jest.fn().mockResolvedValue({ allowed: true, scope: 'organization' }),
+    } as never),
     dataSource,
     manager,
     auditSaves,
@@ -1072,7 +1080,9 @@ function makeApproveStaffRequestService(options?: {
   } as unknown as DataSource;
 
   return {
-    service: new OfficeService(dataSource),
+    service: new OfficeService(dataSource, {
+      assertPermission: jest.fn().mockResolvedValue({ allowed: true, scope: 'organization' }),
+    } as never),
     dataSource,
     manager,
     auditSaves,

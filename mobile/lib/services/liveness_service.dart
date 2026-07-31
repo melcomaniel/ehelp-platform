@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import 'auth_service.dart';
 
-enum LivenessPurpose { registration, application }
+enum LivenessPurpose { registration, application, login }
 
 class LivenessSession {
   const LivenessSession({
@@ -98,8 +98,33 @@ class LivenessService {
     required LivenessPurpose purpose,
     String? userId,
     String? applicationId,
+    String? pendingLoginToken,
     String callbackUrl = 'ehelp://liveness-callback',
   }) async {
+    if (purpose == LivenessPurpose.login) {
+      final pending = pendingLoginToken?.trim() ?? '';
+      if (pending.isEmpty) {
+        throw Exception('pending_login_token is required for login liveness');
+      }
+      final res = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/auth/liveness/session/login'),
+        headers: const {
+          'Content-Type': 'application/json',
+          'X-Client-Platform': 'mobile',
+        },
+        body: jsonEncode({
+          'pending_login_token': pending,
+          'action': 'close',
+          'callback_url': callbackUrl,
+        }),
+      );
+      final data = jsonDecode(res.body.isEmpty ? '{}' : res.body);
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        throw Exception(data is Map ? (data['message'] ?? res.body) : res.body);
+      }
+      return LivenessSession.fromJson(Map<String, dynamic>.from(data as Map));
+    }
+
     final path = _auth.currentSession == null
         ? '/auth/liveness/session/public'
         : '/auth/liveness/session';

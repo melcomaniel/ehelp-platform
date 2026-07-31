@@ -96,6 +96,8 @@ function makeService(options?: {
     users as never,
     {} as never,
     roleAssignments as never,
+    { assertPermission: jest.fn() } as never,
+    { notifyApplicationApproved: jest.fn() } as never,
   ) as unknown as ArchiveAwareDomainService;
 
   return {

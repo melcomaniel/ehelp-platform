@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { homeRouteForRole, parseAppRole } from "@/lib/auth/types";
-import { getOrCreateDeviceFingerprint } from "@/lib/auth/device";
+const PENDING_KEY = "ehelp_pending_login_token";
 
 export default function WebSsoClient() {
   const router = useRouter();
@@ -22,16 +21,16 @@ export default function WebSsoClient() {
         const res = await fetch("/api/auth/sso", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            exchange_code: code,
-            device_fingerprint: getOrCreateDeviceFingerprint(),
-          }),
+          body: JSON.stringify({ exchange_code: code }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.message || "SSO failed");
+        if (!data.pending_login_token) {
+          throw new Error("SSO did not return a pending login token");
+        }
+        sessionStorage.setItem(PENDING_KEY, data.pending_login_token);
         if (cancelled) return;
-        router.replace(homeRouteForRole(parseAppRole(data.user?.role)));
-        router.refresh();
+        router.replace("/auth/liveness");
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : String(e));
@@ -50,7 +49,7 @@ export default function WebSsoClient() {
         <p className="text-sm text-destructive">{error}</p>
       ) : (
         <p className="text-sm text-muted-foreground">
-          Exchanging your code with the Nest API.
+          Exchanging your code, then face liveness.
         </p>
       )}
     </main>

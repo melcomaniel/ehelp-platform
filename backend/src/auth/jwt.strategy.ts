@@ -12,7 +12,10 @@ export type JwtPayload = {
   sub: string;
   role: string;
   erd_role?: string;
+  erd_roles?: string[];
   email?: string | null;
+  /** Present on short-lived SSO pending tokens only. */
+  purpose?: 'login_pending';
 };
 
 @Injectable()
@@ -29,6 +32,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
+    if (payload.purpose === 'login_pending') {
+      throw new UnauthorizedException(
+        'Complete face liveness before using the app session',
+      );
+    }
     const rows = await this.dataSource.query<
       Array<{
         id: string;

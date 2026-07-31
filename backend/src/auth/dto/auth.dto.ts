@@ -27,11 +27,41 @@ export class SsoExchangeDto {
 
 export class LivenessCreateDto {
   @IsString()
-  purpose!: string; // registration | application
+  purpose!: string; // registration | application | login
 
   @IsOptional()
   @IsUUID()
   user_id?: string;
+
+  @IsOptional()
+  @IsString()
+  callback_url?: string;
+
+  @IsOptional()
+  @IsString()
+  action?: string;
+}
+
+export class LoginCompleteDto {
+  @IsString()
+  @MinLength(10)
+  pending_login_token!: string;
+
+  @IsString()
+  @MinLength(4)
+  liveness_session_token!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  @Matches(/^[A-Za-z0-9._:-]+$/)
+  device_fingerprint?: string;
+}
+
+export class LoginLivenessSessionDto {
+  @IsString()
+  @MinLength(10)
+  pending_login_token!: string;
 
   @IsOptional()
   @IsString()

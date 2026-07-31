@@ -18,6 +18,7 @@ import {
   UserAccountEntity,
   UserRoleAssignmentEntity,
 } from '../users/user.entity';
+import { RbacAccessService } from '../auth/rbac-access.service';
 import {
   CreateOrganizationAdminDto,
   CreateOrganizationDto,
@@ -122,6 +123,7 @@ export class OrganizationService {
     private readonly dataSource: DataSource,
     @InjectRepository(OrganizationEntity)
     private readonly organizations: Repository<OrganizationEntity>,
+    private readonly rbac: RbacAccessService,
   ) {}
 
   async list(actorId: string, query: OrganizationListQueryDto) {
@@ -852,6 +854,8 @@ export class OrganizationService {
     ) {
       throw new ForbiddenException('Invalid Platform Administrator scope');
     }
+    // Connect persona to PRD ROLE_GRANTS (any platform-scoped grant).
+    await this.rbac.assertPermission(actorId, 'audit.view_platform');
     return actor;
   }
 

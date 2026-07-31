@@ -13,15 +13,12 @@ export const DEFAULT_RBAC: Record<Role, Permission[]> = {
     "customize-templates",
     "manage-region-rbac",
     "register-accounts",
-    "submit-recommendations",
-    "view-audit",
+    "approve-accounts",
   ],
   approver: [
-    "view-analytics",
     "approve-applications",
     "release-disbursements",
     "act-recommendations",
-    "submit-recommendations",
   ],
   evaluator: [
     "evaluate-applications",

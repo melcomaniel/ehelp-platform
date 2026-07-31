@@ -4,7 +4,9 @@ export type ErdRoleCode =
   | 'OFFICE_ADMIN'
   | 'EVALUATOR'
   | 'APPROVER'
-  | 'BENEFICIARY';
+  | 'BENEFICIARY'
+  /** Same own-account grants as BENEFICIARY; link requires validate→approve. */
+  | 'DEPENDENT';
 
 export type RbacScope =
   | 'platform'
@@ -52,6 +54,11 @@ export type RbacPermission =
   | 'relationship.validate'
   | 'relationship.request'
   | 'relationship.approve'
+  | 'profile_change.request'
+  | 'profile_change.approve'
+  | 'disbursement_slot.manage'
+  | 'disbursement_slot.book'
+  | 'beneficiary_document.manage'
   | 'application.create'
   | 'application.submit'
   | 'application.view_own'
@@ -127,6 +134,10 @@ const ROLE_GRANTS: Record<ErdRoleCode, RbacGrant[]> = {
     { permission: 'rule_set.manage', scope: 'organization' },
     { permission: 'analytics.view_org', scope: 'organization' },
     { permission: 'audit.view_org', scope: 'organization' },
+    { permission: 'profile_change.approve', scope: 'organization' },
+    { permission: 'disbursement_slot.manage', scope: 'organization' },
+    // Oversight: observe all office cases in the org (read-only via UI).
+    { permission: 'application.view_assigned', scope: 'organization' },
   ],
   OFFICE_ADMIN: [
     { permission: 'program_template.override_allowed_fields', scope: 'office' },
@@ -135,18 +146,26 @@ const ROLE_GRANTS: Record<ErdRoleCode, RbacGrant[]> = {
     { permission: 'account.request_office_staff', scope: 'office' },
     { permission: 'analytics.view_office', scope: 'office' },
     { permission: 'audit.view_office', scope: 'office' },
+    // Beneficiary↔beneficiary links with proof (PRD relationship approval).
+    { permission: 'relationship.approve', scope: 'office' },
+    { permission: 'profile_change.approve', scope: 'office' },
+    { permission: 'disbursement_slot.manage', scope: 'office' },
+    // Cash-window scan: validate unique beneficiary claim QR.
+    { permission: 'disbursement.authorize', scope: 'office' },
+    // Observe office cases including claimed / completed disbursements.
+    { permission: 'application.view_assigned', scope: 'office' },
   ],
   EVALUATOR: [
     { permission: 'beneficiary.register', scope: 'office' },
     { permission: 'beneficiary.verify_identity', scope: 'office' },
-    { permission: 'relationship.validate', scope: 'assigned_task' },
     { permission: 'application.view_assigned', scope: 'assigned_task' },
     { permission: 'application.evaluate', scope: 'assigned_task' },
     { permission: 'application.endorse', scope: 'assigned_task' },
+    // Decline at evaluation (before endorsement) — not the approver decision.
+    { permission: 'application.reject', scope: 'assigned_task' },
     { permission: 'application.flag', scope: 'assigned_task' },
   ],
   APPROVER: [
-    { permission: 'relationship.approve', scope: 'assigned_task' },
     { permission: 'application.view_assigned', scope: 'assigned_task' },
     { permission: 'application.approve', scope: 'assigned_task' },
     { permission: 'application.reject', scope: 'assigned_task' },
@@ -154,12 +173,30 @@ const ROLE_GRANTS: Record<ErdRoleCode, RbacGrant[]> = {
   ],
   BENEFICIARY: [
     { permission: 'relationship.request', scope: 'own_account' },
+    { permission: 'profile_change.request', scope: 'own_account' },
     { permission: 'application.create', scope: 'own_account' },
     { permission: 'application.submit', scope: 'own_account' },
     { permission: 'application.view_own', scope: 'own_account' },
     { permission: 'disbursement_method.select', scope: 'own_account' },
     { permission: 'disbursement.authenticate', scope: 'own_account' },
     { permission: 'disbursement.view_own', scope: 'own_account' },
+    { permission: 'disbursement_slot.book', scope: 'own_account' },
+    { permission: 'beneficiary_document.manage', scope: 'own_account' },
+    { permission: 'notification_preferences.manage', scope: 'own_account' },
+  ],
+  // Dependent is beneficiary-class. Links to other beneficiaries need proof
+  // approved by Office Admin (not Evaluator/Approver case roles).
+  DEPENDENT: [
+    { permission: 'relationship.request', scope: 'own_account' },
+    { permission: 'profile_change.request', scope: 'own_account' },
+    { permission: 'application.create', scope: 'own_account' },
+    { permission: 'application.submit', scope: 'own_account' },
+    { permission: 'application.view_own', scope: 'own_account' },
+    { permission: 'disbursement_method.select', scope: 'own_account' },
+    { permission: 'disbursement.authenticate', scope: 'own_account' },
+    { permission: 'disbursement.view_own', scope: 'own_account' },
+    { permission: 'disbursement_slot.book', scope: 'own_account' },
+    { permission: 'beneficiary_document.manage', scope: 'own_account' },
     { permission: 'notification_preferences.manage', scope: 'own_account' },
   ],
 };
@@ -217,7 +254,9 @@ export function decideRbac(
   if (!grant) return { allowed: false, reason: 'Permission is not granted' };
 
   if (
-    permission === 'application.approve' &&
+    (permission === 'application.approve' ||
+      permission === 'application.reject') &&
+    resource.evaluatedByUserId != null &&
     resource.evaluatedByUserId === actor.userId
   ) {
     return {
@@ -244,14 +283,25 @@ export function decideRbac(
         actor.officeId === resource.officeId
         ? { allowed: true, scope: grant.scope }
         : { allowed: false, reason: 'Resource is outside office scope' };
-    case 'assigned_task':
-      return actor.organizationId &&
-        actor.officeId &&
+    case 'assigned_task': {
+      // Office pool: unassigned tasks are claimable by any in-office actor
+      // with the grant. Once assigned, only that assignee may act.
+      const inOffice =
+        !!actor.organizationId &&
+        !!actor.officeId &&
         actor.organizationId === resource.organizationId &&
-        actor.officeId === resource.officeId &&
-        actor.userId === resource.assignedUserId
-        ? { allowed: true, scope: grant.scope }
-        : { allowed: false, reason: 'Task is not assigned to actor' };
+        actor.officeId === resource.officeId;
+      if (!inOffice) {
+        return { allowed: false, reason: 'Resource is outside office scope' };
+      }
+      if (
+        resource.assignedUserId != null &&
+        resource.assignedUserId !== actor.userId
+      ) {
+        return { allowed: false, reason: 'Task is not assigned to actor' };
+      }
+      return { allowed: true, scope: grant.scope };
+    }
     case 'own_account':
       return actor.beneficiaryId &&
         actor.beneficiaryId === resource.beneficiaryId

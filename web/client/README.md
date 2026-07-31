@@ -108,27 +108,50 @@ Open [http://localhost:3000](http://localhost:3000).
 
 Go to [`/signin`](http://localhost:3000/signin).
 
-### Password (provisioned accounts)
+### Flow (all staff / admin personas)
 
-Works for accounts that already have a password (seeded staff / Admin → Accounts), including when Nest is in `live` mode.
+1. Paste an eGov SSO `exchange_code` (or open `/auth/sso?exchange_code=…` from the partner redirect).
+2. Nest returns a short-lived **`pending_login_token`** — no session cookie yet.
+3. Browser opens `/auth/liveness` → Face Liveness (human presence only; not PhilSys match).
+4. On pass, `POST /api/auth/login/complete` sets the httpOnly Nest cookie and routes by role.
 
-| Email | Password | Lands on |
-|-------|----------|----------|
+With Nest `AUTH_PROVIDER_MODE=mock`, any exchange code works for **provisioned** staff; mock liveness auto-passes but the gate steps stay mandatory.
+
+### Seeded staff (for SSO provisioning / Admin → Accounts)
+
+| Email | Typical password (dev/login tests only) | Lands on |
+|-------|------------------------------------------|----------|
 | `platform@ehelp.local` | `PlatformAdmin123!` | `/admin` |
 | `orgadmin@ehelp.local` | `OrgAdmin123!` | `/admin` |
 | `officeadmin@ehelp.local` | `OfficeAdmin123!` | `/admin` |
 | `evaluator@ehelp.local` | `Evaluator123!` | `/staff` |
 | `approver@ehelp.local` | `Approver123!` | `/staff` |
 
+Password is **not** shown in the product UI. Automated tests may still call Nest `POST /auth/dev/login` (proxied as `POST /api/auth/login`).
+
 ### eGov SSO
 
-1. Admin provisions the staff account first (`/admin/accounts` → Nest `POST /auth/staff`), **or** use a seeded email.
-2. On `/signin`, choose SSO and paste `exchange_code`, **or** partner redirects to Nest:
+1. Admin provisions the staff account first (`/admin/accounts` → Nest `POST /auth/staff`), **or** use a seeded email that matches the SSO profile.
+2. On `/signin`, paste `exchange_code`, **or** partner redirects to Nest:
    `GET /auth/egovph/sso?client=web&exchange_code=…`
-   → `{WEB_APP_URL}/auth/sso?exchange_code=…`
-3. Nest exchanges the code with `client_platform=web` and sets the session cookie.
+   → `{WEB_APP_URL}/auth/sso?exchange_code=…` → `/auth/liveness` → session cookie.
+3. Nest exchanges the code with `client_platform=web` and issues a pending token until liveness completes.
 
 Web SSO **does not** auto-create staff. Missing account → “not provisioned”.
+
+Hackathon eGov sample identities are pre-seeded (`003_egov_sso_hackathon_accounts.sql`):
+
+| Mint test account | Nest role | After liveness |
+|-------------------|-----------|----------------|
+| `ssoplatform@ehelp.local` | Platform Admin | `/admin` |
+| `ssoorgadmin@ehelp.local` | Org Admin | `/admin` |
+| `ssoofficeadmin@ehelp.local` | Office Admin | `/admin` |
+| `ssoevaluator@ehelp.local` | Evaluator | `/staff` |
+| `ssoapprover@ehelp.local` | Approver | `/staff` |
+
+Partner code when minting: **`{{partner_code}}`**. These five are web-only.
+
+Mobile beneficiaries use Nest mock fixture codes (`beneficiary`, `beneficiary2`, `dependent`) — they work while Nest stays on `AUTH_PROVIDER_MODE=live` for ssoplatform staff SSO. See [`mobile/README.md`](../../mobile/README.md).
 
 `/signup` is informational only (no public self-registration).
 
@@ -139,8 +162,9 @@ Web SSO **does not** auto-create staff. Missing account → “not provisioned�
 | Path | Who | Notes |
 |------|-----|--------|
 | `/` | Public | Landing (staff/admin portal + mobile CTA) |
-| `/signin` | Public | Password or SSO |
-| `/auth/sso` | Public | Completes web SSO exchange |
+| `/signin` | Public | SSO only → face liveness |
+| `/auth/sso` | Public | SSO exchange → stores pending token → `/auth/liveness` |
+| `/auth/liveness` | Public | Face liveness gate → session cookie |
 | `/staff` | Evaluator / Approver | Nest case queue via cookie |
 | `/admin` | Admins | Console (role-gated) |
 | `/admin/accounts` | Admins with `register_accounts` | Create Nest staff |
@@ -156,13 +180,15 @@ Browser → Nest goes through Next:
 
 | Next route | Nest |
 |------------|------|
-| `POST /api/auth/login` | `POST /auth/dev/login` + set httpOnly cookie |
-| `POST /api/auth/sso` | `POST /auth/sso/exchange` + cookie |
+| `POST /api/auth/login` | `POST /auth/dev/login` + cookie (tests / tooling only) |
+| `POST /api/auth/sso` | `POST /auth/sso/exchange` → `pending_login_token` (no cookie) |
+| `POST /api/auth/liveness/session` | `POST /auth/liveness/session/login` |
+| `POST /api/auth/login/complete` | `POST /auth/login/complete` + set httpOnly cookie |
 | `GET /api/auth/session` | `GET /auth/me` |
 | `POST /api/auth/logout` | Clear cookie |
 | `/api/nest/*` | Proxies to Nest with `Authorization` from cookie |
 
-Middleware guards `/admin`, `/staff`, `/dashboard` and redirects by role.
+Middleware guards `/admin`, `/staff`, `/dashboard` and redirects by role. Pending login tokens are treated as logged-out.
 
 Organization Management is also authorized by Nest on every request; sidebar
 visibility and Next middleware are not the security boundary. New Organization
@@ -187,7 +213,8 @@ active selectors only while the organization remains active.
 | Symptom | Check |
 |---------|--------|
 | Sign-in fails / “Nest request failed” | Nest up on `:3001`; `NEXT_PUBLIC_API_BASE_URL` in `.env.local`; restart `npm run dev` after env change |
-| Seeded login fails | Postgres seeded (`002_staff_accounts`); email/password exact; Nest restarted |
+| Stuck after SSO | Complete `/auth/liveness`; pending token expires in ~15 minutes |
+| Seeded `dev/login` fails | Postgres seeded (`002_staff_accounts`); email/password exact; Nest restarted |
 | 403 / sent to wrong home | Role platform gate — beneficiaries → mobile; staff → web |
 | Staff SSO “not provisioned” | Create account under Admin → Accounts first |
 | No Nest `[HTTP]` logs | Request never hit Nest (proxy/env); or Nest not running |

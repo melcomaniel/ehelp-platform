@@ -12,8 +12,15 @@ export const ERD_ROLES = {
 
 export type ErdRoleCode = (typeof ERD_ROLES)[keyof typeof ERD_ROLES];
 
-/** Roles allowed on Flutter mobile. */
-export const MOBILE_ERD_ROLES = new Set<string>([ERD_ROLES.BENEFICIARY]);
+/**
+ * Roles allowed on Flutter mobile.
+ * DEPENDENT is beneficiary-class (same app); activation still needs an
+ * approved relationship to a principal.
+ */
+export const MOBILE_ERD_ROLES = new Set<string>([
+  ERD_ROLES.BENEFICIARY,
+  ERD_ROLES.DEPENDENT,
+]);
 
 /** Evaluator / Approver on web staff console. */
 export const WEB_STAFF_ERD_ROLES = new Set<string>([
@@ -38,7 +45,6 @@ export type ClientPlatform = 'mobile' | 'web';
 export function platformForErdRole(erdCode: string): ClientPlatform | 'none' {
   if (MOBILE_ERD_ROLES.has(erdCode)) return 'mobile';
   if (WEB_ERD_ROLES.has(erdCode)) return 'web';
-  // DEPENDENT is not a platform persona — treat as web-denied / mobile-denied
   return 'none';
 }
 

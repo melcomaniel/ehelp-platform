@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AuthModule } from '../auth/auth.module';
 import { BeneficiaryEntity } from '../users/beneficiary.entity';
 import {
   RoleEntity,
@@ -19,6 +20,7 @@ import {
   WorkflowTaskEntity,
 } from './domain.entities';
 import { DomainService } from './domain.service';
+import { OfficeOpsService } from './office-ops.service';
 
 const entities = [
   OfficeEntity,
@@ -37,9 +39,9 @@ const entities = [
 ];
 
 @Module({
-  imports: [TypeOrmModule.forFeature(entities)],
+  imports: [AuthModule, TypeOrmModule.forFeature(entities)],
   controllers: [DomainController],
-  providers: [DomainService],
-  exports: [DomainService],
+  providers: [DomainService, OfficeOpsService],
+  exports: [DomainService, OfficeOpsService],
 })
 export class DomainModule {}

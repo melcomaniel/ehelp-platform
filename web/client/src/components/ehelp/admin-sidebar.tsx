@@ -32,7 +32,6 @@ import {
   LayoutDashboardIcon,
   FolderOpenIcon,
   UserPlusIcon,
-  FileSlidersIcon,
   MegaphoneIcon,
   UsersIcon,
   ShieldCheckIcon,
@@ -43,6 +42,8 @@ import {
   Building2Icon,
   LandmarkIcon,
   HandHeartIcon,
+  UserRoundPenIcon,
+  CalendarClockIcon,
 } from "lucide-react";
 
 interface NavLeaf {
@@ -128,11 +129,22 @@ const NAV: NavEntry[] = [
     needsAny: ["approve-accounts", "register-accounts"],
   },
   {
-    title: "Templates",
-    url: "/admin/templates",
-    icon: <FileSlidersIcon />,
-    adminRoles: ["dswd_admin", "satellite_admin"],
-    needsAny: ["manage-templates", "customize-templates"],
+    title: "Profile changes",
+    url: "/admin/profile-changes",
+    icon: <UserRoundPenIcon />,
+    adminRoles: ["satellite_admin", "dswd_admin"],
+  },
+  {
+    title: "Disbursement slots",
+    url: "/admin/disbursement-slots",
+    icon: <CalendarClockIcon />,
+    adminRoles: ["satellite_admin", "dswd_admin"],
+  },
+  {
+    title: "Validate claim QR",
+    url: "/admin/disbursement-validate",
+    icon: <ShieldCheckIcon />,
+    adminRoles: ["satellite_admin"],
   },
   {
     title: "Programs & Workflows",
@@ -165,7 +177,8 @@ const NAV: NavEntry[] = [
     title: "Audit Log",
     url: "/admin/audit",
     icon: <ScrollTextIcon />,
-    adminRoles: ["dswd_admin"],
+    // Platform: platform-scoped audit; Org: org audit (PRD §§4.1–4.2)
+    adminRoles: ["platform_admin", "dswd_admin"],
     needsAny: ["view-audit"],
   },
 ];

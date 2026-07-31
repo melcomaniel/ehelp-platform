@@ -19,7 +19,7 @@ export default function AuditPage() {
     <>
       <PageHeader
         title="Audit Log"
-        description="Every state change is recorded with actor, action, and detail — newest first"
+        description="Security and configuration events — platform admins see platform-scoped events; organization admins see org-scoped events. Case PII is not exposed here."
       >
         <Input
           value={query}

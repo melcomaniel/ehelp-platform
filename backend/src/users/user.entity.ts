@@ -89,6 +89,9 @@ export class UserAccountEntity {
   /** Resolved ERD role code alongside legacy appRole. */
   erdRoleCode: string = 'BENEFICIARY';
 
+  /** All ERD role codes from user_role_assignments (not a DB column). */
+  erdRoleCodes: string[] = ['BENEFICIARY'];
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

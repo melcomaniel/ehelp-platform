@@ -41,6 +41,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>EHELP needs camera access for Face Liveness verification during registration and each assistance application.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>EHELP needs photo library access so you can attach supporting documents to your profile and applications.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>EHELP may need microphone access during Face Liveness streaming.</string>
 	<key>UIApplicationSceneManifest</key>

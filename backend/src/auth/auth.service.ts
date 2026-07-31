@@ -33,6 +33,10 @@ import {
   WEB_ADMIN_ERD_ROLES,
   type ClientPlatform,
 } from './platform-policy';
+import {
+  isBeneficiaryClassRole,
+  pickPrimaryErdRole,
+} from './rbac-access.service';
 import type {
   EgovSsoProfile,
   EgovSsoProvider,
@@ -44,6 +48,7 @@ import {
   EVERIFY_PROVIDER,
   LIVENESS_PROVIDER,
 } from './providers/tokens';
+import type { JwtPayload } from './jwt.strategy';
 
 const STAFF_CREATABLE_BY: Record<string, AppRole[]> = {
   // Tenant onboarding is atomic through OrganizationService. The generic
@@ -88,15 +93,19 @@ export class AuthService {
   private async resolveAppRole(userId: string): Promise<{
     appRole: AppRole;
     erdCode: string;
+    erdCodes: string[];
   }> {
     const assignments = await this.roleAssignments.find({
       where: { userAccountId: userId },
       relations: ['role'],
-      take: 1,
     });
-    const code = assignments[0]?.role?.code ?? 'BENEFICIARY';
+    const erdCodes = assignments
+      .map((a) => a.role?.code)
+      .filter((c): c is string => Boolean(c));
+    const code = pickPrimaryErdRole(erdCodes);
     return {
       erdCode: code,
+      erdCodes: erdCodes.length ? erdCodes : [code],
       appRole: ERD_ROLE_TO_APP[code] ?? 'customer',
     };
   }
@@ -104,9 +113,10 @@ export class AuthService {
   private async attachRole(
     user: UserAccountEntity,
   ): Promise<UserAccountEntity> {
-    const { appRole, erdCode } = await this.resolveAppRole(user.id);
+    const { appRole, erdCode, erdCodes } = await this.resolveAppRole(user.id);
     user.appRole = appRole;
     user.erdRoleCode = erdCode;
+    user.erdRoleCodes = erdCodes;
     return user;
   }
 
@@ -161,7 +171,12 @@ export class AuthService {
   }
 
   private async findByEmail(email: string) {
-    const user = await this.users.findOne({ where: { email } });
+    const normalized = email.trim().toLowerCase();
+    const user = await this.users
+      .createQueryBuilder('u')
+      .leftJoinAndSelect('u.beneficiary', 'b')
+      .where('LOWER(u.email) = :email', { email: normalized })
+      .getOne();
     return user ? this.attachRole(user) : null;
   }
 
@@ -184,8 +199,11 @@ export class AuthService {
       full_name: fullName,
       role: user.appRole,
       erd_role: user.erdRoleCode,
+      erd_roles: user.erdRoleCodes ?? [user.erdRoleCode],
       account_type: user.accountType,
-      allowed_platform: user.erdRoleCode === 'BENEFICIARY' ? 'mobile' : 'web',
+      allowed_platform: isBeneficiaryClassRole(user.erdRoleCode)
+        ? 'mobile'
+        : 'web',
       region_id: user.officeId,
       office_id: user.officeId,
       organization_id: user.organizationId,
@@ -205,6 +223,8 @@ export class AuthService {
       last_name: b?.lastName ?? null,
       birth_date: b?.dateOfBirth ?? null,
       address: b?.address ?? null,
+      municipality: b?.municipality ?? null,
+      barangay: b?.barangay ?? null,
       needs_everify: Boolean(b?.egovUniqid) && !b?.everifyVerifiedAt,
       everify_verified_at: b?.everifyVerifiedAt?.toISOString() ?? null,
     };
@@ -222,6 +242,7 @@ export class AuthService {
       sub: user.id,
       role: user.appRole,
       erd_role: user.erdRoleCode,
+      erd_roles: user.erdRoleCodes ?? [user.erdRoleCode],
       email: user.email,
       full_name: this.toProfile(user, staff).full_name,
     });
@@ -232,34 +253,86 @@ export class AuthService {
     };
   }
 
+  /** Short-lived token after SSO — must complete face liveness before full session. */
+  private async issuePendingLoginToken(user: UserAccountEntity) {
+    await this.assertActiveContext(user);
+    const pendingLoginToken = await this.jwt.signAsync(
+      {
+        sub: user.id,
+        role: user.appRole,
+        erd_role: user.erdRoleCode,
+        erd_roles: user.erdRoleCodes ?? [user.erdRoleCode],
+        email: user.email,
+        purpose: 'login_pending' as const,
+      },
+      { expiresIn: '15m' },
+    );
+    return {
+      pending_login_token: pendingLoginToken,
+      token_type: 'Bearer',
+      expires_in_seconds: 900,
+      user: {
+        id: user.id,
+        role: user.appRole,
+        erd_role: user.erdRoleCode,
+        email: user.email,
+      },
+      next: 'face_liveness',
+    };
+  }
+
+  /**
+   * Merge SSO identity onto the beneficiary.
+   * When profile_locked, preserve office-approved / local contact fields
+   * (phone, address, etc.) so SSO re-login cannot wipe approved changes.
+   */
   private applySsoProfile(beneficiary: BeneficiaryEntity, p: EgovSsoProfile) {
     beneficiary.egovUniqid = p.uniqid;
-    beneficiary.phone = p.mobile ?? beneficiary.phone;
-    beneficiary.firstName = p.first_name ?? beneficiary.firstName;
-    beneficiary.middleName = p.middle_name ?? beneficiary.middleName;
-    beneficiary.lastName = p.last_name ?? beneficiary.lastName;
-    beneficiary.suffix = p.suffix ?? beneficiary.suffix;
-    beneficiary.dateOfBirth = p.birth_date ?? beneficiary.dateOfBirth;
-    beneficiary.gender = p.gender ?? beneficiary.gender;
-    beneficiary.nationality = p.nationality ?? beneficiary.nationality;
-    beneficiary.photoUrl = p.photo ?? beneficiary.photoUrl;
-    beneficiary.address = p.address ?? beneficiary.address;
-    beneficiary.street = p.street ?? beneficiary.street;
-    beneficiary.barangay = p.barangay ?? beneficiary.barangay;
-    beneficiary.municipality = p.municipality ?? beneficiary.municipality;
-    beneficiary.fullName =
-      [p.first_name, p.middle_name, p.last_name, p.suffix]
-        .filter(Boolean)
-        .join(' ')
-        .trim() || beneficiary.fullName;
+
+    const locked = beneficiary.profileLocked;
+    const merge = (
+      current: string | null | undefined,
+      incoming: string | null | undefined,
+    ): string | null => {
+      const next = incoming?.trim() || null;
+      if (!next) return current ?? null;
+      if (!locked) return next;
+      const cur = current?.trim() || null;
+      // Locked: only fill blanks; never overwrite office-approved values.
+      return cur || next;
+    };
+
+    beneficiary.phone = merge(beneficiary.phone, p.mobile);
+    beneficiary.firstName = merge(beneficiary.firstName, p.first_name);
+    beneficiary.middleName = merge(beneficiary.middleName, p.middle_name);
+    beneficiary.lastName = merge(beneficiary.lastName, p.last_name);
+    beneficiary.suffix = merge(beneficiary.suffix, p.suffix);
+    beneficiary.dateOfBirth = merge(beneficiary.dateOfBirth, p.birth_date);
+    beneficiary.gender = merge(beneficiary.gender, p.gender);
+    beneficiary.nationality = merge(beneficiary.nationality, p.nationality);
+    beneficiary.photoUrl = merge(beneficiary.photoUrl, p.photo);
+    beneficiary.address = merge(beneficiary.address, p.address);
+    beneficiary.street = merge(beneficiary.street, p.street);
+    beneficiary.barangay = merge(beneficiary.barangay, p.barangay);
+    beneficiary.municipality = merge(beneficiary.municipality, p.municipality);
+
+    const ssoName = [p.first_name, p.middle_name, p.last_name, p.suffix]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+    if (ssoName) {
+      beneficiary.fullName = locked
+        ? beneficiary.fullName?.trim() || ssoName
+        : ssoName;
+    }
     beneficiary.profileLocked = true;
   }
 
-  /** eGov SSO: exchange_code → upsert beneficiary (mobile) or link staff (web) → JWT */
+  /** eGov SSO: exchange_code → resolve user → pending_login_token (liveness required). */
   async ssoExchange(
     exchangeCode: string,
     clientPlatform: ClientPlatform = 'mobile',
-    deviceFingerprint?: string,
+    _deviceFingerprint?: string,
   ) {
     const profile = await this.sso.exchangeCode(exchangeCode);
 
@@ -272,6 +345,9 @@ export class AuthService {
     const isNew = !user;
     if (!user) {
       if (clientPlatform === 'web') {
+        this.log.warn(
+          `Web SSO not provisioned uniqid=${profile.uniqid} email=${profile.email ?? '(none)'}`,
+        );
         throw new ForbiddenException({
           message:
             'Staff account not provisioned. Ask an Organization or Office Admin to create your account, then sign in with SSO.',
@@ -300,6 +376,14 @@ export class AuthService {
     if (user.accountType === 'beneficiary' || user.beneficiary) {
       const beneficiary = this.ensureBeneficiary(user);
       this.applySsoProfile(beneficiary, profile);
+      // Local mock SSO fixtures (beneficiary / dependent codes) skip PhilSys —
+      // login face check is enough for mobile MVP testing.
+      if (profile.uniqid?.startsWith('MOCK-') && !beneficiary.everifyVerifiedAt) {
+        beneficiary.everifyVerifiedAt = new Date();
+        beneficiary.validationStatus = 'validated';
+        beneficiary.verificationStatus = 'verified';
+        beneficiary.faceScanVerified = true;
+      }
       if (profile.email) user.email = profile.email;
       await this.beneficiaries.save(beneficiary);
       user = await this.users.save(user);
@@ -325,16 +409,110 @@ export class AuthService {
     user = await this.attachRole(user);
     this.assertClientPlatform(user, clientPlatform);
     await this.assertActiveContext(user);
-    await this.activatePendingOrganizationInvitation(user, deviceFingerprint);
 
-    const tokens = await this.issueTokens(user);
+    const pending = await this.issuePendingLoginToken(user);
     return {
-      ...tokens,
+      ...pending,
       is_new_user: isNew,
       needs_everify:
         Boolean(user.beneficiary?.egovUniqid) &&
         !user.beneficiary?.everifyVerifiedAt,
     };
+  }
+
+  /**
+   * After SSO pending token + passed login liveness → full session JWT.
+   * Human check only — does not run PhilSys eVerify.
+   */
+  async completeLogin(
+    pendingLoginToken: string,
+    livenessSessionToken: string,
+    deviceFingerprint?: string,
+  ) {
+    let payload: JwtPayload;
+    try {
+      payload = await this.jwt.verifyAsync<JwtPayload>(pendingLoginToken);
+    } catch {
+      throw new UnauthorizedException('Invalid or expired pending login token');
+    }
+    if (payload.purpose !== 'login_pending' || !payload.sub) {
+      throw new UnauthorizedException('Pending login token required');
+    }
+
+    const user = await this.findById(payload.sub);
+    if (!user) throw new UnauthorizedException();
+    await this.attachRole(user);
+    await this.assertActiveContext(user);
+
+    const liveness = await this.verifyLiveness(
+      livenessSessionToken,
+      user.id,
+    );
+    // Login is a human-presence gate only. Face Liveness may return SUCCEEDED
+    // with confidence below the PhilSys eVerify threshold (95) — still allow login.
+    const loginPassed =
+      liveness.passed ||
+      String(liveness.status ?? '').toUpperCase() === 'SUCCEEDED';
+    if (!loginPassed) {
+      throw new ForbiddenException({
+        message: 'Face liveness check did not pass',
+        code: 'liveness_required',
+        confidence_score: liveness.confidence_score,
+        threshold: liveness.threshold,
+      });
+    }
+
+    const sessionRow = await this.livenessSessions.findOne({
+      where: { sessionToken: livenessSessionToken },
+    });
+    if (sessionRow) {
+      sessionRow.purpose = 'login';
+      sessionRow.userId = user.id;
+      await this.livenessSessions.save(sessionRow);
+    }
+
+    await this.dataSource.query(
+      `INSERT INTO user_login_liveness (user_account_id, liveness_session_id, verified_at)
+       VALUES ($1, $2, now())`,
+      [user.id, sessionRow?.id ?? null],
+    );
+
+    await this.activatePendingOrganizationInvitation(user, deviceFingerprint);
+    const tokens = await this.issueTokens(user);
+    return {
+      ...tokens,
+      needs_everify:
+        Boolean(user.beneficiary?.egovUniqid) &&
+        !user.beneficiary?.everifyVerifiedAt,
+    };
+  }
+
+  /**
+   * Create a login-purpose liveness session from a pending SSO token
+   * (no full session JWT yet).
+   */
+  async createLoginLivenessSession(input: {
+    pendingLoginToken: string;
+    callbackUrl?: string;
+    action?: string;
+    publicBaseUrl?: string;
+  }) {
+    let payload: JwtPayload;
+    try {
+      payload = await this.jwt.verifyAsync<JwtPayload>(input.pendingLoginToken);
+    } catch {
+      throw new UnauthorizedException('Invalid or expired pending login token');
+    }
+    if (payload.purpose !== 'login_pending' || !payload.sub) {
+      throw new UnauthorizedException('Pending login token required');
+    }
+    return this.createLivenessSession({
+      purpose: 'login',
+      userId: payload.sub,
+      callbackUrl: input.callbackUrl,
+      action: input.action,
+      publicBaseUrl: input.publicBaseUrl,
+    });
   }
 
   async createLivenessSession(input: {
@@ -345,7 +523,9 @@ export class AuthService {
     publicBaseUrl?: string;
   }) {
     const created = await this.liveness.createSession({
-      action: input.action ?? 'close',
+      action:
+        input.action ??
+        (/^https?:\/\//i.test(input.callbackUrl ?? '') ? 'redirect' : 'close'),
       callbackUrl: input.callbackUrl ?? 'ehelp://liveness-callback',
       publicBaseUrl: input.publicBaseUrl,
     });
@@ -562,8 +742,13 @@ export class AuthService {
     beneficiary.lastName = verified.last_name ?? beneficiary.lastName;
     beneficiary.suffix = verified.suffix ?? beneficiary.suffix;
     beneficiary.dateOfBirth = verified.birth_date ?? beneficiary.dateOfBirth;
-    beneficiary.phone = verified.mobile_number ?? beneficiary.phone;
-    beneficiary.address = verified.full_address ?? beneficiary.address;
+    // Do not overwrite office-approved contact when profile is already locked.
+    if (!beneficiary.profileLocked || !beneficiary.phone?.trim()) {
+      beneficiary.phone = verified.mobile_number ?? beneficiary.phone;
+    }
+    if (!beneficiary.profileLocked || !beneficiary.address?.trim()) {
+      beneficiary.address = verified.full_address ?? beneficiary.address;
+    }
     beneficiary.faceScanUrl = verified.face_url ?? beneficiary.faceScanUrl;
     beneficiary.faceScanVerified = true;
     beneficiary.everifyReference = verified.reference ?? null;

@@ -1,15 +1,11 @@
 import { NextResponse } from "next/server";
 
-import {
-  nestApiBase,
-  setNestSessionCookie,
-  type NestAuthResponse,
-} from "@/lib/auth/nest-client";
+import { nestApiBase } from "@/lib/auth/nest-client";
 
+/** SSO exchange → pending_login_token (no session cookie until liveness). */
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const exchangeCode = String(body.exchange_code ?? "").trim();
-  const deviceFingerprint = String(body.device_fingerprint ?? "").trim();
   if (!exchangeCode) {
     return NextResponse.json(
       { message: "exchange_code is required" },
@@ -26,11 +22,13 @@ export async function POST(request: Request) {
     body: JSON.stringify({
       exchange_code: exchangeCode,
       client_platform: "web",
-      device_fingerprint: deviceFingerprint || undefined,
     }),
     cache: "no-store",
   });
-  const data = (await res.json().catch(() => ({}))) as NestAuthResponse & {
+  const data = (await res.json().catch(() => ({}))) as {
+    pending_login_token?: string;
+    user?: unknown;
+    next?: string;
     message?: string | string[];
   };
   if (!res.ok) {
@@ -43,6 +41,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ message }, { status: res.status });
   }
 
-  await setNestSessionCookie(data.access_token);
-  return NextResponse.json({ user: data.user });
+  if (!data.pending_login_token) {
+    return NextResponse.json(
+      { message: "SSO did not return a pending login token" },
+      { status: 502 },
+    );
+  }
+
+  return NextResponse.json({
+    pending_login_token: data.pending_login_token,
+    user: data.user,
+    next: data.next ?? "face_liveness",
+  });
 }

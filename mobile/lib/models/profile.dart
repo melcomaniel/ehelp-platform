@@ -56,6 +56,9 @@ class Profile {
     this.middleName,
     this.lastName,
     this.birthDate,
+    this.address,
+    this.municipality,
+    this.barangay,
   });
 
   final String id;
@@ -78,6 +81,58 @@ class Profile {
   final String? middleName;
   final String? lastName;
   final String? birthDate;
+  final String? address;
+  final String? municipality;
+  final String? barangay;
+
+  /// e.g. "NCR · Caloocan City" for home/profile.
+  String get registeredLocationLabel {
+    final muni = municipality?.trim();
+    final parts = <String>[
+      if (muni != null && muni.isNotEmpty) ...[
+        if (_looksLikeNcr(muni, address)) 'NCR',
+        _titleCase(muni),
+      ] else if (address != null && address!.trim().isNotEmpty)
+        address!.trim(),
+    ];
+    return parts.join(' · ');
+  }
+
+  static bool _looksLikeNcr(String municipality, String? address) {
+    final hay = '$municipality ${address ?? ''}'.toUpperCase();
+    const hints = [
+      'NCR',
+      'CALOOCAN',
+      'QUEZON CITY',
+      'MANILA',
+      'MAKATI',
+      'PASIG',
+      'TAGUIG',
+      'PASAY',
+      'MANDALUYONG',
+      'PARANAQUE',
+      'PARAÑAQUE',
+      'MUNTINLUPA',
+      'LAS PINAS',
+      'LAS PIÑAS',
+      'MARIKINA',
+      'VALENZUELA',
+      'MALABON',
+      'NAVOTAS',
+      'SAN JUAN',
+      'PATEROS',
+    ];
+    return hints.any(hay.contains);
+  }
+
+  static String _titleCase(String value) {
+    return value
+        .toLowerCase()
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .map((w) => '${w[0].toUpperCase()}${w.substring(1)}')
+        .join(' ');
+  }
 
   bool get pinExpired {
     if (pinExpiresAt == null) return true;
@@ -116,6 +171,9 @@ class Profile {
       middleName: json['middle_name'] as String?,
       lastName: json['last_name'] as String?,
       birthDate: json['birth_date'] as String?,
+      address: json['address'] as String?,
+      municipality: json['municipality'] as String?,
+      barangay: json['barangay'] as String?,
     );
   }
 
@@ -140,6 +198,9 @@ class Profile {
     AccountValidationStatus? validationStatus,
     bool? faceScanVerified,
     bool? needsEverify,
+    String? address,
+    String? municipality,
+    String? barangay,
   }) {
     return Profile(
       id: id,
@@ -163,6 +224,9 @@ class Profile {
       middleName: middleName,
       lastName: lastName,
       birthDate: birthDate,
+      address: address ?? this.address,
+      municipality: municipality ?? this.municipality,
+      barangay: barangay ?? this.barangay,
     );
   }
 }

@@ -14,7 +14,9 @@ import {
 import { OrganizationInvitationEntity } from '../organizations/organization.entities';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { JwtPendingStrategy } from './jwt-pending.strategy';
 import { JwtStrategy } from './jwt.strategy';
+import { RbacAccessService } from './rbac-access.service';
 import {
   LiveEgovSsoProvider,
   LiveEverifyProvider,
@@ -31,7 +33,13 @@ import {
   LIVENESS_PROVIDER,
 } from './providers/tokens';
 
-const useLive = process.env.AUTH_PROVIDER_MODE === 'live';
+function isLiveAuth(config: ConfigService): boolean {
+  return (
+    (config.get<string>('AUTH_PROVIDER_MODE') ?? 'mock')
+      .trim()
+      .toLowerCase() === 'live'
+  );
+}
 
 @Module({
   imports: [
@@ -61,20 +69,43 @@ const useLive = process.env.AUTH_PROVIDER_MODE === 'live';
   controllers: [AuthController],
   providers: [
     AuthService,
+    RbacAccessService,
     JwtStrategy,
+    JwtPendingStrategy,
+    LiveEgovSsoProvider,
+    MockEgovSsoProvider,
+    LiveEverifyProvider,
+    MockEverifyProvider,
+    LiveLivenessProvider,
+    MockLivenessProvider,
     {
       provide: EGOV_SSO_PROVIDER,
-      useClass: useLive ? LiveEgovSsoProvider : MockEgovSsoProvider,
+      inject: [ConfigService, LiveEgovSsoProvider, MockEgovSsoProvider],
+      useFactory: (
+        config: ConfigService,
+        live: LiveEgovSsoProvider,
+        mock: MockEgovSsoProvider,
+      ) => (isLiveAuth(config) ? live : mock),
     },
     {
       provide: EVERIFY_PROVIDER,
-      useClass: useLive ? LiveEverifyProvider : MockEverifyProvider,
+      inject: [ConfigService, LiveEverifyProvider, MockEverifyProvider],
+      useFactory: (
+        config: ConfigService,
+        live: LiveEverifyProvider,
+        mock: MockEverifyProvider,
+      ) => (isLiveAuth(config) ? live : mock),
     },
     {
       provide: LIVENESS_PROVIDER,
-      useClass: useLive ? LiveLivenessProvider : MockLivenessProvider,
+      inject: [ConfigService, LiveLivenessProvider, MockLivenessProvider],
+      useFactory: (
+        config: ConfigService,
+        live: LiveLivenessProvider,
+        mock: MockLivenessProvider,
+      ) => (isLiveAuth(config) ? live : mock),
     },
   ],
-  exports: [AuthService],
+  exports: [AuthService, RbacAccessService],
 })
 export class AuthModule {}
