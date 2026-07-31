@@ -5,6 +5,10 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { AppModule } from './app.module';
+import {
+  authAdapterMode,
+  baseAuthProviderMode,
+} from './auth/auth-provider-mode';
 import { AllExceptionsFilter } from './common/http-exception.filter';
 import { RequestLoggingInterceptor } from './common/request-logging.interceptor';
 
@@ -43,10 +47,6 @@ async function bootstrap() {
     Number.isFinite(port) && port >= 0 && port < 65536 ? port : 3001;
   // Bind all interfaces so a physical phone on the same Wi‑Fi can reach the Mac.
   await app.listen(listenPort, '0.0.0.0');
-  const {
-    authAdapterMode,
-    baseAuthProviderMode,
-  } = await import('./auth/auth-provider-mode');
   const base = baseAuthProviderMode(config);
   const sso = authAdapterMode(config, 'AUTH_SSO_MODE');
   const everify = authAdapterMode(config, 'AUTH_EVERIFY_MODE');
