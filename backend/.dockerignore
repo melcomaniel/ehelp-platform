@@ -1,0 +1,15 @@
+node_modules
+dist
+coverage
+uploads
+.env
+.env.*
+!.env.example
+*.md
+.git
+.DS_Store
+test
+**/*.spec.ts
+eslint.config.mjs
+.prettierrc
+.prettierignore
