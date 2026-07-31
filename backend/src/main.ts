@@ -36,13 +36,17 @@ async function bootstrap() {
     origin: origins === '*' ? true : origins.split(','),
   });
 
-  const port = Number(config.get('PORT') ?? 3001);
+  // Prefer process.env.PORT (Render/Fly inject this). Empty/invalid → 3001.
+  const rawPort = process.env.PORT ?? config.get<string>('PORT') ?? '3001';
+  const port = Number.parseInt(String(rawPort).trim(), 10);
+  const listenPort =
+    Number.isFinite(port) && port >= 0 && port < 65536 ? port : 3001;
   // Bind all interfaces so a physical phone on the same Wi‑Fi can reach the Mac.
-  await app.listen(port, '0.0.0.0');
+  await app.listen(listenPort, '0.0.0.0');
   const mode = (config.get<string>('AUTH_PROVIDER_MODE') ?? 'mock')
     .trim()
     .toLowerCase();
-  boot.log(`EHELP Core listening on http://0.0.0.0:${port}`);
+  boot.log(`EHELP Core listening on http://0.0.0.0:${listenPort}`);
   boot.log(`Uploads served at /uploads/ → ${uploadsDir}`);
   boot.log(
     `AUTH_PROVIDER_MODE=${mode}` +
