@@ -76,7 +76,10 @@ export class EreportService {
   ) {}
 
   isLive(): boolean {
-    return Boolean(this.config.get<string>('EREPORT_ACCESS_CODE')?.trim());
+    return Boolean(
+      this.config.get<string>('EREPORT_ACCESS_CODE')?.trim() ||
+        this.config.get<string>('EREPORT_ACCESS_TOKEN')?.trim(),
+    );
   }
 
   status() {
@@ -621,10 +624,6 @@ export class EreportService {
     if (this.tokenCache && this.tokenCache.expiresAtMs > now + 60_000) {
       return this.tokenCache.accessToken;
     }
-    const accessCode = this.config.get<string>('EREPORT_ACCESS_CODE')?.trim();
-    if (!accessCode) {
-      throw new ServiceUnavailableException('EREPORT_ACCESS_CODE is not set');
-    }
     const staticToken = this.config.get<string>('EREPORT_ACCESS_TOKEN')?.trim();
     if (staticToken) {
       this.tokenCache = {
@@ -632,6 +631,12 @@ export class EreportService {
         expiresAtMs: now + 8 * 3600_000,
       };
       return staticToken;
+    }
+    const accessCode = this.config.get<string>('EREPORT_ACCESS_CODE')?.trim();
+    if (!accessCode) {
+      throw new ServiceUnavailableException(
+        'Set EREPORT_ACCESS_TOKEN or EREPORT_ACCESS_CODE',
+      );
     }
     const res = await fetch(`${this.baseUrl()}/api/integration/token`, {
       method: 'POST',
