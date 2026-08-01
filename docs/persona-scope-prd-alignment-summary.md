@@ -82,6 +82,7 @@ Client platform gates (`X-Client-Platform: mobile|web`) remain in Nest `platform
 
 **Can**
 
+- Edit program fields for office ops (`program_template.publish_version` + override) including periods; create/retire catalog stays Org Admin.
 - Customize allowed template fields and local requirements for own office.
 - Assign office staff; request office staff accounts.
 - View office analytics / office audit (policy); register accounts in UI where granted.
@@ -90,16 +91,16 @@ Client platform gates (`X-Client-Platform: mobile|web`) remain in Nest `platform
 **Cannot**
 
 - Evaluate / endorse / approve / reject cases by default admin role.
-- Manage org-wide templates, workflows, or other offices.
+- Create/retire org catalog templates, manage workflows for other offices, or act across offices.
 - Enter `/staff` without Evaluator/Approver assignment.
 
 **Current enforcement**
 
 | Layer | Pointer |
 | --- | --- |
-| Policy | `OFFICE_ADMIN` grants — oversight / envelope only |
-| Domain | Same as org admin: recommend/decide require EVALUATOR/APPROVER |
-| Web perms | `OFFICE_ADMIN_PERMISSIONS` without case-acting permissions |
+| Policy | `OFFICE_ADMIN` grants — office oversight + program publish/override |
+| Domain | Same as org admin: recommend/decide require EVALUATOR/APPROVER; queue uses office scope |
+| Web perms | `OFFICE_ADMIN_PERMISSIONS` includes `manage_templates` (no case-acting) |
 | Nav | Recommendations hidden when `submit-` / `act-recommendations` absent |
 
 ---

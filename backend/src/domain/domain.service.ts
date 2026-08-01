@@ -1224,15 +1224,21 @@ export class DomainService {
 
   async listQueue(actorUserId: string, statuses?: string[]) {
     const actor = await this.requireUser(actorUserId);
-    await this.rbac.assertPermission(actorUserId, 'application.view_assigned', {
-      organizationId: actor.organizationId,
-      officeId: actor.officeId,
-      assignedUserId: null,
-    });
+    const scopedOfficeId =
+      (await this.rbac.primaryOfficeId(actorUserId)) ?? actor.officeId;
+    const access = await this.rbac.assertPermission(
+      actorUserId,
+      'application.view_assigned',
+      {
+        organizationId: actor.organizationId,
+        officeId: scopedOfficeId,
+        assignedUserId: null,
+      },
+    );
     const erdStatuses = (statuses ?? []).map((s) => FROM_CLIENT_STATUS[s] ?? s);
     const qb = this.applications.createQueryBuilder('a');
-    if (actor.officeId) {
-      qb.andWhere('a.office_id = :officeId', { officeId: actor.officeId });
+    if (access.allowed && access.scope === 'office' && scopedOfficeId) {
+      qb.andWhere('a.office_id = :officeId', { officeId: scopedOfficeId });
     } else if (actor.organizationId) {
       qb.andWhere('a.organization_id = :orgId', {
         orgId: actor.organizationId,
@@ -2234,14 +2240,26 @@ export class DomainService {
         { organizationId: actor.organizationId },
       );
       if (!canCreate) {
-        await this.rbac.assertPermission(
+        const officeId =
+          (await this.rbac.primaryOfficeId(actorUserId)) ?? actor.officeId;
+        const canEdit = await this.rbac.hasPermission(
           actorUserId,
-          'program_template.override_allowed_fields',
+          'program_template.publish_version',
           {
             organizationId: actor.organizationId,
-            officeId: actor.officeId,
+            officeId,
           },
         );
+        if (!canEdit) {
+          await this.rbac.assertPermission(
+            actorUserId,
+            'program_template.override_allowed_fields',
+            {
+              organizationId: actor.organizationId,
+              officeId,
+            },
+          );
+        }
       }
     }
     if (input.name?.trim()) template.name = input.name.trim();

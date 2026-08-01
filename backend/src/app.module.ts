@@ -21,6 +21,7 @@ import { OrganizationModule } from './organizations/organization.module';
 import { OfficeModule } from './offices/office.module';
 import { RbacModule } from './rbac/rbac.module';
 import { EgovAiModule } from './egov-ai/egov-ai.module';
+import { EreportModule } from './ereport/ereport.module';
 import {
   AuditLogEntity,
   OrganizationEntity,
@@ -74,6 +75,7 @@ import {
     OfficeModule,
     RbacModule,
     EgovAiModule,
+    EreportModule,
   ],
 })
 export class AppModule {}

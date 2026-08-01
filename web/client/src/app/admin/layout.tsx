@@ -32,6 +32,7 @@ const SECTION_TITLE: { prefix: string; label: string }[] = [
   { prefix: "/admin/programs/new", label: "Create Program" },
   { prefix: "/admin/programs", label: "Programs" },
   { prefix: "/admin/applications", label: "Applications" },
+  { prefix: "/admin/appeals", label: "Appeals (eReport)" },
   { prefix: "/admin/registrations", label: "Registrations" },
   { prefix: "/admin/profile-changes", label: "Profile changes" },
   { prefix: "/admin/disbursement-slots", label: "Disbursement slots" },

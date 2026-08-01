@@ -94,6 +94,25 @@ export class RbacAccessService {
     return [...new Set(actors.map((a) => a.role))];
   }
 
+  /**
+   * Prefer office-scoped role assignment office_id, then user_accounts.office_id.
+   * Keeps Applications / program edits working when account vs assignment diverge.
+   */
+  async primaryOfficeId(userId: string): Promise<string | null> {
+    const actors = await this.loadActors(userId);
+    const preferred: ErdRoleCode[] = [
+      'OFFICE_ADMIN',
+      'EVALUATOR',
+      'APPROVER',
+      'ORG_ADMIN',
+    ];
+    for (const role of preferred) {
+      const hit = actors.find((a) => a.role === role && a.officeId);
+      if (hit?.officeId) return hit.officeId;
+    }
+    return actors.find((a) => a.officeId)?.officeId ?? null;
+  }
+
   async assertPermission(
     userId: string,
     permission: RbacPermission,

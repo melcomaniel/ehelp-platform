@@ -101,13 +101,15 @@ export const PLATFORM_ADMIN_PERMISSIONS: DbPermission[] = [
   "view_audit",
 ];
 
-/** Fixed capabilities for Office (satellite) Admin — oversight only (PRD §4.3). */
+/** Fixed capabilities for Office (satellite) Admin — office oversight + program edit. */
 export const OFFICE_ADMIN_PERMISSIONS: DbPermission[] = [
   "view_analytics",
+  "manage_templates",
   "customize_templates",
   "manage_region_rbac",
   "register_accounts",
   "approve_accounts",
+  "view_audit",
 ];
 
 /** Evaluator case-work permissions (PRD §4.4). */

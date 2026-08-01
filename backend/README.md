@@ -92,8 +92,8 @@ Local Postgres schema is the **domain ERD** under `backend/db/migrations/`, appl
 | Path | Purpose |
 |------|---------|
 | `backend/db/migrations/*.sql` | Ordered DDL (org → identity → programs → applications → disbursement → platform) |
-| `backend/db/seed/001_bootstrap.sql` | DSWD org, central office, role catalog (auth only — no program seed) |
-| `backend/db/seed/002_staff_accounts.sql` | Demo web staff (platform / org / office / evaluator / approver) |
+| `backend/db/seed/001_bootstrap.sql` | DSWD org, Central + NCR Field offices, role catalog |
+| `backend/db/seed/002_staff_accounts.sql` | Demo web staff aligned to that hierarchy |
 | `backend/db/init.sh` | Orchestrator mounted into `/docker-entrypoint-initdb.d` |
 
 **Reset schema (wipes all local data):**

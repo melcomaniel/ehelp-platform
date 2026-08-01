@@ -10,10 +10,12 @@ export const DEFAULT_RBAC: Record<Role, Permission[]> = {
   ],
   "satellite-admin": [
     "view-analytics",
+    "manage-templates",
     "customize-templates",
     "manage-region-rbac",
     "register-accounts",
     "approve-accounts",
+    "view-audit",
   ],
   approver: [
     "approve-applications",

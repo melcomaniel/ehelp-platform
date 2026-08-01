@@ -217,6 +217,20 @@ class CustomerHomeScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _QuickTile(
+                        icon: Icons.report_problem_outlined,
+                        label: 'Report a problem',
+                        onTap: () => context.push('/customer/report'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(child: SizedBox()),
+                  ],
+                ),
                 const SizedBox(height: 28),
                 const SectionHeader(title: 'My applications'),
                 const SizedBox(height: 12),

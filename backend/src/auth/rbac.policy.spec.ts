@@ -99,11 +99,35 @@ describe('PRD RBAC policy', () => {
     ).toEqual({ allowed: true, scope: 'office' });
 
     expect(
+      decideRbac(officeAdmin, 'program_template.publish_version', {
+        organizationId: 'org-1',
+        officeId: 'office-1',
+      }),
+    ).toEqual({ allowed: true, scope: 'office' });
+
+    expect(
       decideRbac(officeAdmin, 'program_template.override_allowed_fields', {
         organizationId: 'org-1',
         officeId: 'office-2',
       }).allowed,
     ).toBe(false);
+  });
+
+  it('treats omitted resource.officeId as the actor office for office scope', () => {
+    expect(
+      decideRbac(officeAdmin, 'application.view_assigned', {
+        organizationId: 'org-1',
+        assignedUserId: null,
+      }),
+    ).toEqual({ allowed: true, scope: 'office' });
+
+    expect(
+      decideRbac(officeAdmin, 'application.view_assigned', {
+        organizationId: 'org-1',
+        officeId: null,
+        assignedUserId: null,
+      }),
+    ).toEqual({ allowed: true, scope: 'office' });
   });
 
   it('requires assigned workflow tasks for evaluators and approvers', () => {

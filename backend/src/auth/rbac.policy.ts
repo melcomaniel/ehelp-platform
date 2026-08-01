@@ -140,6 +140,12 @@ const ROLE_GRANTS: Record<ErdRoleCode, RbacGrant[]> = {
     { permission: 'application.view_assigned', scope: 'organization' },
   ],
   OFFICE_ADMIN: [
+    // Edit published program fields (periods, eligibility) for own office ops.
+    // Create/retire of org catalog stays with Org Admin.
+    {
+      permission: 'program_template.publish_version',
+      scope: 'office',
+    },
     { permission: 'program_template.override_allowed_fields', scope: 'office' },
     { permission: 'local_requirement.add', scope: 'office' },
     { permission: 'office_staff.assign', scope: 'office' },
@@ -276,21 +282,26 @@ export function decideRbac(
         actor.organizationId === resource.organizationId
         ? { allowed: true, scope: grant.scope }
         : { allowed: false, reason: 'Resource is outside organization scope' };
-    case 'office':
+    case 'office': {
+      // Oversight calls often omit resource.officeId — treat as actor's own office.
+      // Explicit officeId on the resource must still match.
+      const resourceOfficeId = resource.officeId ?? actor.officeId;
       return actor.organizationId &&
         actor.officeId &&
         actor.organizationId === resource.organizationId &&
-        actor.officeId === resource.officeId
+        actor.officeId === resourceOfficeId
         ? { allowed: true, scope: grant.scope }
         : { allowed: false, reason: 'Resource is outside office scope' };
+    }
     case 'assigned_task': {
       // Office pool: unassigned tasks are claimable by any in-office actor
       // with the grant. Once assigned, only that assignee may act.
+      const resourceOfficeId = resource.officeId ?? actor.officeId;
       const inOffice =
         !!actor.organizationId &&
         !!actor.officeId &&
         actor.organizationId === resource.organizationId &&
-        actor.officeId === resource.officeId;
+        actor.officeId === resourceOfficeId;
       if (!inOffice) {
         return { allowed: false, reason: 'Resource is outside office scope' };
       }

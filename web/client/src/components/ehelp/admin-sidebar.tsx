@@ -122,6 +122,12 @@ const NAV: NavEntry[] = [
     adminRoles: ["dswd_admin", "satellite_admin"],
   },
   {
+    title: "Appeals (eReport)",
+    url: "/admin/appeals",
+    icon: <MegaphoneIcon />,
+    adminRoles: ["dswd_admin"],
+  },
+  {
     title: "Registrations",
     url: "/admin/registrations",
     icon: <UserPlusIcon />,
