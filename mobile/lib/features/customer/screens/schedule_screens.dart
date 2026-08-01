@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../models/application.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../theme/app_theme.dart';
+import 'customer_screens.dart' show unreadMessagesCountProvider;
 
 /// In-app messages (approval → schedule disbursement, profile change outcomes).
 class CustomerNotificationsScreen extends ConsumerStatefulWidget {
@@ -22,6 +23,7 @@ class _CustomerNotificationsScreenState
   List<Map<String, dynamic>> _items = [];
   bool _loading = true;
   String? _error;
+  final Set<String> _expandedIds = {};
 
   @override
   void initState() {
@@ -42,6 +44,7 @@ class _CustomerNotificationsScreenState
         _items = items;
         _loading = false;
       });
+      ref.invalidate(unreadMessagesCountProvider);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -51,11 +54,35 @@ class _CustomerNotificationsScreenState
     }
   }
 
+  Future<void> _onExpansionChanged(
+    Map<String, dynamic> n,
+    bool expanded,
+  ) async {
+    final id = n['id']?.toString();
+    if (id == null) return;
+    setState(() {
+      if (expanded) {
+        _expandedIds.add(id);
+      } else {
+        _expandedIds.remove(id);
+      }
+    });
+    // First collapse of an unread message marks it read.
+    final unread = n['read_at'] == null;
+    if (!expanded && unread) {
+      await ref.read(applicationServiceProvider).markNotificationRead(id);
+      await _load();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final unreadCount = _items.where((n) => n['read_at'] == null).length;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Messages'),
+        title: Text(
+          unreadCount > 0 ? 'Messages ($unreadCount)' : 'Messages',
+        ),
         actions: [
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
         ],
@@ -77,75 +104,119 @@ class _CustomerNotificationsScreenState
                       separatorBuilder: (_, __) => const SizedBox(height: 8),
                       itemBuilder: (context, i) {
                         final n = _items[i];
+                        final id = n['id']?.toString() ?? '$i';
                         final unread = n['read_at'] == null;
-                        final payload =
-                            Map<String, dynamic>.from(n['payload'] as Map? ?? {});
+                        final payload = Map<String, dynamic>.from(
+                          n['payload'] as Map? ?? {},
+                        );
                         final action = payload['action'] as String?;
                         final created = n['created_at'] != null
                             ? DateTime.tryParse(n['created_at'].toString())
                             : null;
+                        final title = n['title']?.toString() ?? 'Message';
+                        final body = n['body']?.toString() ?? '';
+                        final expanded = _expandedIds.contains(id);
+
                         return Card(
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.all(16),
+                          child: ExpansionTile(
+                            key: PageStorageKey('msg-$id'),
+                            initiallyExpanded: expanded,
+                            onExpansionChanged: (v) =>
+                                _onExpansionChanged(n, v),
+                            tilePadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 4,
+                            ),
+                            childrenPadding: const EdgeInsets.fromLTRB(
+                              16,
+                              0,
+                              16,
+                              16,
+                            ),
+                            leading: unread
+                                ? Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: const BoxDecoration(
+                                      color: AppColors.danger,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  )
+                                : const SizedBox(width: 10),
                             title: Text(
-                              n['title']?.toString() ?? 'Message',
+                              title,
                               style: TextStyle(
-                                fontWeight:
-                                    unread ? FontWeight.w700 : FontWeight.w500,
+                                fontWeight: unread
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
                               ),
                             ),
-                            subtitle: Padding(
-                              padding: const EdgeInsets.only(top: 6),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    n['body']?.toString() ?? '',
-                                    style: const TextStyle(
-                                      color: AppColors.muted,
-                                      height: 1.35,
+                            subtitle: Text(
+                              expanded
+                                  ? (created != null
+                                      ? DateFormat.yMMMd()
+                                          .add_jm()
+                                          .format(created)
+                                      : '')
+                                  : (body.length > 72
+                                      ? '${body.substring(0, 72).trimRight()}…'
+                                      : body),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.muted,
+                                fontSize: 12,
+                              ),
+                            ),
+                            children: [
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  body,
+                                  style: const TextStyle(
+                                    color: AppColors.muted,
+                                    height: 1.35,
+                                  ),
+                                ),
+                              ),
+                              if (created != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      DateFormat.yMMMd()
+                                          .add_jm()
+                                          .format(created),
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.muted,
+                                      ),
                                     ),
                                   ),
-                                  if (created != null)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 6),
-                                      child: Text(
-                                        DateFormat.yMMMd().add_jm().format(created),
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: AppColors.muted,
-                                        ),
+                                ),
+                              if (action == 'schedule_disbursement')
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 12),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: FilledButton(
+                                      onPressed: () async {
+                                        if (unread) {
+                                          await ref
+                                              .read(applicationServiceProvider)
+                                              .markNotificationRead(id);
+                                        }
+                                        if (!context.mounted) return;
+                                        context.push('/customer/schedule');
+                                      },
+                                      child: const Text(
+                                        'Schedule disbursement',
                                       ),
                                     ),
-                                  if (action == 'schedule_disbursement')
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 10),
-                                      child: FilledButton(
-                                        onPressed: () async {
-                                          final id = n['id']?.toString();
-                                          if (id != null) {
-                                            await ref
-                                                .read(applicationServiceProvider)
-                                                .markNotificationRead(id);
-                                          }
-                                          if (!context.mounted) return;
-                                          context.push('/customer/schedule');
-                                        },
-                                        child: const Text('Schedule disbursement'),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                            onTap: () async {
-                              final id = n['id']?.toString();
-                              if (id != null && unread) {
-                                await ref
-                                    .read(applicationServiceProvider)
-                                    .markNotificationRead(id);
-                                await _load();
-                              }
-                            },
+                                  ),
+                                ),
+                            ],
                           ),
                         );
                       },

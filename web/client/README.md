@@ -117,6 +117,8 @@ Go to [`/signin`](http://localhost:3000/signin).
 
 With Nest `AUTH_PROVIDER_MODE=mock`, any exchange code works for **provisioned** staff; mock liveness auto-passes but the gate steps stay mandatory.
 
+**Hybrid (fixture codes + real camera):** keep `AUTH_SSO_MODE=mock` and set `AUTH_LIVENESS_MODE=live` in Nest `.env`, then restart the API.
+
 ### Seeded staff (for SSO provisioning / Admin → Accounts)
 
 | Email | Typical password (dev/login tests only) | Lands on |
@@ -174,6 +176,9 @@ Mobile beneficiaries use Nest mock fixture codes (`beneficiary`, `beneficiary2`,
 | `/admin/offices` | Organization Admin only | Search, filter, and manage offices in the admin's organization |
 | `/admin/offices/new` | Organization Admin only | Create an office under the admin's organization |
 | `/admin/offices/:id` | Organization Admin only | Office details, edit, hierarchy, archive, reactivation, and audit history |
+| `/admin/disbursement-slots` | Org / Office Admin | Create / manage claim queue slots (≥ 2-day lead) |
+| `/admin/disbursement-validate` | Office Admin | Validate claim QR + claimant face liveness |
+| `/admin/appeals` | Organization Admin only | Read-only eReport grievance ledger |
 | `/get-app` | Beneficiaries | Mobile app CTA |
 
 Browser → Nest goes through Next:
@@ -226,3 +231,4 @@ active selectors only while the organization remains active.
 
 - Mobile (beneficiaries): [`mobile/README.md`](../../mobile/README.md)
 - Nest API: [`backend/README.md`](../../backend/README.md)
+- Operator manual: [`docs/manual/ehelp-system-manual.md`](../../docs/manual/ehelp-system-manual.md)

@@ -342,23 +342,33 @@ export class EreportService {
     let searchClause = '';
     if (q) {
       params.push(`%${q}%`);
-      searchClause = ` AND (case_number ILIKE $2 OR subject ILIKE $2 OR message ILIKE $2)`;
+      searchClause =
+        ` AND (c.case_number ILIKE $2 OR c.subject ILIKE $2 OR c.message ILIKE $2)`;
     }
     params.push(limit, (page - 1) * limit);
     const limitIdx = params.length - 1;
     const offsetIdx = params.length;
     const rows = await this.dataSource.query(
-      `SELECT case_number, category_code, report_type, subject, message,
-              region_code, municipality_code, upstream_mode, created_at, details
-       FROM ereport_cases
-       WHERE region_code = $1${searchClause}
-       ORDER BY created_at DESC
+      `SELECT c.case_number, c.category_code, c.report_type, c.subject, c.message,
+              c.region_code, c.municipality_code, c.upstream_mode, c.created_at, c.details,
+              COALESCE(b.first_name, split_part(COALESCE(b.full_name, ''), ' ', 1)) AS first_name,
+              COALESCE(
+                b.last_name,
+                NULLIF(regexp_replace(COALESCE(b.full_name, ''), '^\\S+\\s*', ''), '')
+              ) AS last_name,
+              b.full_name AS beneficiary_full_name,
+              u.email AS complainant_email
+       FROM ereport_cases c
+       LEFT JOIN beneficiaries b ON b.id = c.beneficiary_id
+       LEFT JOIN user_accounts u ON u.id = c.user_account_id
+       WHERE c.region_code = $1${searchClause}
+       ORDER BY c.created_at DESC
        LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
       params,
     );
     const countRows = await this.dataSource.query<Array<{ n: string }>>(
-      `SELECT COUNT(*)::text AS n FROM ereport_cases
-       WHERE region_code = $1${searchClause}`,
+      `SELECT COUNT(*)::text AS n FROM ereport_cases c
+       WHERE c.region_code = $1${searchClause}`,
       params.slice(0, q ? 2 : 1),
     );
     const total = Number(countRows[0]?.n ?? 0);
@@ -371,22 +381,36 @@ export class EreportService {
         current_page: page,
         total_pages: Math.max(1, Math.ceil(total / limit)),
       },
-      data: rows.map((r: Record<string, unknown>) => ({
-        type: 'reports',
-        id: r.case_number,
-        attributes: {
-          case_number: r.case_number,
-          report_type: {
-            code: r.report_type,
-            name: r.category_code,
+      data: rows.map((r: Record<string, unknown>) => {
+        const full = String(r.beneficiary_full_name ?? '').trim();
+        const first =
+          String(r.first_name ?? '').trim() ||
+          (full ? full.split(/\s+/)[0] : '');
+        const last =
+          String(r.last_name ?? '').trim() ||
+          (full ? full.split(/\s+/).slice(1).join(' ') : '');
+        return {
+          type: 'reports',
+          id: r.case_number,
+          attributes: {
+            case_number: r.case_number,
+            report_type: {
+              code: r.report_type,
+              name: r.category_code,
+            },
+            subject: r.subject,
+            message: r.message,
+            region_code: r.region_code,
+            created_at: r.created_at,
+            mode: r.upstream_mode,
+            complainant: {
+              first_name: first || 'Citizen',
+              last_name: last || '',
+              email: r.complainant_email ?? null,
+            },
           },
-          subject: r.subject,
-          message: r.message,
-          region_code: r.region_code,
-          created_at: r.created_at,
-          mode: r.upstream_mode,
-        },
-      })),
+        };
+      }),
     };
   }
 

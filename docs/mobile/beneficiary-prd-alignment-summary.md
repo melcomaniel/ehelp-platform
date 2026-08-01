@@ -53,7 +53,7 @@ The Beneficiary is the citizen applying for assistance. Their access is self-ser
 - Influence or bypass Rule Engine eligibility evaluation.
 - Convert an AI recommendation into an automatic approval.
 - Exceed the three-active-relationship limit.
-- Activate a relationship without Evaluator validation and Approver approval.
+- Activate a relationship without **Office Admin** proof review and approval.
 - Self-recover a lost account — recovery requires an administrator-assisted process.
 
 ---
@@ -96,14 +96,12 @@ The Beneficiary is the citizen applying for assistance. Their access is self-ser
 
 **Partial**
 
-- Home program cards use a **static local catalog** (demo programs), not live Nest program templates.
-- Dynamic form fields are driven by that catalog; file “uploads” store filenames only — no object-storage upload.
-- After submit, a review screen can advance to a demo disbursement QR path without waiting for a real approval/disbursement workflow state.
-- Liveness is required in the apply UX, but create-application payload does not yet fully pass liveness session identifiers to Nest in all paths.
+- Home program cards may still use a **local catalog** helper alongside Nest templates.
+- Dynamic form fields are driven by that catalog; file “uploads” may store filenames only — no object-storage upload.
+- Liveness is required in the apply UX; create-application payload may not yet fully pass liveness session identifiers to Nest in all paths.
 
 **Not implemented**
 
-- AI-assisted program recommendations, eligibility explanations, and FAQ via eGovAI (FR-8.1).
 - Offline download / complete / later submit of application forms (FR-10.2).
 - Enforcing disbursement-method selection as a hard gate before submit (FR-7.1) with a successful preference save.
 
@@ -125,21 +123,44 @@ The Beneficiary is the citizen applying for assistance. Their access is self-ser
 - Hard enforcement of the maximum of three active connections in the UI (FR-3.3).
 - Relationship revocation with re-verification (PRD appendix gap; not mobile-delivered).
 
+### AI advisory and eReport
+
+**Implemented**
+
+- **Ask eGov AI** (`/customer/assistant`) → Nest `POST /integrations/egov-ai/assistant`.
+- Mock answers when `EGOV_AI_ACCESS_CODE` is unset; live upstream when configured.
+- Scoped guidance: navigation, eligible programs, period windows, queue slots, application status, cooldown — **read-only** (no apply / book / decide).
+- **Report a problem** (`/customer/report`) → Nest eReport submit + list own cases; categories for aid / account / mobile issues.
+- Entry from home tile and from the assistant banner.
+
+**Partial**
+
+- AI is advisory FAQ / status guidance, not a full eligibility recommender that ranks every program against a rule engine.
+- eReport has no evidence-upload UI; geo on submit uses Nest env defaults; tracking is local case number (no rich upstream status history in-app).
+
+**Not implemented**
+
+- Converting an AI answer into an automatic application or approval (explicitly denied).
+- OTP on citizen report submit; linking a report to a specific application ID for reopen.
+
 ### Disbursement
 
 **Implemented**
 
-- Entry points for disbursement preference and a post-apply “disbursement QR” screen in navigation.
+- **Schedule** (`/customer/schedule`): list open slots, book / rebook (subject to 2-day lead).
+- Program **Disbursement QR** (`/customer/programs/:id/disbursement`): booking-backed unique claim token (`EHELP|claim=…|action=disburse_claim`).
+- Office Admin validates QR on web with claimant face liveness; claim completion updates Nest status.
+- Program cooldown badges after claim (`disbursement_cooldown_days`).
 
 **Partial**
 
-- Disbursement preference screen exists; saving profile preference fails because Nest treats the verified profile as locked.
-- Disbursement QR screen shows a **mock** reference payload for demo purposes.
+- Disbursement **preference** screen (`/customer/disbursement`) exists; saving profile preference may fail because Nest treats the verified profile as locked.
+- Claim auth is QR + office-side face liveness; mobile PIN as a third factor is not required in the current counter flow.
 
 **Not implemented**
 
 - LandBank (or Nest) disbursement channel integration (FR-7.2).
-- Real disbursement authentication requiring QR + face verification + PIN with results recorded for audit (FR-7.3).
+- Full PRD three-factor release of QR + face + PIN entirely on-device without office validate.
 
 ### Notifications
 
@@ -160,17 +181,18 @@ The Beneficiary is the citizen applying for assistance. Their access is self-ser
 ## Main User Flow (Current Build)
 
 1. Beneficiary opens the Flutter app.
-2. Beneficiary signs in with eGov SSO exchange code or mock email/password (dev).
+2. Beneficiary signs in with eGov SSO exchange code (mock fixtures or live).
 3. If National ID eVerify is incomplete, the app opens onboarding.
-4. Beneficiary completes Face Liveness.
-5. Beneficiary scans or pastes National ID QR.
-6. Nest completes first-time eVerify and issues an updated session.
-7. Beneficiary lands on customer home.
+4. Beneficiary completes Face Liveness (every sign-in).
+5. New citizens scan or paste National ID QR; Nest completes first-time eVerify.
+6. Beneficiary lands on customer home.
+7. Optional: Ask eGov AI for status / programs / open slots.
 8. Beneficiary views Nest-backed application list and opens details.
-9. Beneficiary may open a program card (static catalog) and complete the apply wizard.
-10. Beneficiary completes face liveness and submits to Nest when templates/offices allow.
-11. Beneficiary may open dependents and create relationship records in Nest.
-12. Demo path may show a mock disbursement QR after apply; this is not a live LandBank release.
+9. Beneficiary may open a program card and complete the apply wizard (liveness on submit).
+10. After Approver decision: Schedule → book a disbursement slot.
+11. Open program Disbursement QR (requires booking); Office Admin validates + liveness on claim day.
+12. Cooldown may block re-apply; optional eReport grievance via Report a problem.
+13. Beneficiary may open dependents and create relationship records in Nest (Office Admin approves proof).
 
 ---
 
@@ -180,15 +202,18 @@ Typical beneficiary destinations in the current router:
 
 | Destination | Purpose |
 |-------------|---------|
-| Login / Register | Nest SSO or mock login |
+| Login / Register | Nest SSO |
 | Onboarding | Face Liveness + National ID eVerify |
-| Customer home | Greeting, static programs, Nest applications list |
-| Program apply | Catalog-driven form → Nest submit |
+| Customer home | Greeting, programs, Nest applications list |
+| Ask eGov AI | Guidance-only assistant |
+| Report a problem | eReport file + own cases |
+| Program apply | Form → Nest submit |
 | Application detail | Nest application status |
+| Schedule | Book / rebook disbursement slots |
+| Program disbursement QR | Booking-backed claim token |
 | Dependents | Nest relationships |
 | Profile | View / face re-verify (profile field save limited) |
-| Disbursement preference | Preference UI (save currently blocked) |
-| Disbursement QR | Mock QR demo after apply |
+| Disbursement preference | Preference UI (save may be blocked) |
 
 Routes for evaluator, approver, and dependent-home personas redirect away from staff surfaces; mobile remains beneficiary-only.
 
@@ -201,11 +226,13 @@ Routes for evaluator, approver, and dependent-home personas redirect away from s
 - Beneficiary-only platform gate against Nest.
 - eGov SSO / mock login and session restore.
 - Face Liveness and National ID eVerify onboarding.
-- Nest application list and detail.
-- Nest application create (when backend templates exist).
+- Nest application list, detail, and create (when backend templates exist).
 - Nest relationship list and create.
 - Face re-verification from profile.
-- Demo program apply UX and mock disbursement QR for walkthroughs.
+- eGov AI assistant (mock or live) — guidance only.
+- eReport grievance file + own case list.
+- Disbursement slot booking and booking-backed claim QR.
+- Program cooldown awareness after claim.
 - Runbooks for `API_BASE_URL` and Nest Core (`mobile/README.md`).
 
 ### Not included (PRD gaps or intentional non-mobile scope)
@@ -213,13 +240,13 @@ Routes for evaluator, approver, and dependent-home personas redirect away from s
 - PIN and OTP as primary, production login methods.
 - SSO deep-link auto-exchange in Flutter.
 - Administrator-assisted account recovery.
-- Live Nest program template catalog on home.
-- Real document upload to storage.
+- Live Nest program template catalog fully replacing demo home cards (where still static).
+- Real document upload to object storage.
 - Offline form download / fill / sync submit.
-- AI recommendations and FAQ (eGovAI).
-- LandBank disbursement and full QR + face + PIN release flow.
-- Relationship proof documents and activation workflow UX.
-- Hard UI enforcement of three active relationships.
+- LandBank disbursement channel.
+- On-device QR + face + PIN without office counter validation.
+- eReport evidence upload and rich upstream status history.
+- Relationship proof document upload UX and hard UI cap of three active relationships.
 - Mandatory SMS and in-app notification preferences.
 - Evaluator / Approver / Admin features on mobile.
 - Provincial / municipal office hierarchy management (admin domain).
@@ -244,25 +271,28 @@ Suspended or invalid Nest sessions clear local tokens and return the user to sig
 
 ## Sample End-to-End Path (Aligned vs Demo)
 
-**Aligned path (identity + Nest cases)**
+**Aligned path (identity + Nest cases + claim)**
 
 ```
 Beneficiary
 └── Nest user_accounts + beneficiaries
     ├── Face Liveness session
-    ├── National ID eVerify
+    ├── National ID eVerify (first-time)
     ├── Applications (list / detail / create)
-    └── Relationships (list / create)
+    ├── Schedule booking → claim QR
+    ├── Office validate + claim liveness (web)
+    ├── eGov AI guidance (optional)
+    ├── eReport grievance (optional)
+    └── Relationships (list / create → Office Admin approve)
 ```
 
-**Demo-only path (not PRD-complete)**
+**Still demo / partial**
 
 ```
 Beneficiary home
-└── Static program catalog
-    ├── Mock file upload fields
-    ├── Nest submit (when templates seeded)
-    └── Mock disbursement QR
+└── Program cards may still use catalog helpers
+    ├── File “uploads” may store filenames only
+    └── Preference save may be blocked on verified profile
 ```
 
 ---
@@ -273,8 +303,8 @@ The Beneficiary Mobile module follows this product structure:
 
 - The Flutter app is the **Beneficiary** client only.
 - Identity verification is delegated to eGov SSO, Face Liveness, and National ID eVerify through Nest — matching the PRD direction to avoid harvesting PhilSys data outside eGov services.
-- Application tracking and relationship creation are Nest-backed.
-- Program discovery, document upload, offline forms, AI advisory, notifications, and real disbursement authentication remain **open gaps** relative to PRD §4.6 and FR-2 / FR-3 / FR-7 / FR-8 / FR-9 / FR-10.2.
+- Application tracking, slot booking, claim QR, AI guidance, and eReport grievances are Nest-backed.
+- Offline forms, LandBank channel, notification preferences, and some catalog/upload polish remain **open gaps** relative to PRD FR-7.2 / FR-9 / FR-10.2.
 - Evaluator offline work and all admin personas remain on **web**, not mobile.
 
 Example:
@@ -284,10 +314,12 @@ eGov SSO / Nest
 └── Beneficiary (Flutter)
     ├── Onboarding (Liveness + National ID eVerify)     ← delivered
     ├── Applications list / detail / submit             ← delivered / partial
+    ├── Schedule + claim QR (office validate)           ← delivered
+    ├── eGov AI guidance                                ← delivered (advisory)
+    ├── eReport grievance                               ← delivered (file + list)
     ├── Relationships                                   ← partial
-    ├── Disbursement QR + face + PIN                    ← gap (mock only)
     ├── Offline forms                                   ← gap
-    ├── AI recommendations + FAQ                        ← gap
+    ├── LandBank channel                                ← gap
     └── SMS + notification preferences                  ← gap
 ```
 

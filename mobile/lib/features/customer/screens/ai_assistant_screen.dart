@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../providers/auth_provider.dart';
 import '../../../services/egov_ai_service.dart';
@@ -31,7 +32,8 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen> {
           'I help with EHelp navigation, program details & coverage, dates, '
           'disbursement queue slots/locations, and your application status. '
           'Ask “Tell me about [program]”, “What queue slots are open?”, or “What’s my status?” '
-          'I cannot create applications or book slots, and I will not answer unrelated topics.',
+          'I cannot create applications or book slots, and I will not answer unrelated topics. '
+          'Use Report below for aid, account, or mobile-app issues.',
     ),
   ];
   var _sending = false;
@@ -75,6 +77,11 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen> {
       appBar: AppBar(
         title: const Text('eGov AI Assistant'),
         actions: [
+          TextButton.icon(
+            onPressed: () => context.push('/customer/report'),
+            icon: const Icon(Icons.report_problem_outlined, size: 18),
+            label: const Text('Report'),
+          ),
           if (_mode != null)
             Padding(
               padding: const EdgeInsets.only(right: 12),
@@ -93,6 +100,35 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen> {
       ),
       body: Column(
         children: [
+          Material(
+            color: AppColors.secondary,
+            child: InkWell(
+              onTap: () => context.push('/customer/report'),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.report_problem_outlined,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Report a problem (aid, account, or mobile app)',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: AppColors.muted),
+                  ],
+                ),
+              ),
+            ),
+          ),
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(16),

@@ -10,7 +10,7 @@ For PRD policy detail, see [Persona Scope & Limitations](../persona-scope-prd-al
 
 | Layer | What it is | Typical URL |
 |-------|------------|-------------|
-| **Nest Core (API)** | Auth, RBAC, applications, offices, disbursement | Local `http://127.0.0.1:3001` · Demo `https://<your-api-host>` |
+| **Nest Core (API)** | Auth, RBAC, applications, offices, disbursement, eGov AI, eReport | Local `http://127.0.0.1:3001` · Demo `https://<your-api-host>` |
 | **Web portal** | Staff & admin UI (Next.js) | Local `http://localhost:3000` · Demo on Vercel |
 | **Mobile app** | Beneficiaries only (Flutter) | Default API → Render URL (see `mobile/lib/config/api_config.dart`) |
 | **Postgres** | Domain data | Local Docker `:5433` · Render Managed Postgres in demo |
@@ -124,15 +124,17 @@ Optional prefix: `mock:beneficiary`.
 | Manage offices in own org | Decide / endorse cases *unless also* Evaluator/Approver |
 | Programs, workflows, period windows, disbursement slots | Act as Platform Admin across tenants |
 | Accounts / staff provisioning (where granted) | Use `/staff` as Org Admin alone |
-| Oversight lists (applications, profile changes, audit) | |
+| Oversight lists (applications, profile changes, audit) | Resolve / reopen / change eReport status |
+| Read **Appeals (eReport)** ledger (`/admin/appeals`) | |
 
 **Flow**
 
 1. Sign in with `orgadmin` → `/admin`.
 2. Ensure **Offices** exist (e.g. regional office).
 3. Configure **Programs** (eligibility, cooldown, periods) and workflow templates.
-4. Open **Disbursement slots** for claim scheduling (pick office when creating).
+4. Open **Disbursement slots** for claim scheduling (pick office when creating; slots must be ≥ **2 days** ahead).
 5. Provision Evaluator / Approver / Office Admin accounts as needed.
+6. Optional: open **Appeals (eReport)** to review citizen grievance filings (read-only).
 
 ---
 
@@ -153,7 +155,7 @@ Optional prefix: `mock:beneficiary`.
 1. Sign in with `officeadmin` → `/admin`.
 2. Review **Profile changes** / registrations as needed.
 3. Approve beneficiary↔beneficiary **relationships** after proof review.
-4. Support claim day: **Validate claim QR** when citizens arrive.
+4. Support claim day: **Validate claim QR** → preview → claimant face liveness → complete claim.
 
 ---
 
@@ -206,20 +208,25 @@ Optional prefix: `mock:beneficiary`.
 |-----|--------|
 | SSO + liveness (+ eVerify when first-time) | Use web staff/admin consoles |
 | Browse/apply to programs (subject to eligibility & cooldown) | See other people’s cases |
+| Ask **eGov AI** for guidance (status, programs, slots) | Have AI apply, book, or decide cases |
 | Track own applications; book disbursement slots | Exceed relationship limits / skip proof |
 | Request relationships with proof | Claim without office validation flow |
-| Claim auth (QR / liveness as implemented) | |
+| File / list **eReport** grievances (`/customer/report`) | Reopen a rejected application via eReport |
+| Show **booking-backed claim QR**; complete claim at office | |
 
 **Dependent** is the same mobile app and beneficiary-class account. The **link** between two citizens is approved by **Office Admin**, not by Evaluator/Approver.
 
 **Flow (happy path)**
 
 1. Open app → paste `beneficiary` → Face Liveness → (eVerify if new) → home.
-2. Choose program → fill form → submit (may require liveness).
-3. Wait while Evaluator endorses and Approver decides.
-4. If approved → book a **disbursement slot** (Schedule) when window/slots allow.
-5. On claim day → present claim QR; office validates; liveness/claim completion as configured.
-6. After claim, **cooldown** may block re-apply until the program’s cooldown elapses.
+2. Optional: **Ask eGov AI** for status / programs / open slots (guidance only).
+3. Choose program → fill form → submit (may require liveness).
+4. Wait while Evaluator endorses and Approver decides.
+5. If approved → **Schedule** → book a disbursement slot (rebook allowed until 2 days before the slot).
+6. Open **Disbursement QR** for that program (requires an active booking).
+7. On claim day → present claim QR; Office Admin validates + claimant face liveness → claim complete.
+8. After claim, **cooldown** may block re-apply until the program’s `disbursement_cooldown_days` elapses.
+9. Optional grievance: **Report a problem** (from home Assistant or `/customer/report`) → receive case number; Org Admin can see it under Appeals.
 
 ---
 
@@ -241,21 +248,65 @@ sequenceDiagram
   A->>A: Approve or reject
   A-->>B: Notify + claim guidance
   B->>B: Book disbursement slot
-  Off->>Off: Validate claim QR / claim ops
-  B->>B: Complete claim
+  B->>B: Show claim QR
+  Off->>Off: Validate claim QR + liveness
+  B->>B: Claim complete / cooldown
+  opt Grievance (eReport)
+    B->>B: File report → case number
+    OA->>OA: Read Appeals ledger
+  end
 ```
 
 | Step | Who | Where | Outcome |
 |------|-----|-------|---------|
-| 1. Configure program & slots | Org Admin | `/admin/programs`, `/admin/disbursement-slots` | Program open; claim windows/slots exist |
+| 1. Configure program & slots | Org Admin | `/admin/programs`, `/admin/disbursement-slots` | Program open; slots ≥ 2 days ahead |
 | 2. Citizen applies | Beneficiary | Mobile | Application in evaluation |
 | 3. Endorse | Evaluator | `/staff` | Recommended for decision |
 | 4. Decide | Approver | `/staff` | Approved / rejected; SMS/in-app |
 | 5. Book claim | Beneficiary | Mobile Schedule | Slot booking |
-| 6. Claim day | Office Admin + Beneficiary | Web validate + mobile | Disbursed / claimed |
+| 6. Claim day | Office Admin + Beneficiary | `/admin/disbursement-validate` + mobile QR | Disbursed / claimed |
 | 7. Relationships (optional) | Two citizens + Office Admin | Mobile request → `/admin` approve | Dependent / guardian link active |
+| 8. Grievance (optional) | Beneficiary → Org Admin | Mobile `/customer/report` → `/admin/appeals` | Case number; read-only oversight |
 
 **Separation of duties:** the user who **endorses** cannot **approve** that same application.
+
+**eReport note:** Appeals are a **grievance channel**, not a workflow step that reopens a rejected application.
+
+---
+
+## 5.1 eGov AI Assistant (mobile)
+
+Guidance-only chat for beneficiaries. Does **not** mutate applications, book slots, or decide cases.
+
+| Item | Detail |
+|------|--------|
+| Route | `/customer/assistant` (home tile **Ask eGov AI**) |
+| Nest | `POST /integrations/egov-ai/assistant` |
+| Mock | Omit `EGOV_AI_ACCESS_CODE` → Nest answers from local context |
+| Live | Set `EGOV_AI_ACCESS_CODE` (+ optional `EGOV_AI_BASE_URL`) |
+| Useful prompts | “What’s my status?”, “What queue slots are open?”, “Tell me about 4Ps” |
+
+From the assistant, citizens can jump to **Report a problem**.
+
+---
+
+## 5.2 Appeals / eReport
+
+Citizen files a grievance; Org Admin reviews the ledger. Upstream mirror is optional.
+
+| Surface | Who | Path |
+|---------|-----|------|
+| File + list own cases | Beneficiary | Mobile `/customer/report` |
+| Oversight list / filter | Org Admin only | Web `/admin/appeals` |
+
+| Mode | When | Behavior |
+|------|------|----------|
+| **Mock** | No `EREPORT_ACCESS_CODE` / `EREPORT_ACCESS_TOKEN` | Local `EHELP-…` case numbers in `ereport_cases` |
+| **Live** | Access credentials set | Submit to staging eReport; on upstream failure, still writes a local mock case |
+
+Categories (EHelp → upstream type): aid process → `red_tape` · account → `scam` · mobile → `accident`.
+
+**Not supported:** evidence upload UI, citizen OTP on submit, status resolve/reopen by admin, linking a report to an application ID.
 
 ---
 
@@ -270,8 +321,9 @@ sequenceDiagram
 | Programs & Workflows | Org Admin | Templates, periods, mobile forms |
 | Applications (oversight) | Org / Office | Read-oriented lists |
 | Profile changes | Org / Office | Approve citizen profile edits |
-| Disbursement slots | Org / Office | Schedule claim capacity |
-| Validate claim QR | Office | Counter claim |
+| Disbursement slots | Org / Office | Schedule claim capacity (≥ 2-day lead) |
+| Validate claim QR | Office | Counter claim + claimant liveness |
+| Appeals (eReport) | Org Admin | Read-only grievance ledger |
 | Audit / RBAC | Platform (and scoped admins) | Governance |
 | `/staff` | Evaluator / Approver | Live case work |
 
@@ -279,13 +331,14 @@ sequenceDiagram
 
 ## 7. Quick demo script
 
-1. **Org Admin** (`orgadmin`): confirm program disbursement window + create an open slot.
-2. **Beneficiary** (`beneficiary`): apply to that program.
+1. **Org Admin** (`orgadmin`): confirm program disbursement window + create an open slot (≥ 2 days ahead).
+2. **Beneficiary** (`beneficiary`): apply to that program (optional: Ask eGov AI for guidance).
 3. **Evaluator** (`evaluator`): endorse the application.
 4. **Approver** (`approver`): approve (not the same person as step 3).
-5. **Beneficiary**: book slot / follow claim instructions.
-6. **Office Admin** (`officeadmin`): validate claim QR on claim day.
-7. Optional: `beneficiary` + `dependent` request relationship → Office Admin approves with proof.
+5. **Beneficiary**: Schedule → book slot → open program **Disbursement QR**.
+6. **Office Admin** (`officeadmin`): Validate claim QR → claimant face liveness → complete claim.
+7. Optional relationship: `beneficiary` + `dependent` request link → Office Admin approves with proof.
+8. Optional grievance: Beneficiary **Report a problem** → note case number → Org Admin checks `/admin/appeals`.
 
 ---
 
@@ -297,8 +350,12 @@ sequenceDiagram
 | Mobile 403 `web_required` | That account is staff — use web |
 | Mock SSO but fake camera | Set `AUTH_LIVENESS_MODE=live` and restart Nest |
 | Live SSO when you wanted mock codes | Keep `AUTH_SSO_MODE=mock` |
-| Empty Render DB | Run migrations `001`–`026` + seeds on Postgres |
+| Empty Render DB | Run migrations `001`–`027` + seeds on Postgres |
 | App not hitting demo API | Release defaults to Render; local override needs `--dart-define` |
+| AI always “mock” | Expected without `EGOV_AI_ACCESS_CODE`; restart Nest after setting it |
+| Appeals list empty | Beneficiary must have email + phone; file a report first; Org Admin only sees `/admin/appeals` |
+| Cannot create / book slot | Slots and rebook respect **2-day** minimum lead (`DISBURSEMENT_SLOT_MIN_LEAD_DAYS`) |
+| Claim QR missing | Need an approved application **and** an active disbursement booking |
 
 ---
 
@@ -306,8 +363,9 @@ sequenceDiagram
 
 | Doc | Use |
 |-----|-----|
-| [`backend/README.md`](../../backend/README.md) | Nest, DB, migrations |
+| [`backend/README.md`](../../backend/README.md) | Nest, DB, migrations, AI / eReport env |
 | [`web/client/README.md`](../../web/client/README.md) | Web portal setup |
 | [`mobile/README.md`](../../mobile/README.md) | Flutter setup |
 | [Persona PRD alignment](../persona-scope-prd-alignment-summary.md) | Policy Can/Cannot |
 | [Beneficiary mobile alignment](../mobile/beneficiary-prd-alignment-summary.md) | Mobile feature depth |
+| [eGov API services](../eGov-API-Services-Documentation.md) | Upstream partner API reference |

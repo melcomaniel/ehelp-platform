@@ -109,11 +109,21 @@ Expect:
 
 ```text
 EHELP Core listening on http://0.0.0.0:3001
-AUTH_PROVIDER_MODE=mock|live …
+Auth adapters: base=… sso=… everify=… liveness=…
 HTTP request + error logging enabled …
 ```
 
 Smoke-test: open `http://127.0.0.1:3001/auth/provider-mode` (or from the phone: `http://<LAN_IP>:3001/auth/provider-mode`).
+
+For **mock SSO + real camera**, set in `backend/.env`:
+
+```text
+AUTH_SSO_MODE=mock
+AUTH_EVERIFY_MODE=mock
+AUTH_LIVENESS_MODE=live
+```
+
+Then fully restart Nest.
 
 ### Terminal 3 — Flutter
 
@@ -159,6 +169,18 @@ Supabase is **not** used by the mobile app.
 
 Partner callback (mobile deep link): Nest `GET /auth/egovph/sso?exchange_code=…` → `ehelp://egovph/sso?…`.
 
+### Beneficiary surfaces (after sign-in)
+
+| Destination | Purpose |
+|-------------|---------|
+| Home | Programs + applications |
+| Ask eGov AI | Guidance-only assistant (`/customer/assistant`) |
+| Report a problem | eReport grievance (`/customer/report`) |
+| Schedule | Book disbursement slots |
+| Program disbursement QR | Booking-backed claim token for office validation |
+
+AI and eReport run in **mock** without Nest access credentials; see [`backend/README.md`](../backend/README.md) and the [system manual](../docs/manual/ehelp-system-manual.md).
+
 ---
 
 ## Troubleshooting
@@ -168,7 +190,9 @@ Partner callback (mobile deep link): Nest `GET /auth/egovph/sso?exchange_code=�
 | App can't reach API | Correct `API_BASE_URL` for device; Nest bound to `0.0.0.0`; firewall allows `:3001` |
 | 403 `web_required` | Account is staff/admin — use the web portal |
 | No Nest logs for a “failure” | Request never reached Nest (wrong host/offline), or Nest not restarted after `.env` change |
-| Live SSO / camera fails | `AUTH_PROVIDER_MODE=live`, credentials in `backend/.env`, full Nest restart; mock codes fail in live mode |
+| Want fixture SSO + real camera | `AUTH_SSO_MODE=mock` + `AUTH_LIVENESS_MODE=live`; full Nest restart |
+| Live SSO / all adapters live | `AUTH_PROVIDER_MODE=live`, credentials in `backend/.env`; mock codes fail when SSO is live |
+| Claim QR missing | Need approval **and** an active Schedule booking |
 | Cleartext blocked on Android | Use debug build, or HTTPS |
 
 Backend HTTP traffic is logged as `[HTTP]` (method, path, status, `X-Client-Platform`).
@@ -179,3 +203,4 @@ Backend HTTP traffic is logged as `[HTTP]` (method, path, status, `X-Client-Plat
 
 - Web portal: [`web/client/README.md`](../web/client/README.md)
 - Nest API: [`backend/README.md`](../backend/README.md)
+- Operator manual: [`docs/manual/ehelp-system-manual.md`](../docs/manual/ehelp-system-manual.md)

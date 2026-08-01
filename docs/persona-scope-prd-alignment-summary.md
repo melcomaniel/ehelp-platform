@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document aligns **who may do what** (and who is denied) with EHelp PRD v1.4 §§4.1–4.6. It covers scope and explicit restrictions for Platform Admin, Organization Admin, Office Admin, Evaluator, Approver, and Beneficiary — not full feature build-out (offline evaluator, AI, LandBank, Dependent login, etc.).
+This document aligns **who may do what** (and who is denied) with EHelp PRD v1.4 §§4.1–4.6. It covers scope and explicit restrictions for Platform Admin, Organization Admin, Office Admin, Evaluator, Approver, and Beneficiary — including shipped grievance (eReport), AI guidance, and claim ops. Remaining PRD gaps (offline evaluator, LandBank, full Dependent login client, etc.) stay noted at the end.
 
 Canonical policy lives in Nest `backend/src/auth/rbac.policy.ts` (`ROLE_GRANTS`, `PLATFORM_ADMIN_EXPLICIT_DENIES`, SOD in `decideRbac`). Runtime enforcement goes through `RbacAccessService` (`decideAnyRole` over **all** role assignments) for case actions, relationship workflow, application create/submit/queue, and org/office admin gates. Web UI permissions and route gates mirror those boundaries (including dual-role via JWT `erd_roles`).
 
@@ -58,7 +58,9 @@ Client platform gates (`X-Client-Platform: mobile|web`) remain in Nest `platform
 - Manage offices in own organization; approve org staff accounts.
 - Create / publish / retire program templates; define override bounds; manage workflows and rule sets.
 - View org analytics and org audit.
-- Oversight-view applications in admin UI (read-oriented mock / Nest lists as available).
+- Oversight-view applications in admin UI (read-oriented Nest lists as available).
+- Open disbursement slots for claim capacity (with office selection; ≥ 2-day lead).
+- Read-only **Appeals (eReport)** oversight (`/admin/appeals`) for citizen grievance filings.
 
 **Cannot**
 
@@ -66,6 +68,7 @@ Client platform gates (`X-Client-Platform: mobile|web`) remain in Nest `platform
 - Act on Recommendations as a case actor by virtue of admin role alone.
 - Access platform tenant lifecycle or another organization’s data.
 - Use the `/staff` case console (admin home is `/admin`).
+- Resolve, reopen, or change eReport case status (ledger is read-only).
 
 **Current enforcement**
 
@@ -73,6 +76,7 @@ Client platform gates (`X-Client-Platform: mobile|web`) remain in Nest `platform
 | --- | --- |
 | Policy | `ORG_ADMIN` grants — no `application.*` case permissions |
 | Domain | `assertEvaluator` / `assertApprover` are role-exact; `recommend` / `decide` → 403 for org admin |
+| eReport | `GET /admin/ereport/reports*` — `ORG_ADMIN` only |
 | Web perms | `DSWD_ADMIN_PERMISSIONS` stripped of evaluate / approve / recommend act/submit |
 | Web middleware | `/staff` → staff roles only |
 
@@ -87,12 +91,14 @@ Client platform gates (`X-Client-Platform: mobile|web`) remain in Nest `platform
 - Assign office staff; request office staff accounts.
 - View office analytics / office audit (policy); register accounts in UI where granted.
 - Oversight-view applications for own office scope in admin UI.
+- Validate disbursement **claim QR** at the counter (`/admin/disbursement-validate`) including claimant face liveness.
 
 **Cannot**
 
 - Evaluate / endorse / approve / reject cases by default admin role.
 - Create/retire org catalog templates, manage workflows for other offices, or act across offices.
 - Enter `/staff` without Evaluator/Approver assignment.
+- Open Org Admin–only **Appeals (eReport)** admin APIs.
 
 **Current enforcement**
 
@@ -155,11 +161,11 @@ Client platform gates (`X-Client-Platform: mobile|web`) remain in Nest `platform
 
 ## Beneficiary (PRD §4.6)
 
-**Can** — own-account applications, relationships, disbursement auth, notifications (see mobile summary).
+**Can** — own-account applications, relationships, disbursement booking + claim QR, AI guidance, eReport grievances, notifications (see mobile summary).
 
-**Cannot** — other beneficiaries’ data; staff/admin web surfaces; case authority.
+**Cannot** — other beneficiaries’ data; staff/admin web surfaces; case authority; AI-driven auto-approval; reopening rejected cases via eReport.
 
-**Current enforcement** — mobile platform gate + `BENEFICIARY` `own_account` grants; web home `/get-app`.
+**Current enforcement** — mobile platform gate + `BENEFICIARY` `own_account` grants; web home `/get-app`; eReport submit/list own cases; eGov AI assistant JWT endpoint.
 
 ---
 
@@ -207,4 +213,4 @@ Evaluator / Approver do **not** approve relationships (those roles are for case 
 
 ## Out of scope (this pass)
 
-Offline evaluator field ops, AI advisory, LandBank integration, full Nest template/workflow migration, Dependent login client.
+Offline evaluator field ops, LandBank channel integration, full Nest template/workflow migration beyond current engines, Dependent as a separate login client, eReport evidence upload / admin resolve UI, PSA dataset proxy to clients.

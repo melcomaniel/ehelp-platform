@@ -8,8 +8,9 @@ Auth for **mobile** uses NestJS + Docker Postgres. Supabase Auth is no longer us
 |-------|--------|
 | API | NestJS on `http://localhost:3001` |
 | DB | Postgres 16 via Docker Compose (**host port 5433**); domain ERD in `backend/db/migrations` |
-| Auth modes | `AUTH_PROVIDER_MODE=mock` (default) or `live` |
+| Auth modes | `AUTH_PROVIDER_MODE=mock` (default) or `live`; optional per-adapter `AUTH_SSO_MODE` / `AUTH_EVERIFY_MODE` / `AUTH_LIVENESS_MODE` |
 | Mobile providers | eGov SSO · NationalID eVerify · Face Liveness |
+| Integrations | eGov AI assistant · eReport grievances (mock without access credentials) |
 
 ## Per-machine local config (update on every new machine / network)
 
@@ -45,7 +46,7 @@ Checklist on a new machine:
 
 Do **not** hard-code a teammate’s LAN IP in committed files. Prefer `dart-define` (and optional local-only `PUBLIC_API_BASE_URL` in your private `.env`).
 
-**Important:** changing `backend/.env` (including `AUTH_PROVIDER_MODE`) does **not** always reload under `start:dev`. Fully stop Nest (Ctrl+C) and run `npm run start:dev` again. Confirm the boot line says `AUTH_PROVIDER_MODE=live` before testing the camera.
+**Important:** changing `backend/.env` (including auth or integration keys) does **not** always reload under `start:dev`. Fully stop Nest (Ctrl+C) and run `npm run start:dev` again. Confirm the boot line shows adapter modes (`Auth adapters: base=… sso=… everify=… liveness=…`) before testing the camera.
 
 ## Quick start
 
@@ -208,12 +209,23 @@ curl -s -X POST http://localhost:3001/auth/sso/exchange \
 
 With `AUTH_PROVIDER_MODE=mock` (default), **Face Liveness does not use the camera** and **eVerify does not check a National ID** — both adapters auto-pass so local MVP works without partner credentials.
 
-To exercise the real gateways:
+**Hybrid demo (recommended for camera demos with fixture codes):**
+
+```text
+AUTH_PROVIDER_MODE=mock
+AUTH_SSO_MODE=mock
+AUTH_EVERIFY_MODE=mock
+AUTH_LIVENESS_MODE=live
+```
+
+Keep mock SSO / eVerify; only Face Liveness hits the real camera. Restart Nest after changing `.env`.
+
+To exercise **all** real gateways:
 
 1. Put staging/production credentials in `backend/.env`
-2. Set `AUTH_PROVIDER_MODE=live`
+2. Set `AUTH_PROVIDER_MODE=live` (or set each adapter to `live`)
 3. Restart Nest (`npm run start:dev`)
-4. Use a real eGov `exchange_code` from the SSO widget (mock codes will fail)
+4. Use a real eGov `exchange_code` from the SSO widget (mock codes fail when SSO is `live`)
 
 ```
 AUTH_PROVIDER_MODE=live
@@ -233,6 +245,18 @@ Partner SSO Base URL example:
 `https://<your-host>/auth/egovph/sso?exchange_code=...`
 
 Web: add `&client=web`. Mobile deep link: `ehelp://egovph/sso?exchange_code=...`
+
+### eGov AI + eReport
+
+| Integration | Mock (default) | Live |
+|-------------|----------------|------|
+| **eGov AI** | Omit `EGOV_AI_ACCESS_CODE` → Nest contextual answers | Set `EGOV_AI_ACCESS_CODE` (+ `EGOV_AI_BASE_URL`) |
+| **eReport** | Omit `EREPORT_ACCESS_CODE` / `EREPORT_ACCESS_TOKEN` → local `ereport_cases` | Set access credentials; optional `EREPORT_REPORT_VIEW_TOKEN` for admin upstream list |
+
+Citizen APIs: `POST /integrations/egov-ai/assistant`, `POST /integrations/ereport/complaints`, `GET /integrations/ereport/my-cases`.  
+Org Admin: `GET /admin/ereport/reports` (web `/admin/appeals`).
+
+See `backend/.env.example` and [`docs/manual/ehelp-system-manual.md`](../docs/manual/ehelp-system-manual.md).
 
 ## Mobile notes
 

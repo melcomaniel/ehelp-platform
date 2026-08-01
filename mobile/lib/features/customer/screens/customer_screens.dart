@@ -38,6 +38,14 @@ final myDependentsProvider = FutureProvider.autoDispose<List<DependentLink>>((re
   return ref.watch(applicationServiceProvider).listDependents(profile.id);
 });
 
+final unreadMessagesCountProvider = FutureProvider.autoDispose<int>((ref) async {
+  ref.watch(authStateProvider);
+  if (ref.read(authServiceProvider).currentSession == null) return 0;
+  final items =
+      await ref.watch(applicationServiceProvider).listMyNotifications();
+  return items.where((n) => n['read_at'] == null).length;
+});
+
 class CustomerHomeScreen extends ConsumerWidget {
   const CustomerHomeScreen({super.key});
 
@@ -46,6 +54,8 @@ class CustomerHomeScreen extends ConsumerWidget {
     final profileAsync = ref.watch(currentProfileProvider);
     final appsAsync = ref.watch(myApplicationsProvider);
     final programsAsync = ref.watch(availableProgramsProvider);
+    final unreadMessages =
+        ref.watch(unreadMessagesCountProvider).asData?.value ?? 0;
 
     return Scaffold(
       appBar: AppBar(
@@ -88,6 +98,7 @@ class CustomerHomeScreen extends ConsumerWidget {
               ref.invalidate(myApplicationsProvider);
               ref.invalidate(availableProgramsProvider);
               ref.invalidate(currentProfileProvider);
+              ref.invalidate(unreadMessagesCountProvider);
             },
             child: ListView(
               padding: const EdgeInsets.all(20),
@@ -164,6 +175,7 @@ class CustomerHomeScreen extends ConsumerWidget {
                       child: _QuickTile(
                         icon: Icons.notifications_outlined,
                         label: 'Messages',
+                        badgeCount: unreadMessages,
                         onTap: () => context.push('/customer/messages'),
                       ),
                     ),
@@ -217,20 +229,6 @@ class CustomerHomeScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _QuickTile(
-                        icon: Icons.report_problem_outlined,
-                        label: 'Report a problem',
-                        onTap: () => context.push('/customer/report'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Expanded(child: SizedBox()),
-                  ],
-                ),
                 const SizedBox(height: 28),
                 const SectionHeader(title: 'My applications'),
                 const SizedBox(height: 12),
@@ -269,11 +267,13 @@ class _QuickTile extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.badgeCount = 0,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final int badgeCount;
 
   @override
   Widget build(BuildContext context) {
@@ -290,7 +290,37 @@ class _QuickTile extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              Icon(icon, color: AppColors.ocean),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(icon, color: AppColors.ocean),
+                  if (badgeCount > 0)
+                    Positioned(
+                      right: -10,
+                      top: -8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.danger,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        constraints: const BoxConstraints(minWidth: 18),
+                        child: Text(
+                          badgeCount > 99 ? '99+' : '$badgeCount',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
               const SizedBox(height: 8),
               Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
             ],
@@ -301,27 +331,41 @@ class _QuickTile extends StatelessWidget {
   }
 }
 
-class _NestProgramCard extends StatelessWidget {
+class _NestProgramCard extends StatefulWidget {
   const _NestProgramCard({required this.program, required this.onTap});
 
   final ProgramTemplate program;
   final VoidCallback onTap;
 
   @override
+  State<_NestProgramCard> createState() => _NestProgramCardState();
+}
+
+class _NestProgramCardState extends State<_NestProgramCard> {
+  var _descExpanded = false;
+
+  @override
   Widget build(BuildContext context) {
+    final program = widget.program;
     final onCooldown = program.isOnCooldown;
-    final subtitle = onCooldown && program.eligibleAgainAt != null
+    final rawSubtitle = onCooldown && program.eligibleAgainAt != null
         ? 'Available again ${DateFormat.yMMMd().format(program.eligibleAgainAt!.toLocal())}'
         : program.applyBlockReason == 'in_progress'
             ? (program.applyBlockMessage ?? 'Application already in progress')
             : program.description?.isNotEmpty == true
                 ? program.description!
                 : 'Cooldown ${program.disbursementCooldownDays} days';
+    final isLongDesc = !onCooldown &&
+        program.applyBlockReason != 'in_progress' &&
+        (program.description?.length ?? 0) > 90;
+    final subtitle = isLongDesc && !_descExpanded
+        ? '${rawSubtitle.substring(0, 90).trimRight()}…'
+        : rawSubtitle;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
-        onTap: onTap,
+        onTap: widget.onTap,
         borderRadius: BorderRadius.circular(14),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -375,6 +419,24 @@ class _NestProgramCard extends StatelessWidget {
                             onCooldown ? FontWeight.w600 : FontWeight.w400,
                       ),
                     ),
+                    if (isLongDesc)
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(0, 28),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: () {
+                          setState(() => _descExpanded = !_descExpanded);
+                        },
+                        child: Text(
+                          _descExpanded ? 'Show less' : 'Show more',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
                     if (onCooldown && program.cooldownRemainingDays != null) ...[
                       const SizedBox(height: 4),
                       Text(
