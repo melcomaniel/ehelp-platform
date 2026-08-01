@@ -9,6 +9,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+type ReportAttrs = {
+  case_number?: string;
+  subject?: string;
+  message?: string;
+  report_type?: { code?: string; name?: string } | string;
+  region_code?: string;
+  created_at?: string;
+  mode?: string;
+  complainant?: { first_name?: string; last_name?: string };
+  category_code?: string;
+};
+
 type ReportsResponse = {
   source: string;
   region_code: string;
@@ -21,16 +33,7 @@ type ReportsResponse = {
   data: Array<{
     type?: string;
     id?: string;
-    attributes?: {
-      case_number?: string;
-      subject?: string;
-      message?: string;
-      report_type?: { code?: string; name?: string } | string;
-      region_code?: string;
-      created_at?: string;
-      mode?: string;
-      complainant?: { first_name?: string; last_name?: string };
-    };
+    attributes?: ReportAttrs;
     case_number?: string;
     subject?: string;
     category_code?: string;
@@ -38,21 +41,38 @@ type ReportsResponse = {
 };
 
 function rowFields(item: ReportsResponse["data"][number]) {
-  const a = item.attributes ?? item;
-  const caseNumber =
-    a.case_number ?? item.id ?? (item as { case_number?: string }).case_number ?? "—";
+  const a: ReportAttrs = item.attributes ?? {
+    case_number: item.case_number,
+    subject: item.subject,
+    category_code: item.category_code,
+  };
+  const caseNumber = a.case_number ?? item.id ?? item.case_number ?? "—";
   const subject = a.subject ?? "—";
+  const reportTypeRaw = a.report_type;
   const reportType =
-    typeof a.report_type === "string"
-      ? a.report_type
-      : a.report_type?.name ?? a.report_type?.code ?? (item as { category_code?: string }).category_code ?? "—";
+    typeof reportTypeRaw === "string"
+      ? reportTypeRaw
+      : reportTypeRaw?.name ??
+        reportTypeRaw?.code ??
+        a.category_code ??
+        item.category_code ??
+        "—";
   const complainant = a.complainant
-    ? [a.complainant.first_name, a.complainant.last_name].filter(Boolean).join(" ")
+    ? [a.complainant.first_name, a.complainant.last_name]
+        .filter(Boolean)
+        .join(" ")
     : "—";
   const created = a.created_at
     ? new Date(a.created_at).toLocaleString()
     : "—";
-  return { caseNumber, subject, reportType, complainant, created, mode: a.mode };
+  return {
+    caseNumber,
+    subject,
+    reportType,
+    complainant,
+    created,
+    mode: a.mode,
+  };
 }
 
 export default function AppealsEreportPage() {
