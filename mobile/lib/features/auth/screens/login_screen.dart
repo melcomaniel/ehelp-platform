@@ -179,7 +179,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             'In the app, paste beneficiary, beneficiary2, or '
                             'dependent as the exchange code (local mock '
                             'identities). Staff use the web portal with eGov '
-                            'ssoplatform sample accounts.',
+                            'SSO sample accounts.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: AppColors.muted,

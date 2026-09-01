@@ -10,9 +10,9 @@ For PRD policy detail, see [Persona Scope & Limitations](../persona-scope-prd-al
 
 | Layer | What it is | Typical URL |
 |-------|------------|-------------|
-| **Nest Core (API)** | Auth, RBAC, applications, offices, disbursement, eGov AI, eReport | Local `http://127.0.0.1:3001` · Demo `https://<your-api-host>` |
+| **Nest Core (API)** | Auth, RBAC, applications, offices, disbursement, eGov AI, eReport | Local `http://127.0.0.1:3001` · Hosted `https://<your-api-host>` |
 | **Web portal** | Staff & admin UI (Next.js) | Local `http://localhost:3000` · Demo on Vercel |
-| **Mobile app** | Beneficiaries only (Flutter) | Default API → Render URL (see `mobile/lib/config/api_config.dart`) |
+| **Mobile app** | Beneficiaries only (Flutter) | Default API → `http://127.0.0.1:3001` (see `mobile/lib/config/api_config.dart`) |
 | **Postgres** | Domain data | Local Docker `:5433` · Render Managed Postgres in demo |
 
 ```
@@ -74,7 +74,7 @@ Requires seeds `001_bootstrap.sql` + `002_staff_accounts.sql` (or equivalent row
 ```
 DSWD
  └── DSWD Central Office     ← hierarchy root
-     └── NCR Field / DSWD NCR ← officeadmin, evaluator, approver / ssoofficeadmin–04
+     └── NCR Field / DSWD NCR ← officeadmin, evaluator, approver / ssoofficeadmin–ssoapprover
 ```
 
 Org Admin (`orgadmin` / `ssoorgadmin`) is **org-scoped** (no office). Office Admin applications list is scoped to the **regional** office.

@@ -12,6 +12,11 @@
  *   SEED_ADMIN_PASSWORD (default: DemoAdmin123!)
  *   SEED_ADMIN_NAME (default: Demo Satellite Admin)
  *
+ * ⚠️  LOCAL / DEV ONLY. The password default below is published in this file,
+ * so running this script without SEED_ADMIN_PASSWORD set creates a real
+ * Supabase Auth user with a publicly known password. Always set that env var
+ * when pointing at anything other than a local project.
+ *
  * Usage:
  *   node --env-file=.env.local scripts/seed-tenant-admin.mjs
  */

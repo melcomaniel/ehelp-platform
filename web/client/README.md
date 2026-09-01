@@ -129,6 +129,8 @@ With Nest `AUTH_PROVIDER_MODE=mock`, any exchange code works for **provisioned**
 | `evaluator@ehelp.local` | `Evaluator123!` | `/staff` |
 | `approver@ehelp.local` | `Approver123!` | `/staff` |
 
+> ⚠️ **These passwords are public and are for local development only.** Seed `002_staff_accounts.sql` creates a working `PLATFORM_ADMIN` with the credential above; never run it on a shared or public deployment. See the warning at the top of that file.
+
 Password is **not** shown in the product UI. Automated tests may still call Nest `POST /auth/dev/login` (proxied as `POST /api/auth/login`).
 
 ### eGov SSO
@@ -153,7 +155,7 @@ Hackathon eGov sample identities are pre-seeded (`003_egov_sso_hackathon_account
 
 Partner code when minting: **`{{partner_code}}`**. These five are web-only.
 
-Mobile beneficiaries use Nest mock fixture codes (`beneficiary`, `beneficiary2`, `dependent`) — they work while Nest stays on `AUTH_PROVIDER_MODE=live` for ssoplatform staff SSO. See [`mobile/README.md`](../../mobile/README.md).
+Mobile beneficiaries use Nest mock fixture codes (`beneficiary`, `beneficiary2`, `dependent`) — they work while Nest stays on `AUTH_PROVIDER_MODE=live` for sso* staff SSO. See [`mobile/README.md`](../../mobile/README.md).
 
 `/signup` is informational only (no public self-registration).
 

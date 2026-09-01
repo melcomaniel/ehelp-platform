@@ -1,16 +1,19 @@
--- Hackathon eGov SSO sample identities → Nest staff (live SSO testing).
+-- eGov SSO sample identities → Nest staff (live SSO testing).
 -- Mint exchange codes with partner {{partner_code}} for these exact emails.
 --
--- | Email                    | Role            | Office              |
--- | ssoplatform@ehelp.local        | PLATFORM_ADMIN  | (none)              |
--- | ssoorgadmin@ehelp.local      | ORG_ADMIN       | DSWD Central Office |
--- | ssoofficeadmin@ehelp.local      | OFFICE_ADMIN    | NCR Field Office    |
--- | ssoevaluator@ehelp.local      | EVALUATOR       | NCR Field Office    |
--- | ssoapprover@ehelp.local      | APPROVER        | NCR Field Office    |
+-- | Email                       | Role           | Office              |
+-- | ssoplatform@ehelp.local     | PLATFORM_ADMIN | (none)              |
+-- | ssoorgadmin@ehelp.local     | ORG_ADMIN      | DSWD Central Office |
+-- | ssoofficeadmin@ehelp.local  | OFFICE_ADMIN   | NCR Field Office    |
+-- | ssoevaluator@ehelp.local    | EVALUATOR      | NCR Field Office    |
+-- | ssoapprover@ehelp.local     | APPROVER       | NCR Field Office    |
+--
+-- These addresses are placeholders on a reserved non-routable domain. Replace
+-- them with the identities your own eGov partner account actually returns.
 --
 -- Mobile beneficiary: use a non-staff eGov identity (or mock SSO). These five
 -- are web-only after this seed (mobile will get web_required).
--- Re-running re-aligns office designations for existing ssoplatform* rows.
+-- Re-running re-aligns office designations for existing sso* rows.
 
 DO $$
 DECLARE

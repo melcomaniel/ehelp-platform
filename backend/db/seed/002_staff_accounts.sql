@@ -1,3 +1,16 @@
+-- ============================================================================
+-- ⚠️  LOCAL / DEMO ONLY — DO NOT RUN ON ANY SHARED, STAGING, OR PUBLIC DEPLOY.
+--
+-- This seed creates privileged accounts (including PLATFORM_ADMIN) whose
+-- passwords are published in this file and in the READMEs. The bcrypt hashes
+-- below are cost-10 over well-known strings, so deleting the comments would
+-- NOT make them secret. Anyone who can reach a deployment where this seed has
+-- run can log in as platform admin.
+--
+-- Before any non-local deployment, do one of:
+--   * skip this seed entirely and provision staff via POST /auth/staff, or
+--   * change every password_hash below to a value you generated privately.
+-- ============================================================================
 -- Demo staff accounts for Nest web auth (AUTH_PROVIDER_MODE=mock).
 -- Passwords (bcrypt): see comments next to each email.
 --

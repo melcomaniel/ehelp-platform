@@ -196,6 +196,8 @@ Works for accounts that already have `password_hash` (seeded staff / admin-creat
 
 Demo staff (after seed): `evaluator@ehelp.local` / `Evaluator123!` with `X-Client-Platform: web`.
 
+> ⚠️ **Local only.** These credentials are published, so seed `002_staff_accounts.sql` must never run on a shared or public deployment. See the warning at the top of that file.
+
 ### Mock SSO
 
 ```bash

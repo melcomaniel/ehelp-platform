@@ -145,7 +145,7 @@ flutter run --dart-define=API_BASE_URL=http://127.0.0.1:3001
 |------|----------------|
 | Fixed mock codes (works even when Nest is `live`) | Paste `beneficiary`, `beneficiary2`, or `dependent` in the app SSO dialog |
 | `mock` (any code) | Any other string still synthesizes a citizen |
-| `live` + real portal | Real eGov `exchange_code` (staff web uses the five `ssoplatform*@yopmail.com` samples) |
+| `live` + real portal | Real eGov `exchange_code` (staff web uses the five `sso*@ehelp.local` samples) |
 
 | Path | Flow |
 |------|------|
@@ -161,7 +161,7 @@ flutter run --dart-define=API_BASE_URL=http://127.0.0.1:3001
 | `beneficiary2` | `beneficiary2@mock.gov.ph` | Second citizen / link partner |
 | `dependent` | `dependent@mock.gov.ph` | Second party for dependent relationship |
 
-Prefix optional: `mock:beneficiary`. Nest auto-creates the beneficiary on first mobile SSO; keep the five `ssoplatform*` identities for **web staff only**.
+Prefix optional: `mock:beneficiary`. Nest auto-creates the beneficiary on first mobile SSO; keep the five `sso*` identities for **web staff only**.
 
 Password / “Dev sign in” is **not** shown in the product UI. Automated tests may call Nest `POST /auth/dev/login` directly.
 

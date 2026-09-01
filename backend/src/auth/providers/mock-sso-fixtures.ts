@@ -107,41 +107,41 @@ const FIXTURES: Record<string, EgovSsoProfile> = {
     'ADMIN',
   ),
 
-  // Hackathon ssoplatform* identities (seed 003) — optional when that seed is loaded
+  // eGov SSO demo identities (seed 003) — optional when that seed is loaded
   ssoplatform: staffProfile(
     'MOCK-SSO-PLATFORM',
     'ssoplatform@ehelp.local',
+    'PLATFORM',
+    'SSO',
     'DEMO',
-    'SANTOS',
-    'DELA CRUZ',
   ),
   ssoorgadmin: staffProfile(
     'MOCK-SSO-ORG',
     'ssoorgadmin@ehelp.local',
-    'JOSE',
-    'CRUZ',
-    'DELA PENA',
+    'ORGADMIN',
+    'SSO',
+    'DEMO',
   ),
   ssoofficeadmin: staffProfile(
     'MOCK-SSO-OFFICE',
     'ssoofficeadmin@ehelp.local',
-    'ARNEL',
-    'DELA',
-    'CRUZ',
+    'OFFICEADMIN',
+    'SSO',
+    'DEMO',
   ),
   ssoevaluator: staffProfile(
     'MOCK-SSO-EVAL',
     'ssoevaluator@ehelp.local',
-    'JOHN',
-    'GARCIA',
-    'REYES',
+    'EVALUATOR',
+    'SSO',
+    'DEMO',
   ),
   ssoapprover: staffProfile(
     'MOCK-SSO-APPR',
     'ssoapprover@ehelp.local',
     'APPROVER',
-    'RAMOS',
-    'MENDOZA',
+    'SSO',
+    'DEMO',
   ),
 
   // ── Mobile beneficiaries ────────────────────────────────────
