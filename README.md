@@ -5,7 +5,7 @@
 
 | | |
 |---|---|
-| **Demo video** | _(3–5 min, YouTube — unlisted or public)_ → `<YOUTUBE_LINK>` |
+| **Demo video** | https://youtu.be/1HFsW51J-rY |
 | **Repository** | https://github.com/melcomaniel/ehelp-platform |
 | **eGov APIs used** | eGov SSO · eVerify (PhilSys) · Face Liveness · eGov AI · eReport · eMessage |
 | **Clients** | Next.js web portal (staff & admin) · Flutter mobile app (citizens) |
