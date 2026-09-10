@@ -1,4 +1,3 @@
-import Link from "next/link";
 
 export function MobileCta() {
   return (
@@ -13,12 +12,13 @@ export function MobileCta() {
             National ID eVerify, and track disbursement — not on this website.
           </p>
         </div>
-        <Link
+        <a
           href="/get-app"
+          download
           className="shrink-0 rounded-full bg-white px-8 py-3.5 text-sm font-medium text-[#0040E7] hover:bg-white/90"
         >
           Get the app
-        </Link>
+        </a>
       </div>
     </section>
   );

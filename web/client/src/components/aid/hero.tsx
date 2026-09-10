@@ -39,12 +39,13 @@ export function Hero() {
               >
                 Staff sign in
               </Link>
-              <Link
+              <a
                 href="/get-app"
+                download
               className="w-full rounded-lg border border-border px-8 py-3.5 text-center font-semibold text-foreground transition-colors hover:border-primary hover:text-primary focus-visible:ring-3 focus-visible:ring-ring/45 sm:w-auto"
               >
                 Beneficiaries: get the app
-              </Link>
+              </a>
             </div>
 
             <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-[#64748b]">

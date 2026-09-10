@@ -109,9 +109,9 @@ export function SignInForm() {
           Ask your admin
         </Link>
         {" · "}
-        <Link href="/get-app" className="font-medium text-primary hover:underline">
+        <a href="/get-app" download className="font-medium text-primary hover:underline">
           Get the mobile app
-        </Link>
+        </a>
       </p>
     </div>
   );

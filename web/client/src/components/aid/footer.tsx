@@ -19,9 +19,9 @@ export function Footer() {
           <Link href="/signin" className="hover:text-[#0040E7]">
             Staff sign in
           </Link>
-          <Link href="/get-app" className="hover:text-[#0040E7]">
+          <a href="/get-app" download className="hover:text-[#0040E7]">
             Mobile app
-          </Link>
+          </a>
           <Link href="/signup" className="hover:text-[#0040E7]">
             Account access
           </Link>

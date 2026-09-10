@@ -46,12 +46,13 @@ export function Navbar() {
               {l.label}
             </a>
           ))}
-          <Link
+          <a
             href="/get-app"
+            download
             className="rounded-md text-[0.875rem] text-muted-foreground hover:text-primary focus-visible:ring-3 focus-visible:ring-ring/45"
           >
             Get the app
-          </Link>
+          </a>
           <Link
             href="/signin"
             className="rounded-lg bg-primary px-5 py-2.5 text-[0.875rem] font-semibold text-white transition-colors hover:bg-[var(--gov-blue-700)] focus-visible:ring-3 focus-visible:ring-ring/45"

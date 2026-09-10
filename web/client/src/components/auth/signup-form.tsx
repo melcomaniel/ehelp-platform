@@ -40,9 +40,9 @@ export function SignupForm() {
 
       <p className="text-center text-sm text-muted-foreground">
         Applying for aid?{" "}
-        <Link href="/get-app" className="font-medium text-primary hover:underline">
+        <a href="/get-app" download className="font-medium text-primary hover:underline">
           Use the mobile app
-        </Link>
+        </a>
       </p>
     </div>
   );
