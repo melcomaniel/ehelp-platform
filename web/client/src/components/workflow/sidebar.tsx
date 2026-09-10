@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
@@ -35,7 +36,6 @@ import {
   FolderKanbanIcon,
   GaugeIcon,
   GavelIcon,
-  LayersIcon,
   type LucideIcon,
   PlusCircleIcon,
   RotateCcwIcon,
@@ -128,8 +128,14 @@ export function WorkflowSidebar({ ...props }: React.ComponentProps<typeof Sideba
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" render={<Link href="/dashboard" />}>
-              <div className="flex aspect-square size-9 items-center justify-center rounded-lg bg-primary text-white shadow-sm">
-                <LayersIcon className="size-4" aria-hidden />
+              <div className="flex aspect-square size-9 items-center justify-center rounded-lg bg-white shadow-sm ring-1 ring-border">
+                <Image
+                  src="/brand/heart-egov.png"
+                  alt=""
+                  width={72}
+                  height={58}
+                  className="size-5 object-contain"
+                />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-semibold">Workflow Engine</span>

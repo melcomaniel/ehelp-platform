@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
-import { HandHeartIcon, Menu, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 
 const links = [
   { label: "Who it's for", href: "#roles" },
@@ -22,9 +23,14 @@ export function Navbar() {
           aria-label="EHelp home"
           className="flex items-center gap-2 rounded-md focus-visible:ring-3 focus-visible:ring-ring/45"
         >
-          <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <HandHeartIcon className="size-4" aria-hidden />
-          </span>
+          <Image
+            src="/brand/heart-egov.png"
+            alt=""
+            width={72}
+            height={58}
+            priority
+            className="h-8 w-auto"
+          />
           <span className="hidden sm:inline text-sm font-semibold text-[#1a1a2e]">
             EHelp
           </span>

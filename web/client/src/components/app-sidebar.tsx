@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import * as React from "react"
 
 import { NavMain } from "@/components/nav-main"
@@ -126,8 +127,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" render={<a href="/dashboard" />}>
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-[#0040E7] text-white">
-                <HandCoinsIcon className="size-4" />
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-white shadow-sm ring-1 ring-border">
+                <Image
+                  src="/brand/heart-egov.png"
+                  alt=""
+                  width={72}
+                  height={58}
+                  className="size-5 object-contain"
+                />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">Aid Front Door</span>

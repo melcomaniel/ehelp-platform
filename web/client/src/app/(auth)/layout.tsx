@@ -18,8 +18,14 @@ export default function AuthLayout({
           className="inline-flex items-center gap-2 rounded-md focus-visible:ring-3 focus-visible:ring-ring/45"
           aria-label="EHelp home"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/egov/logo.png" alt="eGovPH" className="h-8 w-auto" />
+          <Image
+            src="/brand/heart-egov.png"
+            alt=""
+            width={72}
+            height={58}
+            priority
+            className="h-8 w-auto"
+          />
           <span className="text-sm font-semibold text-foreground">
             EHelp Portal
           </span>
