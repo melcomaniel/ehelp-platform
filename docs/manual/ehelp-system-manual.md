@@ -238,7 +238,7 @@ How personas hand off work for a single assistance application:
 sequenceDiagram
   participant B as Beneficiary (mobile)
   participant OA as Org Admin (web)
-  participant Off as Office Admin (web)
+  participant OFC as Office Admin (web)
   participant E as Evaluator (web)
   participant A as Approver (web)
 
@@ -249,7 +249,7 @@ sequenceDiagram
   A-->>B: Notify + claim guidance
   B->>B: Book disbursement slot
   B->>B: Show claim QR
-  Off->>Off: Validate claim QR + liveness
+  OFC->>OFC: Validate claim QR + liveness
   B->>B: Claim complete / cooldown
   opt Grievance (eReport)
     B->>B: File report → case number

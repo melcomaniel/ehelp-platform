@@ -112,7 +112,7 @@ sequenceDiagram
   participant B as Beneficiary (mobile)
   participant E as Evaluator (web)
   participant A as Approver (web)
-  participant Off as Office Admin (web)
+  participant OFC as Office Admin (web)
 
   OA->>OA: Publish program, open period, create claim slots
   B->>B: Sign in (eGov SSO + PhilSys + face liveness)
@@ -122,7 +122,7 @@ sequenceDiagram
   A-->>B: SMS + in-app notice with claim guidance
   B->>B: Book a disbursement slot
   B->>B: Show one-time claim QR on claim day
-  Off->>Off: Scan QR, run claimant face liveness, release
+  OFC->>OFC: Scan QR, run claimant face liveness, release
   B->>B: Claim recorded, program cooldown starts
   opt Grievance
     B->>B: File report, receive case number
