@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -18,6 +18,8 @@ const TABLE_COUNT_SQL = `select count(*)::int as count
 
 @Injectable()
 export class HealthService {
+  private readonly log = new Logger(HealthService.name);
+
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly config: ConfigService,
@@ -62,13 +64,7 @@ export class HealthService {
   }
 
   async checkDb(): Promise<DbReport> {
-    const host = this.config.get<string>('DATABASE_HOST') ?? 'localhost';
-    const port = Number(this.config.get<string>('DATABASE_PORT') ?? 5432);
-    const database = this.config.get<string>('DATABASE_NAME') ?? 'ehelp';
     const base = {
-      host,
-      port,
-      database,
       latency_ms: null,
       table_count: null,
     };
@@ -88,11 +84,15 @@ export class HealthService {
         error: null,
       };
     } catch (err) {
+      // Driver errors quote host and database name, so they stay server-side.
+      this.log.error(
+        `database check failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
       return {
         ...base,
         state: 'error',
         connected: false,
-        error: err instanceof Error ? err.message : 'unknown database error',
+        error: 'database unreachable',
       };
     }
   }
@@ -129,12 +129,12 @@ export class HealthService {
 
   private readEnvVar(name: string, isSecret: boolean): EnvVarReport {
     const raw = this.config.get<string>(name)?.trim() ?? '';
+    // No value is echoed, secret or not: hostnames and upstream URLs are
+    // infrastructure detail and these routes are public.
     return {
       name,
       set: raw.length > 0,
       secret: isSecret,
-      // Secrets are never echoed, only their presence is reported.
-      value: isSecret || raw.length === 0 ? null : raw,
     };
   }
 }

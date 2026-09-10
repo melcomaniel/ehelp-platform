@@ -5,9 +5,8 @@ export type HealthState = 'ok' | 'degraded' | 'error';
 export interface EnvVarReport {
   name: string;
   set: boolean;
-  /** Secret values are never returned — only whether they are present. */
+  /** No value is ever returned: this endpoint is public, only presence is reported. */
   secret: boolean;
-  value: string | null;
 }
 
 export interface EnvGroupReport {
@@ -21,10 +20,8 @@ export interface DbReport {
   state: HealthState;
   connected: boolean;
   latency_ms: number | null;
-  host: string;
-  port: number;
-  database: string;
   table_count: number | null;
+  /** Generic reason only — driver errors quote the hostname. Full text goes to the log. */
   error: string | null;
 }
 

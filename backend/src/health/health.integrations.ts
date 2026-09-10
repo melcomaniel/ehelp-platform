@@ -8,7 +8,7 @@ export interface IntegrationReport {
   state: IntegrationState;
   http_status: number | null;
   latency_ms: number | null;
-  base_url: string | null;
+  /** Never carries a URL or host: these routes are public. */
   detail: string | null;
 }
 
@@ -120,7 +120,6 @@ export class HealthIntegrationsService {
         state: 'not_configured',
         http_status: null,
         latency_ms: null,
-        base_url: baseUrl || null,
         detail: !baseUrl
           ? `${spec.baseUrlVar} is not set`
           : `missing: ${missingCreds.join(', ')}`,
@@ -146,19 +145,18 @@ export class HealthIntegrationsService {
         state: up ? 'up' : 'down',
         http_status: res.status,
         latency_ms: Date.now() - startedAt,
-        base_url: baseUrl,
         detail: up ? null : `unexpected status ${res.status}`,
       };
     } catch (err) {
       const detail = err instanceof Error ? err.message : 'probe failed';
+      // Fetch errors quote the upstream URL, so the detail stays server-side.
       this.log.warn(`${spec.service} probe failed: ${detail}`);
       return {
         service: spec.service,
         state: 'down',
         http_status: null,
         latency_ms: Date.now() - startedAt,
-        base_url: baseUrl,
-        detail,
+        detail: 'probe failed',
       };
     }
   }
