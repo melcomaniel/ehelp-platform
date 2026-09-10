@@ -35,7 +35,8 @@ for f in \
   "${DB_ROOT}/migrations/023_disbursement_slot_program.sql" \
   "${DB_ROOT}/migrations/024_disbursement_claim_token.sql" \
   "${DB_ROOT}/migrations/025_disbursement_claim_liveness.sql" \
-  "${DB_ROOT}/migrations/026_disbursement_claimed_status.sql"
+  "${DB_ROOT}/migrations/026_disbursement_claimed_status.sql" \
+  "${DB_ROOT}/migrations/027_ereport_cases.sql"
 do
   echo "[ehelp-db]   $(basename "$f")"
   "${PSQL[@]}" -f "$f"
