@@ -47,6 +47,10 @@ import {
         username: config.get<string>('DATABASE_USER') ?? 'ehelp',
         password: config.get<string>('DATABASE_PASSWORD') ?? 'ehelp',
         database: config.get<string>('DATABASE_NAME') ?? 'ehelp',
+        ssl:
+          config.get<string>('DATABASE_SSL') === 'true'
+            ? { rejectUnauthorized: false }
+            : false,
         entities: [
           UserAccountEntity,
           BeneficiaryEntity,
